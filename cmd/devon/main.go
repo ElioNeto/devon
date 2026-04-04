@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/tui"
@@ -11,7 +10,9 @@ import (
 
 var version = "dev"
 
-func main() {
+// main moved to main_nocov.go for coverage purposes
+
+func newRootCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:     "devon",
 		Short:   "Agente de código com TUI — conecta a qualquer LLM OpenAI-compatible",
@@ -31,10 +32,7 @@ func main() {
 	}
 	root.AddCommand(doctor)
 
-	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	return root
 }
 
 func runAgent(cmd *cobra.Command, _ []string) error {

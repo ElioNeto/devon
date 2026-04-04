@@ -6,3 +6,19 @@ dist/
 !.env.example
 .openclaude-profile.json
 reports/
+
+# Go binaries
+bin/
+devon
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test
+*.test
+*.out
+
+# Build output
+build/

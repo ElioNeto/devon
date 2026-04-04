@@ -12,6 +12,9 @@ import (
 func Run(cfg *config.Config) error {
 	fmt.Printf("Devon — %s @ %s\n", cfg.Model, cfg.BaseURL)
 	fmt.Printf("Modo: %s | WorkDir: %s\n", cfg.Mode, cfg.WorkDir)
+	if cfg.ContextDoc != "" {
+		fmt.Printf("DEVON.md: %s\n", cfg.ContextDoc)
+	}
 	fmt.Println("TUI em construção — veja issue #4")
 	return nil
 }

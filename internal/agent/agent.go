@@ -31,8 +31,10 @@ type Agent struct {
 	history  []llm.Message
 }
 
-// New cria um novo Agent.
+// New cria um novo Agent com todas as ferramentas nativas registradas.
 func New(cfg *config.Config, client *llm.Client, registry *tools.Registry) *Agent {
+	tools.RegisterBuiltin(registry, cfg.WorkDir, cfg.Timeout)
+
 	a := &Agent{
 		cfg:      cfg,
 		client:   client,

@@ -200,7 +200,7 @@ func parseSSE(ctx context.Context, body io.ReadCloser, ch chan<- StreamEvent) {
 				} `json:"delta"`
 			} `json:"choices"`
 			Usage *Usage `json:"usage"`
-		}{}
+		}
 
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 			continue
