@@ -1,108 +1,74 @@
-# Início Rápido do OpenClaude no macOS e Linux
+# Início Rápido — macOS / Linux
 
-Este guia usa um shell padrão como Terminal, iTerm, bash ou zsh.
+## 1. Instalar dependências
 
-## 1. Instalar o Node.js
-
-Instale o Node.js 20 ou mais recente em:
-
-- `https://nodejs.org/`
-
-Em seguida, verifique:
+Você precisa de **Bun** e **Node.js**.
 
 ```bash
-node --version
-npm --version
+# instalar Bun
+curl -fsSL https://bun.sh/install | bash
+
+# verificar
+bun --version   # 1.3.11 ou mais recente
+node --version  # 18 ou mais recente
 ```
 
-## 2. Instalar o OpenClaude
+## 2. Clonar e compilar
 
 ```bash
-npm install -g @gitlawb/openclaude
+git clone https://github.com/ElioNeto/devon.git
+cd devon
+bun install
+bun run build
+npm link
 ```
 
-## 3. Escolha Um Provider
-
-### Opção A: OpenAI
-
-Substitua `sk-sua-chave-aqui` pela sua chave real.
+Verifique que o comando está disponível:
 
 ```bash
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=sk-sua-chave-aqui
-export OPENAI_MODEL=gpt-4o
-
-openclaude
+which devon   # deve retornar o caminho do binário
 ```
 
-### Opção B: DeepSeek
+## 3. Configurar provider
+
+Veja [Configuração Avançada](advanced-setup.md) para todos os providers. O mais rápido para começar é o OpenRouter (gratuito, sem cartão):
+
+1. Crie sua chave em [openrouter.ai/keys](https://openrouter.ai/keys)
+2. Crie um `.env` no projeto que quiser usar:
 
 ```bash
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=sk-sua-chave-aqui
-export OPENAI_BASE_URL=https://api.deepseek.com/v1
-export OPENAI_MODEL=deepseek-chat
+cat > .env << 'EOF'
+CLAUDE_CODE_USE_OPENAI=1
+OPENAI_API_KEY=sk-or-sua-chave-aqui
+OPENAI_BASE_URL=https://openrouter.ai/api/v1
+OPENAI_MODEL=mistralai/devstral-2512:free
+EOF
 
-openclaude
+echo ".env" >> .gitignore
 ```
 
-### Opção C: Ollama
-
-Instale o Ollama primeiro em:
-
-- `https://ollama.com/download`
-
-Em seguida execute:
+## 4. Iniciar
 
 ```bash
-ollama pull llama3.1:8b
-
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_BASE_URL=http://localhost:11434/v1
-export OPENAI_MODEL=llama3.1:8b
-
-openclaude
+set -a && source .env && set +a
+devon
 ```
 
-Nenhuma chave de API é necessária para modelos locais do Ollama.
-
-## 4. Se `openclaude` Não For Encontrado
-
-Feche o terminal, abra um novo e tente novamente:
+Ou crie um atalho `start.sh` na raiz do projeto:
 
 ```bash
-openclaude
+cat > start.sh << 'EOF'
+#!/bin/bash
+set -a
+source .env
+set +a
+devon
+EOF
+chmod +x start.sh
+./start.sh
 ```
 
-## 5. Se o Seu Provider Falhar
+## Próximos passos
 
-Verifique o básico:
-
-### Para OpenAI ou DeepSeek
-
-- certifique-se de que a chave é real
-- certifique-se de que você a copiou completamente
-
-### Para Ollama
-
-- certifique-se de que o Ollama está instalado
-- certifique-se de que o Ollama está em execução
-- certifique-se de que o modelo foi baixado com sucesso
-
-## 6. Atualizando o OpenClaude
-
-```bash
-npm install -g @gitlawb/openclaude@latest
-```
-
-## 7. Desinstalando o OpenClaude
-
-```bash
-npm uninstall -g @gitlawb/openclaude
-```
-
-## Precisa de Configuração Avançada?
-
-Use:
-
-- [Configuração Avançada](advanced-setup.md)
+- [Configuração Avançada](advanced-setup.md) — outros providers, perfis, diagnósticos
+- Crie um `DEVON.md` na raiz do projeto para dar contexto permanente ao agente
