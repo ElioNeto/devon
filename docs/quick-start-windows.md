@@ -1,108 +1,66 @@
-# Início Rápido do OpenClaude no Windows
+# Início Rápido — Windows
 
-Este guia usa o Windows PowerShell.
+## 1. Instalar dependências
 
-## 1. Instalar o Node.js
+Você precisa de **Node.js** e **Bun**.
 
-Instale o Node.js 20 ou mais recente em:
-
-- `https://nodejs.org/`
-
-Em seguida, abra o PowerShell e verifique:
+- Baixe o Node.js em [nodejs.org](https://nodejs.org) (versão LTS)
+- Instale o Bun no PowerShell:
 
 ```powershell
-node --version
-npm --version
+powershell -c "irm bun.sh/install.ps1 | iex"
 ```
 
-## 2. Instalar o OpenClaude
+Reinicie o terminal e verifique:
 
 ```powershell
-npm install -g @gitlawb/openclaude
+bun --version   # 1.3.11 ou mais recente
+node --version  # 18 ou mais recente
 ```
 
-## 3. Escolha Um Provider
-
-### Opção A: OpenAI
-
-Substitua `sk-sua-chave-aqui` pela sua chave real.
+## 2. Clonar e compilar
 
 ```powershell
-$env:CLAUDE_CODE_USE_OPENAI="1"
-$env:OPENAI_API_KEY="sk-sua-chave-aqui"
-$env:OPENAI_MODEL="gpt-4o"
-
-openclaude
+git clone https://github.com/ElioNeto/devon.git
+cd devon
+bun install
+bun run build
+npm link
 ```
 
-### Opção B: DeepSeek
+## 3. Configurar provider
+
+Veja [Configuração Avançada](advanced-setup.md) para todos os providers. O mais rápido para começar é o OpenRouter (gratuito, sem cartão):
+
+1. Crie sua chave em [openrouter.ai/keys](https://openrouter.ai/keys)
+2. Configure no PowerShell:
 
 ```powershell
-$env:CLAUDE_CODE_USE_OPENAI="1"
-$env:OPENAI_API_KEY="sk-sua-chave-aqui"
-$env:OPENAI_BASE_URL="https://api.deepseek.com/v1"
-$env:OPENAI_MODEL="deepseek-chat"
-
-openclaude
+$env:CLAUDE_CODE_USE_OPENAI = "1"
+$env:OPENAI_API_KEY         = "sk-or-sua-chave-aqui"
+$env:OPENAI_BASE_URL        = "https://openrouter.ai/api/v1"
+$env:OPENAI_MODEL           = "mistralai/devstral-2512:free"
 ```
 
-### Opção C: Ollama
-
-Instale o Ollama primeiro em:
-
-- `https://ollama.com/download/windows`
-
-Em seguida execute:
+Ou crie um `.env` e carregue com um script `start.ps1`:
 
 ```powershell
-ollama pull llama3.1:8b
-
-$env:CLAUDE_CODE_USE_OPENAI="1"
-$env:OPENAI_BASE_URL="http://localhost:11434/v1"
-$env:OPENAI_MODEL="llama3.1:8b"
-
-openclaude
+# start.ps1
+Get-Content .env | ForEach-Object {
+  if ($_ -match '^\s*([^#][^=]*)=(.*)$') {
+    [System.Environment]::SetEnvironmentVariable($Matches[1].Trim(), $Matches[2].Trim(), 'Process')
+  }
+}
+devon
 ```
 
-Nenhuma chave de API é necessária para modelos locais do Ollama.
-
-## 4. Se `openclaude` Não For Encontrado
-
-Feche o PowerShell, abra um novo e tente novamente:
+## 4. Iniciar
 
 ```powershell
-openclaude
+devon
 ```
 
-## 5. Se o Seu Provider Falhar
+## Próximos passos
 
-Verifique o básico:
-
-### Para OpenAI ou DeepSeek
-
-- certifique-se de que a chave é real
-- certifique-se de que você a copiou completamente
-
-### Para Ollama
-
-- certifique-se de que o Ollama está instalado
-- certifique-se de que o Ollama está em execução
-- certifique-se de que o modelo foi baixado com sucesso
-
-## 6. Atualizando o OpenClaude
-
-```powershell
-npm install -g @gitlawb/openclaude@latest
-```
-
-## 7. Desinstalando o OpenClaude
-
-```powershell
-npm uninstall -g @gitlawb/openclaude
-```
-
-## Precisa de Configuração Avançada?
-
-Use:
-
-- [Configuração Avançada](advanced-setup.md)
+- [Configuração Avançada](advanced-setup.md) — outros providers, perfis, diagnósticos
+- Crie um `DEVON.md` na raiz do projeto para dar contexto permanente ao agente
