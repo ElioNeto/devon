@@ -1,69 +1,61 @@
-# Security Policy
+# Política de Segurança
 
-## Supported Versions
+## Versões Suportadas
 
-Open Claude is currently maintained on the latest `main` branch and the latest
-npm release only.
+O Open Claude é atualmente mantido no branch `main` mais recente e apenas no release npm mais recente.
 
-| Version | Supported |
+| Versão | Suportada |
 | ------- | --------- |
-| Latest release | :white_check_mark: |
-| Older releases | :x: |
-| Unreleased forks / modified builds | :x: |
+| Último release | :white_check_mark: |
+| Releases antigos | :x: |
+| Forks não oficiais / builds modificados | :x: |
 
-Security fixes are generally released in the next patch version and may also be
-landed directly on `main` before a package release is published.
+As correções de segurança geralmente são lançadas na próxima versão de patch e também podem ser aplicadas diretamente no `main` antes que um release de pacote seja publicado.
 
-## Reporting a Vulnerability
+## Reportando uma Vulnerabilidade
 
-If you believe you have found a security vulnerability in Open Claude, please
-report it privately.
+Se você acredita ter encontrado uma vulnerabilidade de segurança no Open Claude, por favor reporte-a de forma privada.
 
-Preferred reporting channel:
+Canal de reporte preferido:
 
-- GitHub Security Advisories / private vulnerability reporting for this
-  repository
+- GitHub Security Advisories / relato privado de vulnerabilidades para este repositório
 
-Please include:
+Por favor inclua:
 
-- a clear description of the issue
-- affected version, commit, or environment
-- reproduction steps or a proof of concept
-- impact assessment
-- any suggested remediation, if available
+- uma descrição clara do problema
+- versão afetada, commit ou ambiente
+- passos de reprodução ou uma prova de conceito
+- avaliação de impacto
+- qualquer remediação sugerida, se disponível
 
-Please do **not** open a public issue for an unpatched vulnerability.
+Por favor, **não** abra uma issue pública para uma vulnerabilidade sem correção.
 
-## Response Process
+## Processo de Resposta
 
-Our general goals are:
+Nossos objetivos gerais são:
 
-- initial triage acknowledgment within 7 days
-- follow-up after validation when we can reproduce the issue
-- coordinated disclosure after a fix is available
+- reconhecimento inicial de triagem em até 7 dias
+- acompanhamento após validação quando conseguirmos reproduzir o problema
+- divulgação coordenada após uma correção estar disponível
 
-Severity, exploitability, and maintenance bandwidth may affect timelines.
+A gravidade, a exploitabilidade e a capacidade de manutenção podem afetar os prazos.
 
-## Disclosure and CVEs
+## Divulgação e CVEs
 
-Valid reports may be fixed privately first and disclosed after a patch is
-available.
+Relatórios válidos podem ser corrigidos privadamente primeiro e divulgados após um patch estar disponível.
 
-If a report is accepted and the issue is significant enough to warrant formal
-tracking, we may publish a GitHub Security Advisory and request or assign a CVE
-through the appropriate channel. CVE issuance is not guaranteed for every
-report.
+Se um relatório for aceito e o problema for significativo o suficiente para justificar rastreamento formal, podemos publicar um GitHub Security Advisory e solicitar ou atribuir um CVE pelo canal apropriado. A emissão de CVE não é garantida para todo relatório.
 
-## Scope
+## Escopo
 
-This policy applies to:
+Esta política se aplica a:
 
-- the Open Claude source code in this repository
-- official release artifacts published from this repository
-- the `@gitlawb/openclaude` npm package
+- o código-fonte do Open Claude neste repositório
+- artefatos de release oficiais publicados a partir deste repositório
+- o pacote npm `@gitlawb/openclaude`
 
-This policy does not cover:
+Esta política não cobre:
 
-- third-party model providers, endpoints, or hosted services
-- local misconfiguration on the reporter's machine
-- vulnerabilities in unofficial forks, mirrors, or downstream repackages
+- providers de modelos de terceiros, endpoints ou serviços hospedados
+- má configuração local na máquina do relator
+- vulnerabilidades em forks não oficiais, espelhos ou reempacotamentos downstream

@@ -1,169 +1,169 @@
-# OpenClaude Local Agent Playbook
+# Playbook do Agente Local OpenClaude
 
-This playbook is a practical guide to run OpenClaude with a local model (Ollama), work safely, and get strong day-to-day results.
+Este playbook é um guia prático para executar o OpenClaude com um modelo local (Ollama), trabalhar com segurança e obter bons resultados no dia a dia.
 
-## 1. What You Have
+## 1. O Que Você Tem
 
-- A CLI agent loop that can read/write files, run terminal commands, and help with coding workflows.
-- A local provider profile system (`profile:init` and `dev:profile`).
-- Runtime checks (`doctor:runtime`) and reporting (`doctor:report`).
-- A local model profile currently set to `llama3.1:8b`.
+- Um loop de agente CLI que pode ler/escrever arquivos, executar comandos no terminal e ajudar com fluxos de trabalho de programação.
+- Um sistema de perfis de provider local (`profile:init` e `dev:profile`).
+- Verificações de runtime (`doctor:runtime`) e relatórios (`doctor:report`).
+- Um perfil de modelo local atualmente configurado para `llama3.1:8b`.
 
-## 2. Daily Start (Fast Path)
+## 2. Inicialização Diária (Caminho Rápido)
 
-Run this in your project root:
+Execute isso na raiz do seu projeto:
 
 ```powershell
 bun run dev:profile
 ```
 
-For quick switches:
+Para trocas rápidas:
 
 ```powershell
-# low latency preset
+# preset de baixa latência
 bun run dev:fast
 
-# better coding quality preset
+# preset de melhor qualidade de código
 bun run dev:code
 ```
 
-If everything is healthy, OpenClaude starts directly.
+Se tudo estiver saudável, o OpenClaude inicia diretamente.
 
-## 3. One-Time Setup (If Needed)
+## 3. Configuração Única (Se Necessário)
 
-### 3.1 Initialize a local profile
+### 3.1 Inicializar um perfil local
 
 ```powershell
 bun run profile:init -- --provider ollama --model llama3.1:8b
 ```
 
-Or let OpenClaude recommend the best local model for your goal:
+Ou deixe o OpenClaude recomendar o melhor modelo local para seu objetivo:
 
 ```powershell
 bun run profile:init -- --provider ollama --goal coding
 ```
 
-Preview recommendations before saving:
+Visualize as recomendações antes de salvar:
 
 ```powershell
 bun run profile:recommend -- --goal coding --benchmark
 ```
 
-### 3.2 Confirm profile file
+### 3.2 Confirmar arquivo de perfil
 
 ```powershell
 Get-Content .\.openclaude-profile.json
 ```
 
-### 3.3 Validate environment
+### 3.3 Validar ambiente
 
 ```powershell
 bun run doctor:runtime
 ```
 
-## 4. Health and Diagnostics
+## 4. Saúde e Diagnósticos
 
-### 4.1 Human-readable checks
+### 4.1 Verificações legíveis por humanos
 
 ```powershell
 bun run doctor:runtime
 ```
 
-### 4.2 JSON diagnostics (automation/logging)
+### 4.2 Diagnósticos em JSON (automação/logging)
 
 ```powershell
 bun run doctor:runtime:json
 ```
 
-### 4.3 Persist runtime report
+### 4.3 Persistir relatório de runtime
 
 ```powershell
 bun run doctor:report
 ```
 
-Report output:
+Saída do relatório:
 
 - `reports/doctor-runtime.json`
 
-### 4.4 Hardening checks
+### 4.4 Verificações de hardening
 
 ```powershell
-# practical checks (smoke + runtime doctor)
+# verificações práticas (smoke + runtime doctor)
 bun run hardening:check
 
-# strict checks (includes typecheck)
+# verificações estritas (inclui typecheck)
 bun run hardening:strict
 ```
 
-## 5. Provider Modes
+## 5. Modos de Provider
 
-## 5.1 Local mode (Ollama)
+## 5.1 Modo local (Ollama)
 
 ```powershell
 bun run profile:init -- --provider ollama --model llama3.1:8b
 bun run dev:profile
 ```
 
-Expected behavior:
+Comportamento esperado:
 
-- No API key required.
-- `OPENAI_BASE_URL` should be `http://localhost:11434/v1`.
+- Nenhuma chave de API necessária.
+- `OPENAI_BASE_URL` deve ser `http://localhost:11434/v1`.
 
-## 5.2 OpenAI mode
+## 5.2 Modo OpenAI
 
 ```powershell
 bun run profile:init -- --provider openai --api-key sk-... --model gpt-4o
 bun run dev:profile
 ```
 
-Expected behavior:
+Comportamento esperado:
 
-- Real API key required.
-- Placeholder values fail fast.
+- Chave de API real necessária.
+- Valores de placeholder falham rapidamente.
 
-## 6. Troubleshooting Matrix
+## 6. Matriz de Solução de Problemas
 
 ## 6.1 `Script not found "dev"`
 
-Cause:
+Causa:
 
-- You ran command in the wrong folder.
+- Você executou o comando na pasta errada.
 
-Fix:
+Solução:
 
 ```powershell
-cd C:\Users\Lucas Pedry\Documents\openclaude\openclaude
+cd C:\Users\SeuUsuario\Documents\openclaude\openclaude
 bun run dev:profile
 ```
 
 ## 6.2 `ollama: term not recognized`
 
-Cause:
+Causa:
 
-- Ollama not installed or PATH not loaded in this terminal.
+- Ollama não está instalado ou o PATH não foi carregado neste terminal.
 
-Fix:
+Solução:
 
-- Install Ollama from https://ollama.com/download/windows or `winget install Ollama.Ollama`.
-- Open a new terminal and run:
+- Instale o Ollama em https://ollama.com/download/windows ou `winget install Ollama.Ollama`.
+- Abra um novo terminal e execute:
 
 ```powershell
 ollama --version
 ```
 
-## 6.3 `Provider reachability failed` for localhost
+## 6.3 `Provider reachability failed` para localhost
 
-Cause:
+Causa:
 
-- Ollama service not running.
+- Serviço Ollama não está em execução.
 
-Fix:
+Solução:
 
 ```powershell
 ollama serve
 ```
 
-Then, in another terminal:
+Em seguida, em outro terminal:
 
 ```powershell
 bun run doctor:runtime
@@ -171,56 +171,56 @@ bun run doctor:runtime
 
 ## 6.4 `Missing key for non-local provider URL`
 
-Cause:
+Causa:
 
-- `OPENAI_BASE_URL` points to remote endpoint without key.
+- `OPENAI_BASE_URL` aponta para endpoint remoto sem chave.
 
-Fix:
+Solução:
 
-- Re-initialize profile for ollama:
+- Reinicialize o perfil para ollama:
 
 ```powershell
 bun run profile:init -- --provider ollama --model llama3.1:8b
 ```
 
-Or pick a local Ollama profile automatically by goal:
+Ou escolha um perfil Ollama local automaticamente por objetivo:
 
 ```powershell
 bun run profile:init -- --provider ollama --goal balanced
 ```
 
-## 6.5 Placeholder key (`SUA_CHAVE`) error
+## 6.5 Erro de chave placeholder (`SUA_CHAVE`)
 
-Cause:
+Causa:
 
-- Placeholder was used instead of real key.
+- Um placeholder foi usado em vez de uma chave real.
 
-Fix:
+Solução:
 
-- For OpenAI: use a real key.
-- For Ollama: no key needed; keep localhost base URL.
+- Para OpenAI: use uma chave real.
+- Para Ollama: nenhuma chave necessária; mantenha a URL base do localhost.
 
-## 7. Recommended Local Models
+## 7. Modelos Locais Recomendados
 
-- Fast/general: `llama3.1:8b`
-- Better coding quality (if hardware supports): `qwen2.5-coder:14b`
-- Low-resource fallback: smaller instruct model
+- Rápido/geral: `llama3.1:8b`
+- Melhor qualidade de código (se o hardware suportar): `qwen2.5-coder:14b`
+- Fallback para hardware limitado: modelo instruct menor
 
-Switch model quickly:
+Troque de modelo rapidamente:
 
 ```powershell
 bun run profile:init -- --provider ollama --model qwen2.5-coder:14b
 bun run dev:profile
 ```
 
-Preset shortcuts already configured:
+Atalhos de preset já configurados:
 
 ```powershell
 bun run profile:fast   # llama3.2:3b
 bun run profile:code   # qwen2.5-coder:7b
 ```
 
-Goal-based local auto-selection:
+Seleção automática local baseada em objetivo:
 
 ```powershell
 bun run profile:init -- --provider ollama --goal latency
@@ -228,44 +228,44 @@ bun run profile:init -- --provider ollama --goal balanced
 bun run profile:init -- --provider ollama --goal coding
 ```
 
-`profile:auto` is a best-available provider picker, not a local-only command. Use `--provider ollama` when you want to stay on a local model.
+`profile:auto` é um seletor do melhor provider disponível, não um comando apenas local. Use `--provider ollama` quando quiser ficar em um modelo local.
 
-## 8. Practical Prompt Playbook (Copy/Paste)
+## 8. Playbook Prático de Prompts (Copiar/Colar)
 
-## 8.1 Code understanding
+## 8.1 Entendimento de código
 
-- "Map this repository architecture and explain the execution flow from entrypoint to tool invocation."
-- "Find the top 5 risky modules and explain why."
+- "Mapeie a arquitetura deste repositório e explique o fluxo de execução do ponto de entrada até a invocação de ferramentas."
+- "Encontre os 5 módulos mais arriscados e explique o porquê."
 
-## 8.2 Refactoring
+## 8.2 Refatoração
 
-- "Refactor this module for clarity without behavior change, then run checks and summarize diff impact."
-- "Extract shared logic from duplicated functions and add minimal tests."
+- "Refatore este módulo para maior clareza sem alterar o comportamento, depois execute as verificações e resuma o impacto do diff."
+- "Extraia a lógica compartilhada de funções duplicadas e adicione testes mínimos."
 
-## 8.3 Debugging
+## 8.3 Depuração
 
-- "Reproduce the failure, identify root cause, implement fix, and validate with commands."
-- "Trace this error path and list likely failure points with confidence levels."
+- "Reproduza a falha, identifique a causa raiz, implemente a correção e valide com comandos."
+- "Trace este caminho de erro e liste os pontos de falha prováveis com níveis de confiança."
 
-## 8.4 Reliability
+## 8.4 Confiabilidade
 
-- "Add runtime guardrails and fail-fast messages for invalid provider env vars."
-- "Create a diagnostic command that outputs JSON report for CI artifacts."
+- "Adicione guardrails de runtime e mensagens de falha rápida para variáveis de ambiente de provider inválidas."
+- "Crie um comando de diagnóstico que produza um relatório JSON para artefatos de CI."
 
-## 8.5 Review mode
+## 8.5 Modo de revisão
 
-- "Do a code review of unstaged changes, prioritize bugs/regressions, and suggest concrete patches."
+- "Faça uma revisão de código das alterações não preparadas, priorize bugs/regressões e sugira patches concretos."
 
-## 9. Safe Working Rules
+## 9. Regras de Trabalho Seguro
 
-- Run `doctor:runtime` before debugging provider issues.
-- Prefer `dev:profile` over manual env edits.
-- Keep `.openclaude-profile.json` local (already gitignored).
-- Use `doctor:report` before asking for help so you have a reproducible snapshot.
+- Execute `doctor:runtime` antes de depurar problemas de provider.
+- Prefira `dev:profile` a edições manuais de variáveis de ambiente.
+- Mantenha `.openclaude-profile.json` local (já está no gitignore).
+- Use `doctor:report` antes de pedir ajuda para ter um snapshot reproduzível.
 
-## 10. Quick Recovery Checklist
+## 10. Checklist de Recuperação Rápida
 
-When something breaks, run in order:
+Quando algo quebrar, execute na ordem:
 
 ```powershell
 bun run doctor:runtime
@@ -273,15 +273,15 @@ bun run doctor:report
 bun run smoke
 ```
 
-If answers are very slow, check processor mode:
+Se as respostas estiverem muito lentas, verifique o modo do processador:
 
 ```powershell
 ollama ps
 ```
 
-If `PROCESSOR` shows `CPU`, your setup is valid but latency will be higher for large models.
+Se `PROCESSOR` mostrar `CPU`, sua configuração está válida, mas a latência será maior para modelos grandes.
 
-If local model mode is failing:
+Se o modo de modelo local estiver falhando:
 
 ```powershell
 ollama --version
@@ -290,33 +290,33 @@ bun run doctor:runtime
 bun run dev:profile
 ```
 
-## 11. Command Reference
+## 11. Referência de Comandos
 
 ```powershell
-# profile
+# perfil
 bun run profile:init -- --provider ollama --model llama3.1:8b
 bun run profile:init -- --provider openai --api-key sk-... --model gpt-4o
 
-# launch
+# iniciar
 bun run dev:profile
 bun run dev:ollama
 bun run dev:openai
 
-# diagnostics
+# diagnósticos
 bun run doctor:runtime
 bun run doctor:runtime:json
 bun run doctor:report
 
-# quality
+# qualidade
 bun run smoke
 bun run hardening:check
 bun run hardening:strict
 ```
 
-## 12. Success Criteria
+## 12. Critérios de Sucesso
 
-Your setup is healthy when:
+Sua configuração está saudável quando:
 
-- `bun run doctor:runtime` passes provider and reachability checks.
-- `bun run dev:profile` opens the CLI normally.
-- Model shown in the UI matches your selected profile model.
+- `bun run doctor:runtime` passa nas verificações de provider e acessibilidade.
+- `bun run dev:profile` abre o CLI normalmente.
+- O modelo mostrado na interface corresponde ao modelo do perfil selecionado.

@@ -1,46 +1,46 @@
 # OpenClaude
 
-Use Claude Code with **any LLM** — not just Claude.
+Use o Claude Code com **qualquer LLM** — não apenas o Claude.
 
-OpenClaude is a fork of the [Claude Code source leak](https://gitlawb.com/node/repos/z6MkgKkb/instructkr-claude-code) (exposed via npm source maps on March 31, 2026). We added an OpenAI-compatible provider shim so you can plug in GPT-4o, DeepSeek, Gemini, Llama, Mistral, or any model that speaks the OpenAI chat completions API. It now also supports the ChatGPT Codex backend for `codexplan` and `codexspark`, and local inference via [Atomic Chat](https://atomic.chat/) on Apple Silicon.
+O OpenClaude é um fork do [vazamento do código-fonte do Claude Code](https://gitlawb.com/node/repos/z6MkgKkb/instructkr-claude-code) (exposto via source maps do npm em 31 de março de 2026). Adicionamos um shim de provider compatível com OpenAI para que você possa usar GPT-4o, DeepSeek, Gemini, Llama, Mistral ou qualquer modelo que fale a API de chat completions da OpenAI. Agora também suporta o backend ChatGPT Codex para `codexplan` e `codexspark`, e inferência local via [Atomic Chat](https://atomic.chat/) em Apple Silicon.
 
-All of Claude Code's tools work — bash, file read/write/edit, grep, glob, agents, tasks, MCP — just powered by whatever model you choose.
-
----
-
-## Start Here
-
-If you are new to terminals or just want the easiest path, start with the beginner guides:
-
-- [Non-Technical Setup](docs/non-technical-setup.md)
-- [Windows Quick Start](docs/quick-start-windows.md)
-- [macOS / Linux Quick Start](docs/quick-start-mac-linux.md)
-
-If you want source builds, Bun workflows, profile launchers, or full provider examples, use:
-
-- [Advanced Setup](docs/advanced-setup.md)
+Todas as ferramentas do Claude Code funcionam — bash, leitura/escrita/edição de arquivos, grep, glob, agentes, tarefas, MCP — só que alimentadas pelo modelo de sua escolha.
 
 ---
 
-## Beginner Install
+## Comece Aqui
 
-For most users, install the npm package:
+Se você não tem experiência com terminais ou quer o caminho mais fácil, comece pelos guias para iniciantes:
+
+- [Configuração para Não-Técnicos](docs/non-technical-setup.md)
+- [Início Rápido no Windows](docs/quick-start-windows.md)
+- [Início Rápido no macOS / Linux](docs/quick-start-mac-linux.md)
+
+Se você quer builds a partir do código-fonte, fluxos com Bun, launchers de perfil ou exemplos completos de providers, use:
+
+- [Configuração Avançada](docs/advanced-setup.md)
+
+---
+
+## Instalação para Iniciantes
+
+Para a maioria dos usuários, instale o pacote npm:
 
 ```bash
 npm install -g @gitlawb/openclaude
 ```
 
-The package name is `@gitlawb/openclaude`, but the command you run is:
+O nome do pacote é `@gitlawb/openclaude`, mas o comando que você executa é:
 
 ```bash
 openclaude
 ```
 
-If you install via npm and later see `ripgrep not found`, install ripgrep system-wide and confirm `rg --version` works in the same terminal before starting OpenClaude.
+Se você instalar via npm e depois ver `ripgrep not found`, instale o ripgrep no sistema e confirme que `rg --version` funciona no mesmo terminal antes de iniciar o OpenClaude.
 
 ---
 
-## Fastest Setup
+## Configuração Mais Rápida
 
 ### Windows PowerShell
 
@@ -48,7 +48,7 @@ If you install via npm and later see `ripgrep not found`, install ripgrep system
 npm install -g @gitlawb/openclaude
 
 $env:CLAUDE_CODE_USE_OPENAI="1"
-$env:OPENAI_API_KEY="sk-your-key-here"
+$env:OPENAI_API_KEY="sk-sua-chave-aqui"
 $env:OPENAI_MODEL="gpt-4o"
 
 openclaude
@@ -60,167 +60,166 @@ openclaude
 npm install -g @gitlawb/openclaude
 
 export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=sk-your-key-here
+export OPENAI_API_KEY=sk-sua-chave-aqui
 export OPENAI_MODEL=gpt-4o
 
 openclaude
 ```
 
-That is enough to start with OpenAI.
+Isso é suficiente para começar com OpenAI.
 
 ---
 
-## Choose Your Guide
+## Escolha Seu Guia
 
-### Beginner
+### Iniciante
 
-- Want the easiest setup with copy-paste steps: [Non-Technical Setup](docs/non-technical-setup.md)
-- On Windows: [Windows Quick Start](docs/quick-start-windows.md)
-- On macOS or Linux: [macOS / Linux Quick Start](docs/quick-start-mac-linux.md)
+- Quer a configuração mais fácil com passos para copiar e colar: [Configuração para Não-Técnicos](docs/non-technical-setup.md)
+- No Windows: [Início Rápido no Windows](docs/quick-start-windows.md)
+- No macOS ou Linux: [Início Rápido no macOS / Linux](docs/quick-start-mac-linux.md)
 
-### Advanced
+### Avançado
 
-- Want source builds, Bun, local profiles, runtime checks, or more provider choices: [Advanced Setup](docs/advanced-setup.md)
+- Quer builds a partir do código-fonte, Bun, perfis locais, verificações de runtime ou mais opções de providers: [Configuração Avançada](docs/advanced-setup.md)
 
 ---
 
-## Common Beginner Choices
+## Escolhas Comuns para Iniciantes
 
 ### OpenAI
 
-Best default if you already have an OpenAI API key.
+Melhor opção padrão se você já tem uma chave de API da OpenAI.
 
 ### Ollama
 
-Best if you want to run models locally on your own machine.
+Melhor se você quer rodar modelos localmente na sua própria máquina.
 
 ### Codex
 
-Best if you already use the Codex CLI or ChatGPT Codex backend.
+Melhor se você já usa o Codex CLI ou o backend ChatGPT Codex.
 
 ### Atomic Chat
 
-Best if you want local inference on Apple Silicon with Atomic Chat. See [Advanced Setup](docs/advanced-setup.md).
+Melhor se você quer inferência local em Apple Silicon com o Atomic Chat. Veja [Configuração Avançada](docs/advanced-setup.md).
 
 ---
 
+## Extensão para VS Code
 
-## VS Code Extension
+Quer uma experiência nativa no VS Code? Use a extensão do repositório em `vscode-extension/openclaude-vscode` para lançar o terminal com um único comando e o tema `OpenClaude Terminal Black`.
 
-Want a native VS Code experience? Use the in-repo extension at `vscode-extension/openclaude-vscode` for one-command terminal launch and the `OpenClaude Terminal Black` theme.
+## O Que Funciona
 
-## What Works
+- **Todas as ferramentas**: Bash, FileRead, FileWrite, FileEdit, Glob, Grep, WebFetch, WebSearch, Agent, MCP, LSP, NotebookEdit, Tasks
+- **Streaming**: Streaming de tokens em tempo real
+- **Chamada de ferramentas**: Cadeias de ferramentas em múltiplos passos (o modelo chama ferramentas, recebe resultados e continua)
+- **Imagens**: Imagens em Base64 e URL passadas para modelos de visão
+- **Comandos slash**: /commit, /review, /compact, /diff, /doctor, etc.
+- **Sub-agentes**: AgentTool cria sub-agentes usando o mesmo provider
+- **Memória**: Sistema de memória persistente
 
-- **All tools**: Bash, FileRead, FileWrite, FileEdit, Glob, Grep, WebFetch, WebSearch, Agent, MCP, LSP, NotebookEdit, Tasks
-- **Streaming**: Real-time token streaming
-- **Tool calling**: Multi-step tool chains (the model calls tools, gets results, continues)
-- **Images**: Base64 and URL images passed to vision models
-- **Slash commands**: /commit, /review, /compact, /diff, /doctor, etc.
-- **Sub-agents**: AgentTool spawns sub-agents using the same provider
-- **Memory**: Persistent memory system
+## O Que é Diferente
 
-## What's Different
-
-- **No thinking mode**: Anthropic's extended thinking is disabled (OpenAI models use different reasoning)
-- **No prompt caching**: Anthropic-specific cache headers are skipped
-- **No beta features**: Anthropic-specific beta headers are ignored
-- **Token limits**: Defaults to 32K max output — some models may cap lower, which is handled gracefully
+- **Sem modo de raciocínio estendido**: O extended thinking da Anthropic está desabilitado (modelos OpenAI usam raciocínio diferente)
+- **Sem cache de prompt**: Headers de cache específicos da Anthropic são ignorados
+- **Sem funcionalidades beta**: Headers beta específicos da Anthropic são ignorados
+- **Limites de tokens**: Padrão de 32K de saída máxima — alguns modelos podem ter limite menor, o que é tratado graciosamente
 
 ---
 
-## Web Search and Fetch
+## Busca e Fetch na Web
 
-By default, `WebSearch` is disabled for all non-Anthropic providers. The native search backend requires either the Anthropic API or the Codex responses endpoint, so users on GPT-4o, DeepSeek, Gemini, Ollama, and other OpenAI-compatible providers get no web search at all.
+Por padrão, o `WebSearch` está desabilitado para todos os providers não-Anthropic. O backend de busca nativo requer a API da Anthropic ou o endpoint de respostas do Codex, então usuários de GPT-4o, DeepSeek, Gemini, Ollama e outros providers compatíveis com OpenAI não têm busca na web.
 
-`WebFetch` works but uses basic HTTP plus HTML-to-markdown conversion. That fails on JavaScript-rendered pages (React, Next.js, Vue SPAs) and sites that block plain HTTP requests.
+O `WebFetch` funciona, mas usa HTTP básico com conversão de HTML para markdown. Isso falha em páginas renderizadas por JavaScript (React, Next.js, Vue SPAs) e sites que bloqueiam requisições HTTP simples.
 
-Set a [Firecrawl](https://firecrawl.dev) API key to fix both:
+Defina uma chave de API do [Firecrawl](https://firecrawl.dev) para corrigir os dois:
 
 ```bash
-export FIRECRAWL_API_KEY=your-key-here
+export FIRECRAWL_API_KEY=sua-chave-aqui
 ```
 
-With this set:
+Com isso definido:
 
-- `WebSearch` is enabled for all providers and routes through Firecrawl's search API
-- `WebFetch` uses Firecrawl's scrape endpoint instead of raw HTTP, handling JS-rendered pages correctly
+- `WebSearch` é habilitado para todos os providers e roteado pela API de busca do Firecrawl
+- `WebFetch` usa o endpoint de scrape do Firecrawl em vez de HTTP puro, lidando corretamente com páginas renderizadas por JS
 
-Free tier at [firecrawl.dev](https://firecrawl.dev) includes 500 credits. The key is optional — if not set, both tools fall back to their original behavior.
+O plano gratuito em [firecrawl.dev](https://firecrawl.dev) inclui 500 créditos. A chave é opcional — se não definida, ambas as ferramentas voltam ao comportamento original.
 
 ---
 
-## How It Works
+## Como Funciona
 
-The shim (`src/services/api/openaiShim.ts`) sits between Claude Code and the LLM API:
+O shim (`src/services/api/openaiShim.ts`) fica entre o Claude Code e a API do LLM:
 
 ```
-Claude Code Tool System
+Sistema de Ferramentas do Claude Code
         |
         v
-  Anthropic SDK interface (duck-typed)
+  Interface do SDK Anthropic (duck-typed)
         |
         v
-  openaiShim.ts  <-- translates formats
+  openaiShim.ts  <-- traduz formatos
         |
         v
-  OpenAI Chat Completions API
+  API de Chat Completions OpenAI
         |
         v
-  Any compatible model
+  Qualquer modelo compatível
 ```
 
-It translates:
-- Anthropic message blocks → OpenAI messages
-- Anthropic tool_use/tool_result → OpenAI function calls
-- OpenAI SSE streaming → Anthropic stream events
-- Anthropic system prompt arrays → OpenAI system messages
+Ele traduz:
+- Blocos de mensagem Anthropic → mensagens OpenAI
+- tool_use/tool_result Anthropic → chamadas de função OpenAI
+- Streaming SSE OpenAI → eventos de stream Anthropic
+- Arrays de system prompt Anthropic → mensagens de sistema OpenAI
 
-The rest of Claude Code doesn't know it's talking to a different model.
+O restante do Claude Code não sabe que está falando com um modelo diferente.
 
 ---
 
-## Model Quality Notes
+## Notas sobre Qualidade dos Modelos
 
-Not all models are equal at agentic tool use. Here's a rough guide:
+Nem todos os modelos são iguais no uso de ferramentas agênticas. Aqui está um guia aproximado:
 
-| Model | Tool Calling | Code Quality | Speed |
+| Modelo | Chamada de Ferramentas | Qualidade de Código | Velocidade |
 |-------|-------------|-------------|-------|
-| GPT-4o | Excellent | Excellent | Fast |
-| DeepSeek-V3 | Great | Great | Fast |
-| Gemini 2.0 Flash | Great | Good | Very Fast |
-| Llama 3.3 70B | Good | Good | Medium |
-| Mistral Large | Good | Good | Fast |
-| GPT-4o-mini | Good | Good | Very Fast |
-| Qwen 2.5 72B | Good | Good | Medium |
-| Smaller models (<7B) | Limited | Limited | Very Fast |
+| GPT-4o | Excelente | Excelente | Rápido |
+| DeepSeek-V3 | Ótimo | Ótimo | Rápido |
+| Gemini 2.0 Flash | Ótimo | Bom | Muito Rápido |
+| Llama 3.3 70B | Bom | Bom | Médio |
+| Mistral Large | Bom | Bom | Rápido |
+| GPT-4o-mini | Bom | Bom | Muito Rápido |
+| Qwen 2.5 72B | Bom | Bom | Médio |
+| Modelos menores (<7B) | Limitado | Limitado | Muito Rápido |
 
-For best results, use models with strong function/tool calling support.
+Para melhores resultados, use modelos com forte suporte a chamadas de função/ferramentas.
 
 ---
 
-## Files Changed from Original
+## Arquivos Alterados em Relação ao Original
 
 ```
-src/services/api/openaiShim.ts   — NEW: OpenAI-compatible API shim (724 lines)
-src/services/api/client.ts       — Routes to shim when CLAUDE_CODE_USE_OPENAI=1
-src/utils/model/providers.ts     — Added 'openai' provider type
-src/utils/model/configs.ts       — Added openai model mappings
-src/utils/model/model.ts         — Respects OPENAI_MODEL for defaults
-src/utils/auth.ts                — Recognizes OpenAI as valid 3P provider
+src/services/api/openaiShim.ts   — NOVO: Shim de API compatível com OpenAI (724 linhas)
+src/services/api/client.ts       — Roteia para o shim quando CLAUDE_CODE_USE_OPENAI=1
+src/utils/model/providers.ts     — Adicionado tipo de provider 'openai'
+src/utils/model/configs.ts       — Adicionados mapeamentos de modelo openai
+src/utils/model/model.ts         — Respeita OPENAI_MODEL para padrões
+src/utils/auth.ts                — Reconhece OpenAI como provider 3P válido
 ```
 
-6 files changed. 786 lines added. Zero dependencies added.
+6 arquivos alterados. 786 linhas adicionadas. Zero dependências adicionadas.
 
 ---
 
-## Origin
+## Origem
 
-This is a fork of [instructkr/claude-code](https://gitlawb.com/node/repos/z6MkgKkb/instructkr-claude-code), which mirrored the Claude Code source snapshot that became publicly accessible through an npm source map exposure on March 31, 2026.
+Este é um fork de [instructkr/claude-code](https://gitlawb.com/node/repos/z6MkgKkb/instructkr-claude-code), que espelhou o snapshot do código-fonte do Claude Code que se tornou publicamente acessível por meio de uma exposição de source map do npm em 31 de março de 2026.
 
-The original Claude Code source is the property of Anthropic. This repository is not affiliated with or endorsed by Anthropic.
+O código-fonte original do Claude Code é propriedade da Anthropic. Este repositório não é afiliado nem endossado pela Anthropic.
 
 ---
 
-## License
+## Licença
 
-This repository is provided for educational and research purposes. The original source code is subject to Anthropic's terms. The OpenAI shim additions are public domain.
+Este repositório é fornecido para fins educacionais e de pesquisa. O código-fonte original está sujeito aos termos da Anthropic. As adições do shim OpenAI são de domínio público.

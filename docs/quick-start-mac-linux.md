@@ -1,58 +1,58 @@
-# OpenClaude Quick Start for macOS and Linux
+# Início Rápido do OpenClaude no macOS e Linux
 
-This guide uses a standard shell such as Terminal, iTerm, bash, or zsh.
+Este guia usa um shell padrão como Terminal, iTerm, bash ou zsh.
 
-## 1. Install Node.js
+## 1. Instalar o Node.js
 
-Install Node.js 20 or newer from:
+Instale o Node.js 20 ou mais recente em:
 
 - `https://nodejs.org/`
 
-Then check it:
+Em seguida, verifique:
 
 ```bash
 node --version
 npm --version
 ```
 
-## 2. Install OpenClaude
+## 2. Instalar o OpenClaude
 
 ```bash
 npm install -g @gitlawb/openclaude
 ```
 
-## 3. Pick One Provider
+## 3. Escolha Um Provider
 
-### Option A: OpenAI
+### Opção A: OpenAI
 
-Replace `sk-your-key-here` with your real key.
+Substitua `sk-sua-chave-aqui` pela sua chave real.
 
 ```bash
 export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=sk-your-key-here
+export OPENAI_API_KEY=sk-sua-chave-aqui
 export OPENAI_MODEL=gpt-4o
 
 openclaude
 ```
 
-### Option B: DeepSeek
+### Opção B: DeepSeek
 
 ```bash
 export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=sk-your-key-here
+export OPENAI_API_KEY=sk-sua-chave-aqui
 export OPENAI_BASE_URL=https://api.deepseek.com/v1
 export OPENAI_MODEL=deepseek-chat
 
 openclaude
 ```
 
-### Option C: Ollama
+### Opção C: Ollama
 
-Install Ollama first from:
+Instale o Ollama primeiro em:
 
 - `https://ollama.com/download`
 
-Then run:
+Em seguida execute:
 
 ```bash
 ollama pull llama3.1:8b
@@ -64,45 +64,45 @@ export OPENAI_MODEL=llama3.1:8b
 openclaude
 ```
 
-No API key is needed for Ollama local models.
+Nenhuma chave de API é necessária para modelos locais do Ollama.
 
-## 4. If `openclaude` Is Not Found
+## 4. Se `openclaude` Não For Encontrado
 
-Close the terminal, open a new one, and try again:
+Feche o terminal, abra um novo e tente novamente:
 
 ```bash
 openclaude
 ```
 
-## 5. If Your Provider Fails
+## 5. Se o Seu Provider Falhar
 
-Check the basics:
+Verifique o básico:
 
-### For OpenAI or DeepSeek
+### Para OpenAI ou DeepSeek
 
-- make sure the key is real
-- make sure you copied it fully
+- certifique-se de que a chave é real
+- certifique-se de que você a copiou completamente
 
-### For Ollama
+### Para Ollama
 
-- make sure Ollama is installed
-- make sure Ollama is running
-- make sure the model was pulled successfully
+- certifique-se de que o Ollama está instalado
+- certifique-se de que o Ollama está em execução
+- certifique-se de que o modelo foi baixado com sucesso
 
-## 6. Updating OpenClaude
+## 6. Atualizando o OpenClaude
 
 ```bash
 npm install -g @gitlawb/openclaude@latest
 ```
 
-## 7. Uninstalling OpenClaude
+## 7. Desinstalando o OpenClaude
 
 ```bash
 npm uninstall -g @gitlawb/openclaude
 ```
 
-## Need Advanced Setup?
+## Precisa de Configuração Avançada?
 
 Use:
 
-- [Advanced Setup](advanced-setup.md)
+- [Configuração Avançada](advanced-setup.md)

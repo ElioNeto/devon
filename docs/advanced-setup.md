@@ -1,18 +1,18 @@
-# OpenClaude Advanced Setup
+# Configuração Avançada do OpenClaude
 
-This guide is for users who want source builds, Bun workflows, provider profiles, diagnostics, or more control over runtime behavior.
+Este guia é para usuários que querem builds a partir do código-fonte, fluxos de trabalho com Bun, perfis de provider, diagnósticos ou mais controle sobre o comportamento de runtime.
 
-## Install Options
+## Opções de Instalação
 
-### Option A: npm
+### Opção A: npm
 
 ```bash
 npm install -g @gitlawb/openclaude
 ```
 
-### Option B: From source with Bun
+### Opção B: A partir do código-fonte com Bun
 
-Use Bun `1.3.11` or newer for source builds on Windows. Older Bun versions can fail during `bun run build`.
+Use o Bun `1.3.11` ou mais recente para builds a partir do código-fonte no Windows. Versões mais antigas do Bun podem falhar durante o `bun run build`.
 
 ```bash
 git clone https://node.gitlawb.com/z6MkqDnb7Siv3Cwj7pGJq4T5EsUisECqR8KpnDLwcaZq5TPr/openclaude.git
@@ -23,7 +23,7 @@ bun run build
 npm link
 ```
 
-### Option C: Run directly with Bun
+### Opção C: Executar diretamente com Bun
 
 ```bash
 git clone https://node.gitlawb.com/z6MkqDnb7Siv3Cwj7pGJq4T5EsUisECqR8KpnDLwcaZq5TPr/openclaude.git
@@ -33,7 +33,7 @@ bun install
 bun run dev
 ```
 
-## Provider Examples
+## Exemplos de Providers
 
 ### OpenAI
 
@@ -43,18 +43,18 @@ export OPENAI_API_KEY=sk-...
 export OPENAI_MODEL=gpt-4o
 ```
 
-### Codex via ChatGPT auth
+### Codex via autenticação ChatGPT
 
-`codexplan` maps to GPT-5.4 on the Codex backend with high reasoning.
-`codexspark` maps to GPT-5.3 Codex Spark for faster loops.
+`codexplan` mapeia para GPT-5.4 no backend Codex com raciocínio elevado.
+`codexspark` mapeia para GPT-5.3 Codex Spark para loops mais rápidos.
 
-If you already use the Codex CLI, OpenClaude reads `~/.codex/auth.json` automatically. You can also point it elsewhere with `CODEX_AUTH_JSON_PATH` or override the token directly with `CODEX_API_KEY`.
+Se você já usa o Codex CLI, o OpenClaude lê `~/.codex/auth.json` automaticamente. Você também pode apontar para outro local com `CODEX_AUTH_JSON_PATH` ou substituir o token diretamente com `CODEX_API_KEY`.
 
 ```bash
 export CLAUDE_CODE_USE_OPENAI=1
 export OPENAI_MODEL=codexplan
 
-# optional if you do not already have ~/.codex/auth.json
+# opcional se você ainda não tem ~/.codex/auth.json
 export CODEX_API_KEY=...
 
 openclaude
@@ -78,7 +78,7 @@ export OPENAI_BASE_URL=https://openrouter.ai/api/v1
 export OPENAI_MODEL=google/gemini-2.0-flash-001
 ```
 
-OpenRouter model availability changes over time. If a model stops working, try another current OpenRouter model before assuming the integration is broken.
+A disponibilidade de modelos no OpenRouter muda com o tempo. Se um modelo parar de funcionar, tente outro modelo atual do OpenRouter antes de presumir que a integração está quebrada.
 
 ### Ollama
 
@@ -95,25 +95,25 @@ export OPENAI_MODEL=llama3.3:70b
 ```bash
 export CLAUDE_CODE_USE_OPENAI=1
 export OPENAI_BASE_URL=http://127.0.0.1:1337/v1
-export OPENAI_MODEL=your-model-name
+export OPENAI_MODEL=nome-do-seu-modelo
 ```
 
-No API key is needed for Atomic Chat local models.
+Nenhuma chave de API é necessária para modelos locais do Atomic Chat.
 
-Or use the profile launcher:
+Ou use o launcher de perfil:
 
 ```bash
 bun run dev:atomic-chat
 ```
 
-Download Atomic Chat from [atomic.chat](https://atomic.chat/). The app must be running with a model loaded before launching.
+Baixe o Atomic Chat em [atomic.chat](https://atomic.chat/). O aplicativo deve estar em execução com um modelo carregado antes de iniciar.
 
 ### LM Studio
 
 ```bash
 export CLAUDE_CODE_USE_OPENAI=1
 export OPENAI_BASE_URL=http://localhost:1234/v1
-export OPENAI_MODEL=your-model-name
+export OPENAI_MODEL=nome-do-seu-modelo
 ```
 
 ### Together AI
@@ -147,116 +147,116 @@ export OPENAI_MODEL=mistral-large-latest
 
 ```bash
 export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=your-azure-key
-export OPENAI_BASE_URL=https://your-resource.openai.azure.com/openai/deployments/your-deployment/v1
+export OPENAI_API_KEY=sua-chave-azure
+export OPENAI_BASE_URL=https://seu-recurso.openai.azure.com/openai/deployments/seu-deployment/v1
 export OPENAI_MODEL=gpt-4o
 ```
 
-## Environment Variables
+## Variáveis de Ambiente
 
-| Variable | Required | Description |
+| Variável | Obrigatória | Descrição |
 |----------|----------|-------------|
-| `CLAUDE_CODE_USE_OPENAI` | Yes | Set to `1` to enable the OpenAI provider |
-| `OPENAI_API_KEY` | Yes* | Your API key (`*` not needed for local models like Ollama or Atomic Chat) |
-| `OPENAI_MODEL` | Yes | Model name such as `gpt-4o`, `deepseek-chat`, or `llama3.3:70b` |
-| `OPENAI_BASE_URL` | No | API endpoint, defaulting to `https://api.openai.com/v1` |
-| `CODEX_API_KEY` | Codex only | Codex or ChatGPT access token override |
-| `CODEX_AUTH_JSON_PATH` | Codex only | Path to a Codex CLI `auth.json` file |
-| `CODEX_HOME` | Codex only | Alternative Codex home directory |
-| `OPENCLAUDE_DISABLE_CO_AUTHORED_BY` | No | Suppress the default `Co-Authored-By` trailer in generated git commits |
+| `CLAUDE_CODE_USE_OPENAI` | Sim | Defina como `1` para habilitar o provider OpenAI |
+| `OPENAI_API_KEY` | Sim* | Sua chave de API (`*` não necessária para modelos locais como Ollama ou Atomic Chat) |
+| `OPENAI_MODEL` | Sim | Nome do modelo como `gpt-4o`, `deepseek-chat` ou `llama3.3:70b` |
+| `OPENAI_BASE_URL` | Não | Endpoint da API, padrão `https://api.openai.com/v1` |
+| `CODEX_API_KEY` | Apenas Codex | Token de acesso ao Codex ou ChatGPT |
+| `CODEX_AUTH_JSON_PATH` | Apenas Codex | Caminho para um arquivo `auth.json` do Codex CLI |
+| `CODEX_HOME` | Apenas Codex | Diretório home alternativo do Codex |
+| `OPENCLAUDE_DISABLE_CO_AUTHORED_BY` | Não | Suprime o trailer padrão `Co-Authored-By` em commits git gerados |
 
-You can also use `ANTHROPIC_MODEL` to override the model name. `OPENAI_MODEL` takes priority.
+Você também pode usar `ANTHROPIC_MODEL` para substituir o nome do modelo. `OPENAI_MODEL` tem prioridade.
 
-## Runtime Hardening
+## Hardening de Runtime
 
-Use these commands to validate your setup and catch mistakes early:
+Use estes comandos para validar sua configuração e detectar erros cedo:
 
 ```bash
-# quick startup sanity check
+# verificação de sanidade rápida na inicialização
 bun run smoke
 
-# validate provider env + reachability
+# validar env de provider + acessibilidade
 bun run doctor:runtime
 
-# print machine-readable runtime diagnostics
+# imprimir diagnósticos de runtime legíveis por máquina
 bun run doctor:runtime:json
 
-# persist a diagnostics report to reports/doctor-runtime.json
+# persistir um relatório de diagnósticos em reports/doctor-runtime.json
 bun run doctor:report
 
-# full local hardening check (smoke + runtime doctor)
+# verificação de hardening local completa (smoke + runtime doctor)
 bun run hardening:check
 
-# strict hardening (includes project-wide typecheck)
+# hardening estrito (inclui typecheck em todo o projeto)
 bun run hardening:strict
 ```
 
-Notes:
+Observações:
 
-- `doctor:runtime` fails fast if `CLAUDE_CODE_USE_OPENAI=1` with a placeholder key or a missing key for non-local providers.
-- Local providers such as `http://localhost:11434/v1`, `http://10.0.0.1:11434/v1`, and `http://127.0.0.1:1337/v1` can run without `OPENAI_API_KEY`.
-- Codex profiles validate `CODEX_API_KEY` or the Codex CLI auth file and probe `POST /responses` instead of `GET /models`.
+- `doctor:runtime` falha rapidamente se `CLAUDE_CODE_USE_OPENAI=1` com uma chave placeholder ou chave ausente para providers não-locais.
+- Providers locais como `http://localhost:11434/v1`, `http://10.0.0.1:11434/v1` e `http://127.0.0.1:1337/v1` podem funcionar sem `OPENAI_API_KEY`.
+- Perfis Codex validam `CODEX_API_KEY` ou o arquivo de autenticação do Codex CLI e testam `POST /responses` em vez de `GET /models`.
 
-## Provider Launch Profiles
+## Perfis de Launch de Provider
 
-Use profile launchers to avoid repeated environment setup:
+Use launchers de perfil para evitar configuração repetida de ambiente:
 
 ```bash
-# one-time profile bootstrap (prefer viable local Ollama, otherwise OpenAI)
+# bootstrap de perfil único (prefere Ollama local viável, caso contrário OpenAI)
 bun run profile:init
 
-# preview the best provider/model for your goal
+# visualize o melhor provider/modelo para seu objetivo
 bun run profile:recommend -- --goal coding --benchmark
 
-# auto-apply the best available local/openai provider/model for your goal
+# aplique automaticamente o melhor provider/modelo local/openai disponível para seu objetivo
 bun run profile:auto -- --goal latency
 
-# codex bootstrap (defaults to codexplan and ~/.codex/auth.json)
+# bootstrap codex (padrão codexplan e ~/.codex/auth.json)
 bun run profile:codex
 
-# openai bootstrap with explicit key
+# bootstrap openai com chave explícita
 bun run profile:init -- --provider openai --api-key sk-...
 
-# ollama bootstrap with custom model
+# bootstrap ollama com modelo personalizado
 bun run profile:init -- --provider ollama --model llama3.1:8b
 
-# ollama bootstrap with intelligent model auto-selection
+# bootstrap ollama com seleção automática inteligente de modelo
 bun run profile:init -- --provider ollama --goal coding
 
-# atomic-chat bootstrap (auto-detects running model)
+# bootstrap atomic-chat (detecta automaticamente o modelo em execução)
 bun run profile:init -- --provider atomic-chat
 
-# codex bootstrap with a fast model alias
+# bootstrap codex com alias de modelo rápido
 bun run profile:init -- --provider codex --model codexspark
 
-# launch using persisted profile (.openclaude-profile.json)
+# iniciar usando perfil persistido (.openclaude-profile.json)
 bun run dev:profile
 
-# codex profile (uses CODEX_API_KEY or ~/.codex/auth.json)
+# perfil codex (usa CODEX_API_KEY ou ~/.codex/auth.json)
 bun run dev:codex
 
-# OpenAI profile (requires OPENAI_API_KEY in your shell)
+# perfil OpenAI (requer OPENAI_API_KEY no shell)
 bun run dev:openai
 
-# Ollama profile (defaults: localhost:11434, llama3.1:8b)
+# perfil Ollama (padrões: localhost:11434, llama3.1:8b)
 bun run dev:ollama
 
-# Atomic Chat profile (Apple Silicon local LLMs at 127.0.0.1:1337)
+# perfil Atomic Chat (LLMs locais Apple Silicon em 127.0.0.1:1337)
 bun run dev:atomic-chat
 ```
 
-`profile:recommend` ranks installed Ollama models for `latency`, `balanced`, or `coding`, and `profile:auto` can persist the recommendation directly.
+`profile:recommend` classifica modelos Ollama instalados por `latency`, `balanced` ou `coding`, e `profile:auto` pode persistir a recomendação diretamente.
 
-If no profile exists yet, `dev:profile` uses the same goal-aware defaults when picking the initial model.
+Se ainda não existir um perfil, `dev:profile` usa os mesmos padrões com reconhecimento de objetivo ao escolher o modelo inicial.
 
-Use `--provider ollama` when you want a local-only path. Auto mode falls back to OpenAI when no viable local chat model is installed.
+Use `--provider ollama` quando quiser um caminho apenas local. O modo automático usa OpenAI como fallback quando nenhum modelo de chat local viável está instalado.
 
-Use `--provider atomic-chat` when you want Atomic Chat as the local Apple Silicon provider.
+Use `--provider atomic-chat` quando quiser o Atomic Chat como provider local para Apple Silicon.
 
-Use `profile:codex` or `--provider codex` when you want the ChatGPT Codex backend.
+Use `profile:codex` ou `--provider codex` quando quiser o backend ChatGPT Codex.
 
-`dev:openai`, `dev:ollama`, `dev:atomic-chat`, and `dev:codex` run `doctor:runtime` first and only launch the app if checks pass.
+`dev:openai`, `dev:ollama`, `dev:atomic-chat` e `dev:codex` executam `doctor:runtime` primeiro e só iniciam o aplicativo se as verificações passarem.
 
-For `dev:ollama`, make sure Ollama is running locally before launch.
+Para `dev:ollama`, certifique-se de que o Ollama está em execução localmente antes de iniciar.
 
-For `dev:atomic-chat`, make sure Atomic Chat is running with a model loaded before launch.
+Para `dev:atomic-chat`, certifique-se de que o Atomic Chat está em execução com um modelo carregado antes de iniciar.

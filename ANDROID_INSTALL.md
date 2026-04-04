@@ -1,45 +1,45 @@
-# OpenClaude on Android (Termux)
+# OpenClaude no Android (Termux)
 
-A complete guide to running OpenClaude on Android using Termux + proot Ubuntu.
-
----
-
-## Prerequisites
-
-- Android phone with ~700MB free storage
-- [Termux](https://f-droid.org/en/packages/com.termux/) installed from **F-Droid** (not Play Store)
-- An [OpenRouter](https://openrouter.ai) API key (free, no credit card required)
+Um guia completo para executar o OpenClaude no Android usando Termux + proot Ubuntu.
 
 ---
 
-## Why This Setup?
+## Pré-requisitos
 
-OpenClaude requires [Bun](https://bun.sh) to build, and Bun does not support Android natively. The workaround is running a real Ubuntu environment inside Termux via `proot-distro`, where Bun's Linux binary works correctly.
+- Celular Android com ~700MB de armazenamento livre
+- [Termux](https://f-droid.org/en/packages/com.termux/) instalado pelo **F-Droid** (não pela Play Store)
+- Uma chave de API do [OpenRouter](https://openrouter.ai) (gratuita, sem necessidade de cartão de crédito)
 
 ---
 
-## Installation
+## Por Que Esta Configuração?
 
-### Step 1 — Update Termux
+O OpenClaude requer o [Bun](https://bun.sh) para fazer o build, e o Bun não suporta Android nativamente. A solução é executar um ambiente Ubuntu real dentro do Termux via `proot-distro`, onde o binário Linux do Bun funciona corretamente.
+
+---
+
+## Instalação
+
+### Passo 1 — Atualizar o Termux
 
 ```bash
 pkg update && pkg upgrade
 ```
 
-Press `N` or Enter for any config file conflict prompts.
+Pressione `N` ou Enter em qualquer prompt de conflito de arquivo de configuração.
 
-### Step 2 — Install dependencies
+### Passo 2 — Instalar dependências
 
 ```bash
 pkg install nodejs-lts git proot-distro
 ```
 
-Verify Node.js:
+Verifique o Node.js:
 ```bash
-node --version  # should be v20+
+node --version  # deve ser v20+
 ```
 
-### Step 3 — Clone OpenClaude
+### Passo 3 — Clonar o OpenClaude
 
 ```bash
 git clone https://github.com/Gitlawb/openclaude.git
@@ -48,62 +48,62 @@ npm install
 npm link
 ```
 
-### Step 4 — Install Ubuntu via proot
+### Passo 4 — Instalar Ubuntu via proot
 
 ```bash
 proot-distro install ubuntu
 ```
 
-This downloads ~200–400MB. Wait for it to complete.
+Isso baixa ~200–400MB. Aguarde a conclusão.
 
-### Step 5 — Install Bun inside Ubuntu
+### Passo 5 — Instalar Bun dentro do Ubuntu
 
 ```bash
 proot-distro login ubuntu
 curl -fsSL https://bun.sh/install | bash
 source ~/.bashrc
-bun --version  # should show 1.3.11+
+bun --version  # deve mostrar 1.3.11+
 ```
 
-### Step 6 — Build OpenClaude
+### Passo 6 — Fazer o build do OpenClaude
 
 ```bash
 cd /data/data/com.termux/files/home/openclaude
 bun run build
 ```
 
-You should see:
+Você deve ver:
 ```
 ✓ Built openclaude v0.1.6 → dist/cli.mjs
 ```
 
-### Step 7 — Save env vars permanently
+### Passo 7 — Salvar variáveis de ambiente permanentemente
 
-Still inside Ubuntu, add your OpenRouter config to `.bashrc`:
+Ainda dentro do Ubuntu, adicione sua configuração do OpenRouter ao `.bashrc`:
 
 ```bash
 echo 'export CLAUDE_CODE_USE_OPENAI=1' >> ~/.bashrc
-echo 'export OPENAI_API_KEY=your_openrouter_key_here' >> ~/.bashrc
+echo 'export OPENAI_API_KEY=sua_chave_openrouter_aqui' >> ~/.bashrc
 echo 'export OPENAI_BASE_URL=https://openrouter.ai/api/v1' >> ~/.bashrc
 echo 'export OPENAI_MODEL=qwen/qwen3.6-plus-preview:free' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-Replace `your_openrouter_key_here` with your actual key from [openrouter.ai/keys](https://openrouter.ai/keys).
+Substitua `sua_chave_openrouter_aqui` pela sua chave real de [openrouter.ai/keys](https://openrouter.ai/keys).
 
-### Step 8 — Run OpenClaude
+### Passo 8 — Executar o OpenClaude
 
 ```bash
 node dist/cli.mjs
 ```
 
-Select **3** (3rd-party platform) at the login screen. Your env vars will be detected automatically.
+Selecione **3** (plataforma de terceiros) na tela de login. Suas variáveis de ambiente serão detectadas automaticamente.
 
 ---
 
-## Restarting After Closing Termux
+## Reiniciando Após Fechar o Termux
 
-Every time you reopen Termux after killing it, run:
+Toda vez que você reabrir o Termux após fechá-lo, execute:
 
 ```bash
 proot-distro login ubuntu
@@ -113,30 +113,30 @@ node dist/cli.mjs
 
 ---
 
-## Recommended Free Model
+## Modelo Gratuito Recomendado
 
-**`qwen/qwen3.6-plus-preview:free`** — Best free model on OpenRouter as of April 2026.
+**`qwen/qwen3.6-plus-preview:free`** — Melhor modelo gratuito no OpenRouter em abril de 2026.
 
-- 1M token context window
-- Beats Claude 4.5 Opus on Terminal-Bench 2.0 agentic coding (61.6 vs 59.3)
-- Built-in chain-of-thought reasoning
-- Native tool use and function calling
-- $0/M tokens (preview period)
+- Janela de contexto de 1M tokens
+- Supera Claude 4.5 Opus no Terminal-Bench 2.0 de codificação agêntica (61,6 vs 59,3)
+- Raciocínio chain-of-thought integrado
+- Uso nativo de ferramentas e chamada de funções
+- $0/M tokens (período de preview)
 
-> ⚠️ Free status may change when the preview period ends. Check [openrouter.ai](https://openrouter.ai/qwen/qwen3.6-plus-preview:free) for current pricing.
+> ⚠️ O status gratuito pode mudar quando o período de preview terminar. Verifique em [openrouter.ai](https://openrouter.ai/qwen/qwen3.6-plus-preview:free) os preços atuais.
 
 ---
 
-## Alternative Free Models (OpenRouter)
+## Modelos Gratuitos Alternativos (OpenRouter)
 
-| Model ID | Context | Notes |
+| ID do Modelo | Contexto | Notas |
 |---|---|---|
-| `qwen/qwen3-coder:free` | 262K | Best for pure coding tasks |
-| `openai/gpt-oss-120b:free` | 131K | OpenAI open model, strong tool calling |
-| `nvidia/nemotron-3-super-120b-a12b:free` | 262K | Hybrid MoE, good general use |
-| `meta-llama/llama-3.3-70b-instruct:free` | 66K | Reliable, widely tested |
+| `qwen/qwen3-coder:free` | 262K | Melhor para tarefas puramente de código |
+| `openai/gpt-oss-120b:free` | 131K | Modelo aberto da OpenAI, forte chamada de ferramentas |
+| `nvidia/nemotron-3-super-120b-a12b:free` | 262K | MoE híbrido, bom uso geral |
+| `meta-llama/llama-3.3-70b-instruct:free` | 66K | Confiável, amplamente testado |
 
-Switch models anytime:
+Troque de modelo a qualquer hora:
 ```bash
 export OPENAI_MODEL=qwen/qwen3-coder:free
 node dist/cli.mjs
@@ -144,19 +144,19 @@ node dist/cli.mjs
 
 ---
 
-## Why Not Groq or Cerebras?
+## Por Que Não Groq ou Cerebras?
 
-Both were tested and fail due to OpenClaude's large system prompt (~50K tokens):
+Ambos foram testados e falham por causa do grande system prompt do OpenClaude (~50K tokens):
 
-- **Groq free tier**: TPM limits too low (6K–12K tokens/min)
-- **Cerebras free tier**: TPM limits exceeded, even on `llama3.1-8b`
+- **Plano gratuito Groq**: Limites de TPM muito baixos (6K–12K tokens/min)
+- **Plano gratuito Cerebras**: Limites de TPM excedidos, mesmo no `llama3.1-8b`
 
-OpenRouter free models have no TPM restrictions — only 20 req/min and 200 req/day.
+Modelos gratuitos do OpenRouter não têm restrições de TPM — apenas 20 req/min e 200 req/dia.
 
 ---
 
-## Tips
+## Dicas
 
-- **Don't swipe Termux away** from recent apps mid-session — use the home button to minimize instead.
-- The Ubuntu environment persists between Termux sessions; your build and config are saved.
-- Run `bun run build` again only if you pull updates to the OpenClaude repo.
+- **Não deslize o Termux** para fora dos apps recentes durante uma sessão — use o botão home para minimizar.
+- O ambiente Ubuntu persiste entre sessões do Termux; seu build e configuração são salvos.
+- Execute `bun run build` novamente apenas se você baixar atualizações do repositório do OpenClaude.
