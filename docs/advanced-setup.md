@@ -1,262 +1,221 @@
-# Configuração Avançada do OpenClaude
+# Configuração Avançada do Devon
 
-Este guia é para usuários que querem builds a partir do código-fonte, fluxos de trabalho com Bun, perfis de provider, diagnósticos ou mais controle sobre o comportamento de runtime.
+Este guia cobre configuração de providers, perfis por projeto, diagnósticos e opções de runtime.
 
-## Opções de Instalação
+---
 
-### Opção A: npm
+## Instalação
 
-```bash
-npm install -g @gitlawb/openclaude
-```
-
-### Opção B: A partir do código-fonte com Bun
-
-Use o Bun `1.3.11` ou mais recente para builds a partir do código-fonte no Windows. Versões mais antigas do Bun podem falhar durante o `bun run build`.
+### Opção A: npm (versão atual TypeScript)
 
 ```bash
-git clone https://node.gitlawb.com/z6MkqDnb7Siv3Cwj7pGJq4T5EsUisECqR8KpnDLwcaZq5TPr/openclaude.git
-cd openclaude
-
+git clone https://github.com/ElioNeto/devon.git
+cd devon
 bun install
 bun run build
 npm link
 ```
 
-### Opção C: Executar diretamente com Bun
+### Opção B: Executar direto com Bun
 
 ```bash
-git clone https://node.gitlawb.com/z6MkqDnb7Siv3Cwj7pGJq4T5EsUisECqR8KpnDLwcaZq5TPr/openclaude.git
-cd openclaude
-
+git clone https://github.com/ElioNeto/devon.git
+cd devon
 bun install
 bun run dev
 ```
 
-## Exemplos de Providers
+> **Em breve:** Versão Go com binário único estático. Sem Node, sem Bun, sem dependências. Veja [#7](https://github.com/ElioNeto/devon/issues/7).
 
-### OpenAI
+---
+
+## Configuração de Provider
+
+O Devon conecta a qualquer API compatível com OpenAI. Configure via variáveis de ambiente ou arquivo `.env` local.
+
+### Usando `.env` (recomendado)
+
+Crie um `.env` na raiz do projeto que quiser usar:
 
 ```bash
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=sk-...
-export OPENAI_MODEL=gpt-4o
+CLAUDE_CODE_USE_OPENAI=1
+OPENAI_API_KEY=sk-or-sua-chave-aqui
+OPENAI_BASE_URL=https://openrouter.ai/api/v1
+OPENAI_MODEL=mistralai/devstral-2512:free
 ```
 
-### Codex via autenticação ChatGPT
-
-`codexplan` mapeia para GPT-5.4 no backend Codex com raciocínio elevado.
-`codexspark` mapeia para GPT-5.3 Codex Spark para loops mais rápidos.
-
-Se você já usa o Codex CLI, o OpenClaude lê `~/.codex/auth.json` automaticamente. Você também pode apontar para outro local com `CODEX_AUTH_JSON_PATH` ou substituir o token diretamente com `CODEX_API_KEY`.
+Certifique-se que `.env` está no `.gitignore`:
 
 ```bash
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_MODEL=codexplan
+echo ".env" >> .gitignore
+```
 
-# opcional se você ainda não tem ~/.codex/auth.json
-export CODEX_API_KEY=...
+Inicie carregando o `.env`:
 
-openclaude
+```bash
+set -a && source .env && set +a && devon
+```
+
+---
+
+## Exemplos de Providers
+
+### OpenRouter (modelos gratuitos)
+
+Crie sua chave em [openrouter.ai/keys](https://openrouter.ai/keys) — sem cartão de crédito.
+
+```bash
+CLAUDE_CODE_USE_OPENAI=1
+OPENAI_API_KEY=sk-or-sua-chave-aqui
+OPENAI_BASE_URL=https://openrouter.ai/api/v1
+OPENAI_MODEL=mistralai/devstral-2512:free
+```
+
+Modelos gratuitos recomendados para código:
+
+| Modelo | Contexto | Destaque |
+|---|---|---|
+| `mistralai/devstral-2512:free` | 262K | Melhor para código |
+| `qwen/qwen3-coder:free` | 262K | Forte em tool use |
+| `deepseek/deepseek-r1:free` | 128K | Raciocínio em código |
+
+### Google Gemini
+
+Chave gratuita em [aistudio.google.com](https://aistudio.google.com).
+
+```bash
+CLAUDE_CODE_USE_OPENAI=1
+OPENAI_API_KEY=AIzaSy-sua-chave-aqui
+OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+OPENAI_MODEL=gemini-2.5-flash
 ```
 
 ### DeepSeek
 
 ```bash
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=sk-...
-export OPENAI_BASE_URL=https://api.deepseek.com/v1
-export OPENAI_MODEL=deepseek-chat
-```
-
-### Google Gemini via OpenRouter
-
-```bash
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=sk-or-...
-export OPENAI_BASE_URL=https://openrouter.ai/api/v1
-export OPENAI_MODEL=google/gemini-2.0-flash-001
-```
-
-A disponibilidade de modelos no OpenRouter muda com o tempo. Se um modelo parar de funcionar, tente outro modelo atual do OpenRouter antes de presumir que a integração está quebrada.
-
-### Ollama
-
-```bash
-ollama pull llama3.3:70b
-
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_BASE_URL=http://localhost:11434/v1
-export OPENAI_MODEL=llama3.3:70b
-```
-
-### Atomic Chat (local, Apple Silicon)
-
-```bash
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_BASE_URL=http://127.0.0.1:1337/v1
-export OPENAI_MODEL=nome-do-seu-modelo
-```
-
-Nenhuma chave de API é necessária para modelos locais do Atomic Chat.
-
-Ou use o launcher de perfil:
-
-```bash
-bun run dev:atomic-chat
-```
-
-Baixe o Atomic Chat em [atomic.chat](https://atomic.chat/). O aplicativo deve estar em execução com um modelo carregado antes de iniciar.
-
-### LM Studio
-
-```bash
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_BASE_URL=http://localhost:1234/v1
-export OPENAI_MODEL=nome-do-seu-modelo
-```
-
-### Together AI
-
-```bash
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=...
-export OPENAI_BASE_URL=https://api.together.xyz/v1
-export OPENAI_MODEL=meta-llama/Llama-3.3-70B-Instruct-Turbo
+CLAUDE_CODE_USE_OPENAI=1
+OPENAI_API_KEY=sk-sua-chave-aqui
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+OPENAI_MODEL=deepseek-chat
 ```
 
 ### Groq
 
 ```bash
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=gsk_...
-export OPENAI_BASE_URL=https://api.groq.com/openai/v1
-export OPENAI_MODEL=llama-3.3-70b-versatile
+CLAUDE_CODE_USE_OPENAI=1
+OPENAI_API_KEY=gsk_sua-chave-aqui
+OPENAI_BASE_URL=https://api.groq.com/openai/v1
+OPENAI_MODEL=llama-3.3-70b-versatile
 ```
 
-### Mistral
+### Ollama (local)
 
 ```bash
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=...
-export OPENAI_BASE_URL=https://api.mistral.ai/v1
-export OPENAI_MODEL=mistral-large-latest
+ollama pull qwen2.5-coder:32b
+
+CLAUDE_CODE_USE_OPENAI=1
+OPENAI_BASE_URL=http://localhost:11434/v1
+OPENAI_MODEL=qwen2.5-coder:32b
+# OPENAI_API_KEY não é necessário para modelos locais
+```
+
+### LM Studio
+
+```bash
+CLAUDE_CODE_USE_OPENAI=1
+OPENAI_BASE_URL=http://localhost:1234/v1
+OPENAI_MODEL=nome-do-seu-modelo
+```
+
+### OpenAI
+
+```bash
+CLAUDE_CODE_USE_OPENAI=1
+OPENAI_API_KEY=sk-sua-chave-aqui
+OPENAI_MODEL=gpt-4o
 ```
 
 ### Azure OpenAI
 
 ```bash
-export CLAUDE_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=sua-chave-azure
-export OPENAI_BASE_URL=https://seu-recurso.openai.azure.com/openai/deployments/seu-deployment/v1
-export OPENAI_MODEL=gpt-4o
+CLAUDE_CODE_USE_OPENAI=1
+OPENAI_API_KEY=sua-chave-azure
+OPENAI_BASE_URL=https://seu-recurso.openai.azure.com/openai/deployments/seu-deployment/v1
+OPENAI_MODEL=gpt-4o
 ```
+
+---
 
 ## Variáveis de Ambiente
 
 | Variável | Obrigatória | Descrição |
-|----------|----------|-------------|
-| `CLAUDE_CODE_USE_OPENAI` | Sim | Defina como `1` para habilitar o provider OpenAI |
-| `OPENAI_API_KEY` | Sim* | Sua chave de API (`*` não necessária para modelos locais como Ollama ou Atomic Chat) |
-| `OPENAI_MODEL` | Sim | Nome do modelo como `gpt-4o`, `deepseek-chat` ou `llama3.3:70b` |
-| `OPENAI_BASE_URL` | Não | Endpoint da API, padrão `https://api.openai.com/v1` |
-| `CODEX_API_KEY` | Apenas Codex | Token de acesso ao Codex ou ChatGPT |
-| `CODEX_AUTH_JSON_PATH` | Apenas Codex | Caminho para um arquivo `auth.json` do Codex CLI |
-| `CODEX_HOME` | Apenas Codex | Diretório home alternativo do Codex |
-| `OPENCLAUDE_DISABLE_CO_AUTHORED_BY` | Não | Suprime o trailer padrão `Co-Authored-By` em commits git gerados |
+|---|---|---|
+| `CLAUDE_CODE_USE_OPENAI` | Sim | Defina como `1` para habilitar provider OpenAI-compatible |
+| `OPENAI_API_KEY` | Sim* | Chave de API (`*` não necessária para modelos locais) |
+| `OPENAI_MODEL` | Sim | Nome do modelo (ex: `mistralai/devstral-2512:free`) |
+| `OPENAI_BASE_URL` | Não | Endpoint da API. Padrão: `https://api.openai.com/v1` |
 
-Você também pode usar `ANTHROPIC_MODEL` para substituir o nome do modelo. `OPENAI_MODEL` tem prioridade.
+---
 
-## Hardening de Runtime
+## Perfis por Projeto
 
-Use estes comandos para validar sua configuração e detectar erros cedo:
+O Devon salva um perfil local para não precisar configurar o ambiente toda vez:
 
 ```bash
-# verificação de sanidade rápida na inicialização
-bun run smoke
+# inicializar perfil com OpenRouter
+bun run profile:init -- --provider openai --api-key sk-or-... --model mistralai/devstral-2512:free
 
-# validar env de provider + acessibilidade
+# inicializar com Ollama
+bun run profile:init -- --provider ollama --model qwen2.5-coder:32b
+
+# iniciar usando perfil salvo (.devon-profile.json)
+bun run dev:profile
+```
+
+O arquivo `.devon-profile.json` é criado na raiz do projeto e já está no `.gitignore` por padrão.
+
+---
+
+## Contexto de Projeto (DEVON.md)
+
+Crie um `DEVON.md` na raiz do projeto para dar contexto permanente ao agente:
+
+```markdown
+# Contexto do Projeto
+
+- Stack: Go 1.22, PostgreSQL, gRPC
+- Convenções: todos os erros devem ser wrapped com `fmt.Errorf("...: %w", err)`
+- Testes: usar `testify/assert`, sem mocks de terceiros
+- Não alterar arquivos em `vendor/` sem permissão explícita
+```
+
+O Devon lê esse arquivo automaticamente ao iniciar em um diretório que o contém.
+
+---
+
+## Diagnósticos
+
+```bash
+# verificar configuração e conexão com provider
 bun run doctor:runtime
 
-# imprimir diagnósticos de runtime legíveis por máquina
+# saída em JSON para scripts
 bun run doctor:runtime:json
 
-# persistir um relatório de diagnósticos em reports/doctor-runtime.json
+# persistir relatório em reports/doctor-runtime.json
 bun run doctor:report
-
-# verificação de hardening local completa (smoke + runtime doctor)
-bun run hardening:check
-
-# hardening estrito (inclui typecheck em todo o projeto)
-bun run hardening:strict
 ```
 
-Observações:
+O `doctor:runtime` falha imediatamente se a chave de API estiver ausente ou o endpoint inacessível, antes de iniciar o agente.
 
-- `doctor:runtime` falha rapidamente se `CLAUDE_CODE_USE_OPENAI=1` com uma chave placeholder ou chave ausente para providers não-locais.
-- Providers locais como `http://localhost:11434/v1`, `http://10.0.0.1:11434/v1` e `http://127.0.0.1:1337/v1` podem funcionar sem `OPENAI_API_KEY`.
-- Perfis Codex validam `CODEX_API_KEY` ou o arquivo de autenticação do Codex CLI e testam `POST /responses` em vez de `GET /models`.
+---
 
-## Perfis de Launch de Provider
+## Modos de Permissão
 
-Use launchers de perfil para evitar configuração repetida de ambiente:
+Controle o que o Devon pode executar sem pedir confirmação:
 
 ```bash
-# bootstrap de perfil único (prefere Ollama local viável, caso contrário OpenAI)
-bun run profile:init
-
-# visualize o melhor provider/modelo para seu objetivo
-bun run profile:recommend -- --goal coding --benchmark
-
-# aplique automaticamente o melhor provider/modelo local/openai disponível para seu objetivo
-bun run profile:auto -- --goal latency
-
-# bootstrap codex (padrão codexplan e ~/.codex/auth.json)
-bun run profile:codex
-
-# bootstrap openai com chave explícita
-bun run profile:init -- --provider openai --api-key sk-...
-
-# bootstrap ollama com modelo personalizado
-bun run profile:init -- --provider ollama --model llama3.1:8b
-
-# bootstrap ollama com seleção automática inteligente de modelo
-bun run profile:init -- --provider ollama --goal coding
-
-# bootstrap atomic-chat (detecta automaticamente o modelo em execução)
-bun run profile:init -- --provider atomic-chat
-
-# bootstrap codex com alias de modelo rápido
-bun run profile:init -- --provider codex --model codexspark
-
-# iniciar usando perfil persistido (.openclaude-profile.json)
-bun run dev:profile
-
-# perfil codex (usa CODEX_API_KEY ou ~/.codex/auth.json)
-bun run dev:codex
-
-# perfil OpenAI (requer OPENAI_API_KEY no shell)
-bun run dev:openai
-
-# perfil Ollama (padrões: localhost:11434, llama3.1:8b)
-bun run dev:ollama
-
-# perfil Atomic Chat (LLMs locais Apple Silicon em 127.0.0.1:1337)
-bun run dev:atomic-chat
+devon --mode auto    # padrão: leitura livre, escrita/shell pedem confirmação
+devon --mode safe    # toda ferramenta pede confirmação
+devon --mode yolo    # executa tudo sem perguntar
 ```
-
-`profile:recommend` classifica modelos Ollama instalados por `latency`, `balanced` ou `coding`, e `profile:auto` pode persistir a recomendação diretamente.
-
-Se ainda não existir um perfil, `dev:profile` usa os mesmos padrões com reconhecimento de objetivo ao escolher o modelo inicial.
-
-Use `--provider ollama` quando quiser um caminho apenas local. O modo automático usa OpenAI como fallback quando nenhum modelo de chat local viável está instalado.
-
-Use `--provider atomic-chat` quando quiser o Atomic Chat como provider local para Apple Silicon.
-
-Use `profile:codex` ou `--provider codex` quando quiser o backend ChatGPT Codex.
-
-`dev:openai`, `dev:ollama`, `dev:atomic-chat` e `dev:codex` executam `doctor:runtime` primeiro e só iniciam o aplicativo se as verificações passarem.
-
-Para `dev:ollama`, certifique-se de que o Ollama está em execução localmente antes de iniciar.
-
-Para `dev:atomic-chat`, certifique-se de que o Atomic Chat está em execução com um modelo carregado antes de iniciar.
