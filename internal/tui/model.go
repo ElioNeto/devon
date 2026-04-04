@@ -1,12 +1,15 @@
-// Package tui implementa a interface de usuÃ¡rio com Bubble Tea.
+// Package tui implements a Bubble Tea TUI for Devon.
 package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/ElioNeto/devon/internal/agent"
 	"github.com/ElioNeto/devon/internal/config"
+	"github.com/ElioNeto/devon/internal/cost"
+	"github.com/ElioNeto/devon/internal/history"
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/tools"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -14,58 +17,34 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// --- Model principal ---
-
+// appModel is the main Bubble Tea model.
 type appModel struct {
 	width  int
 	height int
 
-	// config
-	cfg    *config.Config
-	agent  *agent.Agent
-	done   bool
-
-	// status bar
-	usage llm.Usage
-
-	// chat messages
+	cfg      *config.Config
+	agent    *agent.Agent
+	session  *history.Session
+	tracker  *cost.Session
 	messages []chatMessage
-
-	// tool calls sendo executados
-	currentToolRuns []toolRun
-
-	// input
-	input        strings.Builder
-	cursorVisible bool
-	cursorPos    int
-
-	// scroll
-	scrollOffset int
-	maxScroll    int
-
-	// spinner para agente processando
-	spinner spinner.Model
-
-	// agente estÃ¡ ativo
-	running bool
-	cancel  context.CancelFunc
-
-	// ajuda visÃ­vel
+	toolRuns []toolRun
+	input    string
+	cursor   int
+	scroll   int
+	running  bool
+	cancel   context.CancelFunc
 	showHelp bool
-
-	// estilos
-	styles styles
+	spinner  spinner.Model
+	styles   styles
+	popup    string // overlay for /history, /usage etc
 }
 
-// chatMessage representa uma mensagem no chat.
 type chatMessage struct {
-	Sender    string // "user" | "devon" | "system" | "tool"
-	Content   string
-	ToolRuns  []toolRun // para mensagens do devon com tool calls
-	IsError   bool
+	Sender  string // "user" | "devon" | "system"
+	Content string
+	IsError bool
 }
 
-// toolRun representa a execuÃ§Ã£o de uma tool com status.
 type toolRun struct {
 	Name   string
 	Args   string
@@ -74,129 +53,169 @@ type toolRun struct {
 }
 
 type styles struct {
-	header      lipgloss.Style
-	statusBar   lipgloss.Style
-	chatArea    lipgloss.Style
-	inputBar    lipgloss.Style
+	title       lipgloss.Style
+	info        lipgloss.Style
 	userMsg     lipgloss.Style
 	devonMsg    lipgloss.Style
-	systemMsg   lipgloss.Style
-	errorMsg    lipgloss.Style
+	sysMsg      lipgloss.Style
+	errMsg      lipgloss.Style
 	toolRunning lipgloss.Style
 	toolDone    lipgloss.Style
 	toolError   lipgloss.Style
+	inputPrefix lipgloss.Style
+	cursor      lipgloss.Style
 	helpText    lipgloss.Style
+	popup       lipgloss.Style
 }
 
-func makeStyles() styles {
+func newStyles() styles {
 	s := styles{}
-	s.header = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#8B5CF6")).
-		Bold(true).
-		Padding(0, 1)
-
-	s.statusBar = lipgloss.NewStyle().
+	s.title = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8B5CF6"))
+	s.info = lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF"))
+	s.userMsg = lipgloss.NewStyle().Foreground(lipgloss.Color("#93C5FD")).PaddingLeft(1)
+	s.devonMsg = lipgloss.NewStyle().Foreground(lipgloss.Color("#86EFAC")).PaddingLeft(1)
+	s.sysMsg = lipgloss.NewStyle().Foreground(lipgloss.Color("#A5B4FC")).Italic(true).PaddingLeft(1)
+	s.errMsg = lipgloss.NewStyle().Foreground(lipgloss.Color("#FCA5A5")).PaddingLeft(1)
+	s.toolRunning = lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24"))
+	s.toolDone = lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80"))
+	s.toolError = lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171"))
+	s.inputPrefix = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8B5CF6"))
+	s.cursor = lipgloss.NewStyle().Foreground(lipgloss.Color("#8B5CF6"))
+	s.helpText = lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF")).Faint(true)
+	s.popup = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#E2E8F0")).
-		Background(lipgloss.Color("#4B5563")).
-		Padding(0, 1)
-
-	s.inputBar = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E2E8F0")).
-		Bold(true).
-		Padding(0, 1)
-
-	s.userMsg = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#93C5FD")).
-		PaddingLeft(1)
-
-	s.devonMsg = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#86EFAC")).
-		PaddingLeft(1)
-
-	s.systemMsg = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#A5B4FC")).
-		Italic(true).
-		PaddingLeft(1)
-
-	s.errorMsg = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FCA5A5")).
-		PaddingLeft(1)
-
-	s.toolRunning = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FBBF24")) // amarelo
-
-	s.toolDone = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#4ADE80")) // verde
-
-	s.toolError = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F87171")) // vermelho
-
-	s.helpText = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#9CA3AF")).
-		Faint(true)
-
+		Background(lipgloss.Color("#1E293B")).
+		Padding(1, 2).
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#8B5CF6"))
 	return s
 }
 
 func newModel(cfg *config.Config) appModel {
 	s := spinner.New()
-	s.Type = spinner.MiniDot
-
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#8B5CF6"))
 	registry := tools.NewRegistry()
 	client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
 	agt := agent.New(cfg, client, registry)
+	tracker := cost.NewSession(cfg.Model)
+
+	// Try to load last session
+	session, err := history.LoadLastSession(cfg.WorkDir)
+	if err != nil {
+		session = nil // start fresh if history fails
+	}
 
 	return appModel{
 		cfg:     cfg,
 		agent:   agt,
+		session: session,
+		tracker: tracker,
 		spinner: s,
-		styles:  makeStyles(),
+		styles:  newStyles(),
 	}
 }
 
-// --- Mensagens ---
+// --- Messages ---
 
-type userMsg string
 type agentEventMsg agent.Event
-type windowSizeMsg tea.WindowSizeMsg
-type agentDoneMsg struct{}
-
-// --- Commands ---
-
-func newUserInput() tea.Cmd {
-	// input handled via View/Update directly
-	return nil
-}
-
-func sendToAgent(ctx context.Context, a *agent.Agent, input string) tea.Cmd {
-	return func() tea.Msg {
-		ch := a.Run(ctx, input)
-		for ev := range ch {
-			tea.Send(agentEventMsg(ev))
-		}
-		return agentDoneMsg{}
-	}
-}
 
 // --- Init ---
 
 func (m appModel) Init() tea.Cmd {
-	return tea.Batch(
+	welcomeText := "Devon pronto. Digite sua mensagem e pressione Enter."
+	if m.session != nil {
+		welcomeText = fmt.Sprintf("Sessao %s carregada. Digite sua mensagem ou use comandos: /history /usage /clear", m.session.ID)
+	}
+	return tea.Sequence(
 		m.spinner.Tick,
 		func() tea.Msg {
-			// Mensagem de boas-vindas
-			return agentEventMsg(agent.Event{
-				Type: "system",
-				Text: "Devon pronto. Digite sua mensagem e pressione Enter.",
-			})
+			return agentEventMsg(agent.Event{Type: "system", Text: welcomeText})
 		},
 	)
+}
+
+// --- Slash command handling ---
+
+func (m *appModel) handleSlash(text string) {
+	switch {
+	case text == "/history" || text == "/sessions":
+		m.showHistory()
+	case text == "/clear":
+		if m.session != nil {
+			_ = history.ClearSession(m.cfg.WorkDir, m.session.ID)
+		}
+		m.messages = nil
+		m.toolRuns = nil
+		m.scroll = 0
+		m.tracker = cost.NewSession(m.cfg.Model)
+		var err error
+		m.session, err = history.LoadLastSession(m.cfg.WorkDir)
+		if err == nil {
+			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Sessao limpa. Nova sessao " + m.session.ID})
+		}
+	case text == "/usage" || text == "/cost":
+		m.showUsage()
+	case strings.HasPrefix(text, "/load "):
+		id := strings.TrimSpace(strings.TrimPrefix(text, "/load"))
+		if ses, err := history.LoadSession(m.cfg.WorkDir, id); err == nil {
+			m.session = ses
+			m.messages = nil
+			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Sessao " + id + " carregada. Mensagens: " + itoaF(len(ses.Messages))})
+			// Track usage from session
+			m.tracker = cost.NewSession(m.cfg.Model)
+			m.tracker.TotalInputTokens = ses.Usage.PromptTokens
+			m.tracker.TotalOutputTokens = ses.Usage.CompletionTokens
+			m.tracker.TotalRequests = ses.Usage.Requests
+			m.tracker.TotalCostUSD = cost.EstimateCost(m.cfg.Model, ses.Usage.PromptTokens, ses.Usage.CompletionTokens)
+		} else {
+			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Erro ao carregar sessao: " + err.Error()})
+		}
+	default:
+		m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Comando desconhecido. Use: /history /load <id> /clear /usage"})
+	}
+}
+
+func (m *appModel) showHistory() {
+	sessions, err := history.ListSessions(m.cfg.WorkDir)
+	if err != nil {
+		m.popup = "Erro ao listar sessoes: " + err.Error()
+		return
+	}
+	if len(sessions) == 0 {
+		m.popup = "Nenhuma sessao salva."
+		return
+	}
+	sb := strings.Builder{}
+	sb.WriteString("Sessoes salvas:\n")
+	for _, id := range sessions {
+		marker := " "
+		if m.session != nil && m.session.ID == id {
+			marker = ">"
+		}
+		sb.WriteString(fmt.Sprintf("  %s %s\n", marker, id))
+	}
+	sb.WriteString("\nUse /load <id> para retomar ou ESC para fechar.")
+	m.popup = sb.String()
+}
+
+func (m *appModel) showUsage() {
+	if m.tracker == nil {
+		m.popup = "Sem dados de uso."
+		return
+	}
+	m.popup = m.tracker.Format() + "\n\nPressione qualquer tecla para fechar."
 }
 
 // --- Update ---
 
 func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
+	// Handle popup dismissal
+	if m.popup != "" {
+		if _, ok := msg.(tea.KeyMsg); ok {
+			m.popup = ""
+			return m, nil
+		}
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -206,11 +225,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if m.showHelp {
-			if msg.String() == "esc" || msg.String() == "?" {
-				m.showHelp = false
-			} else {
-				m.showHelp = false // qualquer tecla fecha a ajuda
-			}
+			m.showHelp = false
 			return m, nil
 		}
 
@@ -219,186 +234,158 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.running && m.cancel != nil {
 				m.cancel()
 				m.running = false
-				m.currentToolRuns = nil
-				m.addMessage(chatMessage{
-					Sender:  "system",
-					Content: "Agente interrompido.",
-				})
+				m.toolRuns = nil
+				m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Agente interrompido."})
 				return m, nil
 			}
 			return m, tea.Quit
 
 		case "ctrl+l":
 			m.messages = nil
-			m.currentToolRuns = nil
-			m.scrollOffset = 0
+			m.toolRuns = nil
+			m.scroll = 0
 			return m, nil
 
 		case "ctrl+k":
 			m.messages = nil
-			m.currentToolRuns = nil
-			m.scrollOffset = 0
-			m.usage = llm.Usage{}
-			m.agent = agent.New(
-				m.cfg,
-				llm.New(m.cfg.APIKey, m.cfg.BaseURL, m.cfg.Model, m.cfg.Timeout),
-				tools.NewRegistry(),
-			)
-			m.addMessage(chatMessage{
-				Sender:  "system",
-				Content: "Nova sessÃ£o iniciada.",
-			})
+			m.toolRuns = nil
+			m.scroll = 0
+			m.tracker = cost.NewSession(m.cfg.Model)
+			var err error
+			m.session, err = history.CreateSession(m.cfg.WorkDir) // new session
+			if err != nil {
+				m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Erro ao criar sessao: " + err.Error()})
+			} else {
+				m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Nova sessao " + m.session.ID})
+			}
 			return m, nil
 
 		case "enter":
-			if m.input.Len() == 0 || m.running {
+			if len(m.input) == 0 || m.running {
 				return m, nil
 			}
-			input := m.input.String()
-			m.input.Reset()
-			m.cursorPos = 0
-			m.addMessage(chatMessage{
-				Sender:  "user",
-				Content: input,
-			})
-			m.scrollOffset = 0
-			m.currentToolRuns = nil
+			text := m.input
+			m.input = ""
+			m.cursor = 0
+
+			// Check for slash commands
+			if strings.HasPrefix(text, "/") {
+				m.handleSlash(text)
+				return m, nil
+			}
+
+			m.messages = append(m.messages, chatMessage{Sender: "user", Content: text})
+			m.scroll = 0
+			m.toolRuns = nil
 			m.running = true
 			ctx, cancel := context.WithCancel(context.Background())
 			m.cancel = cancel
-			cmds = append(cmds, sendToAgent(ctx, m.agent, input))
-			m.spinner.Type = spinner.MiniDot
+			cmd := startAgent(ctx, m.agent, text)
+			return m, tea.Batch(m.spinner.Tick, cmd)
 
-		case "ctrl+backspace", "ctrl+w":
-			if m.input.Len() > 0 {
-				m.deletePreviousWord()
-			}
+		case "ctrl+u":
+			m.input = ""
+			m.cursor = 0
+
+		case "ctrl+w", "ctrl+backspace":
+			m.deleteWord()
 
 		case "backspace":
-			if m.input.Len() > 0 && m.cursorPos > 0 {
+			if m.cursor > 0 {
 				m.deleteCharBefore()
 			}
 
-		case "ctrl+u":
-			m.input.Reset()
-			m.cursorPos = 0
+		case "delete":
+			if m.cursor < len([]rune(m.input)) {
+				m.deleteCharAfter()
+			}
 
 		case "left":
-			if m.cursorPos > 0 {
-				m.cursorPos--
+			if m.cursor > 0 {
+				m.cursor--
 			}
 
 		case "right":
-			if m.cursorPos < m.input.Len() {
-				m.cursorPos++
+			if m.cursor < len([]rune(m.input)) {
+				m.cursor++
+			}
+
+		case "home":
+			m.cursor = 0
+
+		case "end":
+			m.cursor = len([]rune(m.input))
+
+		case "pgup":
+			if len(m.messages) > 0 {
+				m.scroll++
+			}
+
+		case "pgdown":
+			if m.scroll > 0 {
+				m.scroll--
 			}
 
 		case "?":
 			m.showHelp = true
 			return m, nil
 
-		case "up", "down", "ctrl+e", "ctrl+a", "home", "end":
-			// handled by standard input, ignore
-
 		default:
 			if msg.Type == tea.KeyRunes {
-				m.insertRune(msg.Runes[0])
-			}
-
-		case "pgup":
-			if m.scrollOffset < m.maxScroll {
-				m.scrollOffset++
-			}
-
-		case "pgdown":
-			if m.scrollOffset > 0 {
-				m.scrollOffset--
+				for _, r := range msg.Runes {
+					m.insertRune(r)
+				}
 			}
 		}
 
 	case agentEventMsg:
-		ev := agent.Event(msg)
-		switch ev.Type {
-		case "text":
-			// Adiciona ou append ao Ãºltimo texto do devon
-			if len(m.messages) == 0 || m.messages[len(m.messages)-1].Sender != "devon" {
-				m.addMessage(chatMessage{
-					Sender:  "devon",
-					Content: ev.Text,
-				})
-			} else {
-				idx := len(m.messages) - 1
-				m.messages[idx].Content += ev.Text
-			}
-
-		case "tool_start":
-			m.currentToolRuns = append(m.currentToolRuns, toolRun{
-				Name:   ev.Tool,
-				Args:   ev.Args,
-				Status: "running",
-			})
-
-		case "tool_done":
-			for i, tr := range m.currentToolRuns {
-				if tr.Name == ev.Tool && tr.Status == "running" {
-					m.currentToolRuns[i].Result = ev.Result
-					m.currentToolRuns[i].Status = "done"
-					break
-				}
-			}
-
-		case "tool_error":
-			for i, tr := range m.currentToolRuns {
-				if tr.Name == ev.Tool && tr.Status == "running" {
-					m.currentToolRuns[i].Result = ev.Err.Error()
-					m.currentToolRuns[i].Status = "error"
-					break
-				}
-			}
-
-		case "turn_done":
-			if m.cancel != nil {
-				m.cancel()
-			}
-			m.running = false
-			m.currentToolRuns = nil
-			m.spinner.Type = spinner.MiniDot
-
-		case "error":
-			m.addMessage(chatMessage{
-				Sender:  "devon",
-				Content: "Erro: " + ev.Err.Error(),
-				IsError: true,
-			})
-			if m.cancel != nil {
-				m.cancel()
-			}
-			m.running = false
-			m.currentToolRuns = nil
-
-		case "system":
-			m.addMessage(chatMessage{
-				Sender:  "system",
-				Content: ev.Text,
-			})
-		}
-		m.scrollOffset = 0
+		m.processAgentEvent(agent.Event(msg))
+		m.scroll = 0
 		return m, m.spinner.Tick
 
-	case agentDoneMsg:
-		m.running = false
-		m.currentToolRuns = nil
+	case agentResult:
+		for _, ev := range msg.events {
+			m.processAgentEvent(ev)
+		}
+		// Save session
+		if m.session != nil {
+			messages := m.agentMessages()
+			if err := history.SaveMessages(m.cfg.WorkDir, m.session.ID, messages, &m.session.Usage); err != nil {
+				m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Erro ao salvar sessao: " + err.Error()})
+			}
+		}
 		if m.cancel != nil {
 			m.cancel()
+			m.cancel = nil
 		}
+		m.running = false
+		m.toolRuns = nil
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		cmds = append(cmds, cmd)
+		return m, cmd
 	}
 
-	return m, tea.Batch(cmds...)
+	return m, nil
+}
+
+// agentMessages returns the current messages in a format suitable for history.
+func (m *appModel) agentMessages() []llm.Message {
+	var msgs []llm.Message
+	for _, cm := range m.messages {
+		switch cm.Sender {
+		case "user":
+			msgs = append(msgs, llm.Message{Role: llm.RoleUser, Content: cm.Content})
+		case "devon":
+			role := llm.RoleAssistant
+			if cm.IsError {
+				role = llm.RoleTool // treat errors as tool messages
+			}
+			msgs = append(msgs, llm.Message{Role: role, Content: cm.Content})
+		}
+	}
+	return msgs
 }
 
 // --- View ---
@@ -408,218 +395,320 @@ func (m appModel) View() string {
 		return "Iniciando Devon..."
 	}
 
-	availableHeight := m.height - 3 // header + status + input
+	headerH := 2
+	inputH := 1
+	helpH := 10
+	maxChatH := m.height - headerH - inputH - 1 // minus separator
 
-	var b strings.Builder
+	if m.showHelp {
+		maxChatH -= helpH
+	}
+
+	if maxChatH < 1 {
+		maxChatH = 1
+	}
+
+	var sb strings.Builder
 
 	// Header
-	b.WriteString(m.renderHeader())
-	b.WriteByte('\n')
+	sb.WriteString(m.renderHeader())
+	sb.WriteString("\n")
+	sb.WriteString(strings.Repeat("─", m.width))
+	sb.WriteString("\n")
 
-	// Chat area
-	chatArea := m.renderChat(availableHeight - 1)
-	b.WriteString(chatArea)
-	b.WriteByte('\n')
+	// Chat
+	chatLines := m.buildChatLines(maxChatH)
+	for _, line := range chatLines {
+		sb.WriteString(line)
+		sb.WriteString("\n")
+	}
 
-	// Separator
-	b.WriteString(strings.Repeat("â", m.width))
-	b.WriteByte('\n')
+	// Input bar
+	if m.running {
+		sb.WriteString(" " + m.spinner.View() + " ")
+	} else {
+		sb.WriteString(m.styles.inputPrefix.Render(" > "))
+	}
+	sb.WriteString(m.renderInputLine())
 
-	// Input
-	b.WriteString(m.renderInput())
-
-	// Help overlay
+	// Help
 	if m.showHelp {
-		b.WriteByte('\n')
-		b.WriteString(m.renderHelp())
+		sb.WriteString("\n")
+		sb.WriteString(m.renderHelp())
 	}
 
-	return b.String()
-}
-
-// --- Helpers ---
-
-func (m *appModel) addMessage(msg chatMessage) {
-	m.messages = append(m.messages, msg)
-}
-
-func (m *appModel) insertRune(r rune) {
-	m.input.WriteString(string(r))
-	m.cursorPos++
-}
-
-func (m *appModel) deleteCharBefore() {
-	if m.cursorPos <= 0 {
-		return
+	// Popup overlay
+	if m.popup != "" {
+		sb.WriteString("\n")
+		sb.WriteString(m.styles.popup.Render(m.popup))
 	}
-	s := m.input.String()
-	r := []rune(s)
-	before := m.cursorPos
-	if before <= len(r) {
-		r = append(r[:before-1], r[before:]...)
-		m.input.Reset()
-		m.input.WriteString(string(r))
-		m.cursorPos = before - 1
-	}
-}
 
-func (m *appModel) deletePreviousWord() {
-	s := m.input.String()
-	ru := []rune(s)
-	pos := m.cursorPos
-	if pos == 0 {
-		return
-	}
-	// Skip whitespace backwards
-	for pos > 0 && ru[pos-1] == ' ' {
-		pos--
-	}
-	// Skip word chars backwards
-	for pos > 0 && ru[pos-1] != ' ' {
-		pos--
-	}
-	remaining := append(ru[:pos], ru[m.cursorPos:]...)
-	m.input.Reset()
-	m.input.WriteString(string(remaining))
-	m.cursorPos = pos
+	return sb.String()
 }
 
 func (m *appModel) renderHeader() string {
-	title := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#8B5CF6")).
-		Render("devon")
-
-	info := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#9CA3AF")).
-		Render(
-			" > " +
-				lipgloss.NewStyle().Foreground(lipgloss.Color("#E2E8F0")).Render(m.cfg.WorkDir) +
-				"  modelo: " +
-				lipgloss.NewStyle().Foreground(lipgloss.Color("#E2E8F0")).Render(m.cfg.Model) +
-				"  tokens: " +
-				lipgloss.NewStyle().Foreground(lipgloss.Color("#E2E8F0")).Render(formatTokens(m.usage)) +
-				"  modo: " +
-				lipgloss.NewStyle().Foreground(lipgloss.Color("#E2E8F0")).Render(m.cfg.Mode.String()))
-
-	return lipgloss.JoinString(lipgloss.Top, title, "  ", info)
+	wd := m.cfg.WorkDir
+	if len(wd) > 30 {
+		wd = "..." + wd[len(wd)-27:]
+	}
+	tokens := formatTokens(m.tracker.TotalInputTokens + m.tracker.TotalOutputTokens)
+	costStr := cost.FormatCost(m.tracker.TotalCostUSD)
+	sessionID := ""
+	if m.session != nil {
+		sessionID = " [" + m.session.ID[:min(len(m.session.ID), 16)] + "]"
+	}
+	title := m.styles.title.Render("devon" + sessionID)
+	info := m.styles.info.Render(fmt.Sprintf(" > %s  modelo: %s  tokens: %s  custo: %s  modo: %s", wd, m.cfg.Model, tokens, costStr, m.cfg.Mode.String()))
+	return lipgloss.JoinHorizontal(lipgloss.Top, title, "  ", info)
 }
 
-func (m *appModel) renderChat(availableHeight int) string {
+func (m *appModel) buildChatLines(maxH int) []string {
 	var lines []string
 
 	for _, msg := range m.messages {
 		switch msg.Sender {
 		case "user":
-			text := m.styles.userMsg.Render("> " + msg.Content)
-			lines = append(lines, text)
-
+			for _, line := range wrapLine(" > "+msg.Content, m.width) {
+				lines = append(lines, m.styles.userMsg.Render(line))
+			}
 		case "devon":
+			prefix := " > "
 			if msg.IsError {
-				text := m.styles.errorMsg.Render("â " + msg.Content)
-				lines = append(lines, text)
-			} else {
-				text := m.styles.devonMsg.Render("â " + msg.Content)
-				lines = append(lines, text)
+				prefix = " x "
 			}
-
+			for _, line := range wrapLine(prefix+msg.Content, m.width) {
+				if msg.IsError {
+					lines = append(lines, m.styles.errMsg.Render(line))
+				} else {
+					lines = append(lines, m.styles.devonMsg.Render(line))
+				}
+			}
 		case "system":
-			text := m.styles.systemMsg.Render("Â· " + msg.Content)
-			lines = append(lines, text)
-
-		case "tool":
-			text := m.styles.toolDone.Render("  " + msg.Content)
-			lines = append(lines, text)
-		}
-	}
-
-	// Tool runs em andamento
-	if len(m.currentToolRuns) > 0 {
-		for _, tr := range m.currentToolRuns {
-			var line string
-			switch tr.Status {
-			case "running":
-				line = m.spinner.View() + " " + tr.Name + "(" + shortenArgs(tr.Args) + ")"
-				lines = append(lines, m.styles.toolRunning.Render("  "+line))
-			case "done":
-				line = "â " + tr.Name + "(" + shortenArgs(tr.Args) + ")"
-				lines = append(lines, m.styles.toolDone.Render("  "+line))
-			case "error":
-				line = "â " + tr.Name + ": " + tr.Result
-				lines = append(lines, m.styles.toolError.Render("  "+line))
+			for _, line := range wrapLine(" - "+msg.Content, m.width) {
+				lines = append(lines, m.styles.sysMsg.Render(line))
 			}
 		}
 	}
 
-	// Truncate para caber no space disponÃ­vel
-	total := len(lines)
-	if total > availableHeight {
-		lines = lines[total-availableHeight:]
+	// Active tool runs
+	for _, tr := range m.toolRuns {
+		switch tr.Status {
+		case "running":
+			line := m.spinner.View() + " " + tr.Name + "(" + shortenArgs(tr.Args) + ")"
+			lines = append(lines, m.styles.toolRunning.Render("  "+line))
+		case "done":
+			line := " / " + tr.Name + "(" + shortenArgs(tr.Args) + ")"
+			lines = append(lines, m.styles.toolDone.Render("  "+line))
+		case "error":
+			line := " x " + tr.Name + ": " + firstLine(tr.Result)
+			lines = append(lines, m.styles.toolError.Render("  "+line))
+		}
 	}
 
-	return strings.Join(lines, "\n")
+	// Apply scroll
+	if len(lines) > maxH {
+		start := m.scroll
+		if start < 0 {
+			start = 0
+		}
+		end := start + maxH
+		if end > len(lines) {
+			end = len(lines)
+			start = end - maxH
+			if start < 0 {
+				start = 0
+			}
+		}
+		lines = lines[start:end]
+	}
+
+	return lines
 }
 
-func (m *appModel) renderInput() string {
-	prefix := " > "
-	inputText := m.input.String()
-	cursor := m.cursorPos
-
-	// Split around cursor for cursor display
-	if cursor >= len([]rune(inputText)) {
-		// cursor at end
-		return prefix + inputText + " " + m.styles.helpText.Render("|")
+func (m *appModel) renderInputLine() string {
+	ru := []rune(m.input)
+	if len(ru) == 0 {
+		return m.styles.cursor.Render(" |")
 	}
-
-	ru := []rune(inputText)
-	before := string(ru[:cursor])
-	after := string(ru[cursor:])
-	_ = before
-	_ = after
-
-	// Simplified: just show the text with a cursor indicator
-	display := prefix + inputText
-	return m.styles.inputBar.Render(display)
+	if m.cursor >= len(ru) {
+		return m.input + m.styles.cursor.Render(" |")
+	}
+	before := string(ru[:m.cursor])
+	cur := string(ru[m.cursor])
+	after := string(ru[m.cursor+1:])
+	return before + m.styles.cursor.Render(cur) + after
 }
 
 func (m *appModel) renderHelp() string {
-	help := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#9CA3AF")).
-		Faint(true).
-		Render(`
-Teclas:
-  Enter        Enviar mensagem
-  Ctrl+C       Interromper agente / sair
-  Ctrl+L       Limpar chat
-  Ctrl+K       Nova sessÃ£o
-  Ctrl+Backsp  Apagar palavra anterior
-  Ctrl+U       Limpar input
-  PgUp/PgDn    Scroll chat
-  ?            Mostrar/ocultar esta ajuda
-`)
-	return help
+	return m.styles.helpText.Render(
+		"  Enter: enviar  Ctrl+C: sair  Ctrl+L: limpar  Ctrl+K: nova sessao  Ctrl+W: apagar palavra  Ctrl+U: limpar input  PgUp/PgDn: scroll  /history /usage /clear /load",
+	)
 }
 
-func formatTokens(u llm.Usage) string {
-	if u.TotalTokens == 0 {
-		return "0"
+// --- Agent event processing ---
+
+func (m *appModel) processAgentEvent(ev agent.Event) {
+	switch ev.Type {
+	case "text":
+		last := len(m.messages) - 1
+		if last < 0 || m.messages[last].Sender != "devon" {
+			m.messages = append(m.messages, chatMessage{Sender: "devon", Content: ev.Text})
+		} else {
+			m.messages[last].Content += ev.Text
+		}
+	case "tool_start":
+		m.toolRuns = append(m.toolRuns, toolRun{Name: ev.Tool, Args: ev.Args, Status: "running"})
+	case "tool_done":
+		for i, tr := range m.toolRuns {
+			if tr.Name == ev.Tool && tr.Status == "running" {
+				m.toolRuns[i].Result = ev.Result
+				m.toolRuns[i].Status = "done"
+				break
+			}
+		}
+	case "tool_error":
+		for i, tr := range m.toolRuns {
+			if tr.Name == ev.Tool && tr.Status == "running" {
+				m.toolRuns[i].Result = ev.Err.Error()
+				m.toolRuns[i].Status = "error"
+				break
+			}
+		}
+	case "turn_done":
+		if m.cancel != nil {
+			m.cancel()
+			m.cancel = nil
+		}
+		m.running = false
+		m.toolRuns = nil
+	case "error":
+		m.messages = append(m.messages, chatMessage{Sender: "devon", Content: "Erro: " + ev.Err.Error(), IsError: true})
+		if m.cancel != nil {
+			m.cancel()
+			m.cancel = nil
+		}
+		m.running = false
+		m.toolRuns = nil
+	case "system":
+		m.messages = append(m.messages, chatMessage{Sender: "system", Content: ev.Text})
 	}
-	return formatNumber(u.TotalTokens)
 }
 
-func formatNumber(n int) string {
+// --- Input manipulation ---
+
+func (m *appModel) insertRune(r rune) {
+	ru := []rune(m.input)
+	ru = append(ru[:m.cursor], append([]rune{r}, ru[m.cursor:]...)...)
+	m.input = string(ru)
+	m.cursor++
+}
+
+func (m *appModel) deleteCharBefore() {
+	if m.cursor <= 0 {
+		return
+	}
+	ru := []rune(m.input)
+	ru = append(ru[:m.cursor-1], ru[m.cursor:]...)
+	m.input = string(ru)
+	m.cursor--
+}
+
+func (m *appModel) deleteCharAfter() {
+	ru := []rune(m.input)
+	if m.cursor >= len(ru) {
+		return
+	}
+	ru = append(ru[:m.cursor], ru[m.cursor+1:]...)
+	m.input = string(ru)
+}
+
+func (m *appModel) deleteWord() {
+	if m.cursor <= 0 {
+		return
+	}
+	ru := []rune(m.input)
+	pos := m.cursor
+	for pos > 0 && ru[pos-1] == ' ' {
+		pos--
+	}
+	for pos > 0 && ru[pos-1] != ' ' {
+		pos--
+	}
+	ru = append(ru[:pos], ru[m.cursor:]...)
+	m.input = string(ru)
+	m.cursor = pos
+}
+
+// --- Commands ---
+
+type agentResult struct {
+	events []agent.Event
+}
+
+func startAgent(ctx context.Context, a *agent.Agent, input string) tea.Cmd {
+	return func() tea.Msg {
+		ch := a.Run(ctx, input)
+		var events []agent.Event
+		for ev := range ch {
+			events = append(events, ev)
+		}
+		return agentResult{events: events}
+	}
+}
+
+// --- Utilities ---
+
+func shortenArgs(args string) string {
+	if len(args) <= 25 {
+		return args
+	}
+	return args[:22] + "..."
+}
+
+func firstLine(s string) string {
+	if i := strings.Index(s, "\n"); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+func formatTokens(n int) string {
 	if n >= 1_000_000 {
-		return formatNumber(n/1000_000) + "M"
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
 	}
 	if n >= 1_000 {
-		return formatNumber(n/1000) + "k"
+		return fmt.Sprintf("%.1fk", float64(n)/1_000)
 	}
 	return fmt.Sprintf("%d", n)
 }
 
-func shortenArgs(args string) string {
-	if len(args) <= 30 {
-		return args
+func wrapLine(s string, width int) []string {
+	if width <= 0 {
+		return []string{s}
 	}
-	return args[:27] + "..."
+	var lines []string
+	for len(s) > width {
+		idx := strings.LastIndex(s[:width], " ")
+		if idx < 0 {
+			idx = width
+		}
+		lines = append(lines, s[:idx])
+		s = strings.TrimLeft(s[idx:], " ")
+	}
+	if s != "" {
+		lines = append(lines, s)
+	}
+	return lines
+}
+
+func itoaF(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	s := ""
+	for n > 0 {
+		s = string(rune('0'+n%10)) + s
+		n /= 10
+	}
+	return s
 }

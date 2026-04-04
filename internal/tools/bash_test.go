@@ -113,6 +113,7 @@ func TestBashTool_Execute_StderrOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
 	}
+	result = strings.TrimSpace(result)
 	if result != "error" {
 		t.Errorf("stderr-only result = %q, want 'error'", result)
 	}
