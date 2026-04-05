@@ -83,6 +83,14 @@ type appModel struct {
 	showMenu   bool
 	menuCursor int
 
+	// Session slots (Ctrl+1..5 — like Linux workspaces / tmux windows)
+	workspaceSlots  [5]workspaceSlot
+	activeWorkspace int // 0..4
+
+	// Command menu (! — shows available commands in a sidebar)
+	showCmdMenu   bool
+	cmdMenuCursor int
+
 	// Input
 	input     string
 	cursor    int
@@ -168,13 +176,14 @@ func newModel(cfg *config.Config) appModel {
 		selectedTurnIdx:  -1,
 		leftFocus:        true,
 		maxContextTokens: maxCtx,
+		activeWorkspace:  0,
 	}
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 func (m appModel) Init() tea.Cmd {
-	welcome := "Devon pronto. ↑↓ navegar · Enter selecionar · x menu · ? ajuda"
+	welcome := "Devon pronto. ↑↓ navegar · Enter selecionar · Ctrl+X menu · ? ajuda"
 	if m.session != nil {
 		welcome = "Sessão " + m.session.ID + " carregada."
 	}

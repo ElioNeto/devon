@@ -19,13 +19,14 @@ const appVersion = "0.4.1"
 func renderStatusBar(m *appModel, width int) string {
 	s := m.styles
 
+	// Status bar hints — updated for workspace tabs and command menu.
 	navHints := []struct{ key, desc string }{
 		{"PgUp/PgDn", "scroll"},
 		{"esc/q", "quit"},
 		{"Tab", "focus"},
 		{"↑↓", "navigate"},
 		{"Enter", "select"},
-		{"x", "menu"},
+		{"!", "comandos"},
 	}
 	var parts []string
 	for i, h := range navHints {
@@ -82,7 +83,7 @@ func renderInputLine(m *appModel) string {
 	ru := []rune(m.input)
 	s := m.styles
 	if len(ru) == 0 {
-		return s.sysMsg.Render(fmt.Sprintf("envie uma mensagem  [x] menu  [?] ajuda"))
+		return s.sysMsg.Render(fmt.Sprintf("envie uma mensagem  [!] comandos  [?] ajuda"))
 	}
 	if m.cursor >= len(ru) {
 		return m.input + s.cursorStyle.Render("▋")

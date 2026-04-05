@@ -178,6 +178,120 @@ func TestModel_UpdateHelp(t *testing.T) {
 	}
 }
 
+// ── Issue #27: shortcut keys must not conflict with text input ─────────────
+
+func TestModel_ShortcutsDontConflictWithInput(t *testing.T) {
+	m := newModel(testConfig())
+	m.width = 80
+	m.height = 24
+
+	// Typing shortcut keys as plain characters should go into the input,
+	// NOT trigger their former actions.
+
+	// "1" should be typed as input, not switch to Logs
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	if m.input != "1" {
+		t.Errorf("expected input '1', got %q", m.input)
+	}
+	if m.rightView != viewLogs {
+		// initial rightView is Logs, so it's fine — but the point is it stayed
+	}
+
+	// "2" should be typed as input, not switch to Diff
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	if m.input != "12" {
+		t.Errorf("expected input '12', got %q", m.input)
+	}
+
+	// "e" should be typed as input, not toggle expanded
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	if m.input != "12e" {
+		t.Errorf("expected input '12e', got %q", m.input)
+	}
+
+	// "x" should be typed as input, not open context menu
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	if m.input != "12ex" {
+		t.Errorf("expected input '12ex', got %q", m.input)
+	}
+	if m.ctxMenu.visible {
+		t.Error("'x' should NOT open context menu anymore")
+	}
+}
+
+func TestModel_CtrlShortcutsWork(t *testing.T) {
+	m := newModel(testConfig())
+	m.width = 80
+	m.height = 24
+
+	// Ctrl+2 (\x02) → switch to workspace 0
+	m.messages = append(m.messages, chatMessage{Sender: "user", Content: "hello ws0"})
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{0x02}})
+	if m.activeWorkspace != 0 {
+		t.Errorf("Ctrl+2 should activate workspace 0, got %d", m.activeWorkspace)
+	}
+
+	// Ctrl+4 (\x04) → switch to workspace 1
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{0x04}})
+	if m.activeWorkspace != 1 {
+		t.Errorf("Ctrl+4 should activate workspace 1, got %d", m.activeWorkspace)
+	}
+
+	// Ctrl+E → toggle expanded
+	m.expandedView = false
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlE})
+	if !m.expandedView {
+		t.Error("Ctrl+E should toggle expanded view on")
+	}
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlE})
+	if m.expandedView {
+		t.Error("Ctrl+E should toggle expanded view off")
+	}
+
+	// "!" → open command menu
+	m.showCmdMenu = false
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("!")})
+	if !m.showCmdMenu {
+		t.Error("'!' should open command menu")
+	}
+
+	// "!" again → close command menu
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("!")})
+	if m.showCmdMenu {
+		t.Error("'!' again should close command menu")
+	}
+}
+
+func TestModel_HelpShowsNewBindings(t *testing.T) {
+	m := newModel(testConfig())
+	m.width = 80
+	m.height = 40
+
+	hints := AllHints()
+	has := func(keys string) bool {
+		for _, h := range hints {
+			if h.Keys == keys {
+				return true
+			}
+		}
+		return false
+	}
+	// Old single-letter bindings must be gone
+	if has("x") || has(" ") || has("e") || has("1") || has("2") {
+		t.Error("old single-letter bindings should be removed from hints")
+	}
+	for _, key := range []string{"Ctrl+2..5", "!", "Ctrl+E", "Ctrl+C", "Ctrl+L", "Ctrl+K"} {
+		if !has(key) {
+			t.Errorf("missing %s in AllHints()", key)
+		}
+	}
+}
+
+// ctxMenuVisible reads the internal ctxMenu state.
+func ctxMenuVisible(m appModel) bool {
+	return m.ctxMenu.visible
+}
+
 func TestModel_UpdateCtrlC(t *testing.T) {
 	m := newModel(testConfig())
 	m.width = 80

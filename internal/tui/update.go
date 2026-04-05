@@ -32,6 +32,24 @@ func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.showCmdMenu {
+			switch msg.String() {
+			case "esc", "!":
+				m.showCmdMenu = false
+				m.cmdMenuCursor = 0
+			case "enter":
+				m.execCmdMenuAction()
+			case "up":
+				if m.cmdMenuCursor > 0 {
+					m.cmdMenuCursor--
+				}
+			case "down":
+				if m.cmdMenuCursor < len(cmdMenuActions)-1 {
+					m.cmdMenuCursor++
+				}
+			}
+			return m, nil
+		}
 		if m.ctxMenu.visible {
 			return m.handleCtxMenuKey(msg)
 		}
@@ -171,32 +189,33 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.rightScroll += 5
 		return m, nil
 
-	case "1":
-		m.rightView = viewLogs
-		return m, nil
-	case "2":
-		m.rightView = viewDiff
-		return m, nil
-	case "3":
-		m.rightView = viewConfig
-		return m, nil
-	case "4":
-		m.rightView = viewSteps
+	case "!":
+		m.toggleCmdMenu()
 		return m, nil
 
 	case "enter":
+		if m.showCmdMenu {
+			m.execCmdMenuAction()
+			return m, nil
+		}
 		if m.leftFocus {
 			m.selectLeftItem()
 			return m, nil
 		}
 		return m.sendInput()
 
-	case "x":
-		m.handleCtxMenuOpen()
+	case KeyExpand: // Ctrl+E — toggle expanded
+		m.expandedView = !m.expandedView
 		return m, nil
 
-	case "e":
-		m.expandedView = !m.expandedView
+	case KeySession2: // Ctrl+2 — workspace 1
+		m.switchWorkspace(0)
+		return m, nil
+	case KeySession4: // Ctrl+4 — workspace 2
+		m.switchWorkspace(1)
+		return m, nil
+	case KeySession5: // Ctrl+5 — workspace 3
+		m.switchWorkspace(2)
 		return m, nil
 
 	case "?", "ctrl+h":
@@ -207,6 +226,8 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showMenu = false
 		m.popup = ""
 		m.showHelp = false
+		m.showCmdMenu = false
+		m.cmdMenuCursor = 0
 		return m, nil
 
 	case "backspace":
@@ -222,6 +243,10 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "ctrl+w":
 		m.deleteWord()
+		return m, nil
+
+	case " ":
+		m.insertRune(' ')
 		return m, nil
 
 	case "home":
@@ -323,6 +348,10 @@ func (m appModel) View() string {
 	}
 	if m.ctxMenu.visible {
 		view += "\n" + m.ctxMenu.render(m.width)
+	}
+	if m.showCmdMenu {
+		cmdView := renderCmdMenuOverlay(&m, m.width)
+		view = overlayCenter(view, cmdView, m.width, m.height)
 	}
 
 	return view
