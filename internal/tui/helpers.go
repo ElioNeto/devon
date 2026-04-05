@@ -17,6 +17,9 @@ func Trunc(s string, max int) string {
 	return string(ru[:max-1]) + "…"
 }
 
+// truncate is the unexported alias used throughout the package.
+func truncate(s string, max int) string { return Trunc(s, max) }
+
 // fmtShort formats an integer with K/M suffix for compact display.
 func fmtShort(n int) string {
 	switch {
@@ -29,17 +32,16 @@ func fmtShort(n int) string {
 	}
 }
 
-// formatShort is the exported alias used by messages.go.
-// (chart.go provides the package-level formatShort → fmtShort bridge,
-//  but fmtShort must exist here.)
+// formatShort is the unexported alias used throughout the package.
+func formatShort(n int) string { return fmtShort(n) }
 
 // HorzBar renders a single labelled horizontal bar.
 //
-//	label   – left-aligned label
-//	value   – current value
-//	maxV    – maximum value (used to scale the bar)
-//	width   – total character width available for the bar segment
-//	labelW  – fixed width reserved for the label column
+//	label  – left-aligned label
+//	value  – current value
+//	maxV   – maximum value (used to scale the bar)
+//	width  – total character width for the bar segment
+//	labelW – fixed width reserved for the label column
 func HorzBar(label string, value, maxV, width, labelW int) string {
 	if maxV <= 0 {
 		maxV = 1
@@ -56,7 +58,7 @@ func HorzBar(label string, value, maxV, width, labelW int) string {
 }
 
 // Sparkline renders a compact single-line sparkline for a slice of ints.
-// The result is exactly `width` characters wide (or len(values) if shorter).
+// The result is at most `width` characters wide.
 //
 // Characters used (low → high): ▁▂▃▄▅▆▇█
 func Sparkline(values []int, width int) string {
@@ -68,10 +70,8 @@ func Sparkline(values []int, width int) string {
 		return ""
 	}
 
-	// Downsample or use as-is
 	data := values
 	if len(data) > width {
-		// average-downsample to fit width
 		data = downsample(values, width)
 	}
 
@@ -94,7 +94,6 @@ func Sparkline(values []int, width int) string {
 		sb.WriteRune(sparkRunes[idx])
 	}
 
-	// Pad with spaces on the right if shorter than width
 	result := sb.String()
 	if len([]rune(result)) < width {
 		result += strings.Repeat(" ", width-len([]rune(result)))
@@ -116,7 +115,6 @@ func downsample(values []int, targetLen int) []int {
 			end = len(values)
 		}
 		if start >= end {
-			out[i] = 0
 			continue
 		}
 		sum := 0
