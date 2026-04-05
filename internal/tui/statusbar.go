@@ -1,3 +1,4 @@
+// renderStatusBar, renderModeBadge, renderInputBar, renderInputLine
 package tui
 
 import (
@@ -5,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ElioNeto/devon/internal/cost"
 )
 
 // renderStatusBar renderiza a barra inferior de status — lazydocker style:
@@ -18,8 +21,8 @@ func renderStatusBar(m *appModel, width int) string {
 	// Navigation hints (left side)
 	navHints := []struct{ key, desc string }{
 		{"PgUp/PgDn", "scroll"},
-		{"esc/q", "close"},
-		{"x", "menu"},
+		{"Ctrl+Q", "close"},
+		{"Ctrl+Tab", "panel"},
 		{"← → ↑ ↓", "navigate"},
 	}
 	for i, h := range navHints {
@@ -35,13 +38,13 @@ func renderStatusBar(m *appModel, width int) string {
 
 	// Right side: model + mode + cost
 	rightStr := s.statusKey.Render("modelo: ") +
-		s.statusVal.Render(truncate(m.cfg.Model, 20)) +
+		s.statusVal.Render(Trunc(m.cfg.Model, 20)) +
 		s.statusSep.Render(" │ ") +
 		s.statusKey.Render("modo: ") +
 		renderModeBadge(m) +
 		s.statusSep.Render(" │ ") +
 		s.statusKey.Render("custo: ") +
-		s.statusVal.Render(formatCostStr(m.tracker.TotalCostUSD))
+		s.statusVal.Render(cost.FormatCost(m.tracker.TotalCostUSD))
 
 	leftW := lipgloss.Width(leftStr)
 	rightW := lipgloss.Width(rightStr)
@@ -68,38 +71,6 @@ func renderModeBadge(m *appModel) string {
 	return lipgloss.NewStyle().Foreground(color).Bold(true).Render(mode)
 }
 
-// renderHelp renderiza o painel de ajuda inline.
-func renderHelp(m *appModel, width int) string {
-	s := m.styles
-	pairs := []struct{ k, v string }{
-		{"↑↓", "navegar"},
-		{"tab", "seção"},
-		{"enter", "selecionar"},
-		{"x", "menu contexto"},
-		{"e", "expandir"},
-		{"ctrl+c", "sair"},
-		{"ctrl+l", "limpar"},
-		{"ctrl+k", "nova sessão"},
-		{"pgup/pgdn", "rolar"},
-		{"q/esc", "fechar"},
-		{"?", "ajuda"},
-	}
-	var sb strings.Builder
-	for _, p := range pairs {
-		sb.WriteString(s.keyStyle.Render(p.k))
-		sb.WriteString(s.helpStyle.Render(" "+p.v+"  "))
-	}
-	line := sb.String()
-	visW := lipgloss.Width(line)
-	if visW < width {
-		line += strings.Repeat(" ", width-visW)
-	}
-	return lipgloss.NewStyle().
-		Background(colorSurface).
-		Width(width).
-		Render(line)
-}
-
 // renderInputBar renderiza a barra de input na parte inferior.
 func renderInputBar(m *appModel, width int) string {
 	s := m.styles
@@ -107,8 +78,6 @@ func renderInputBar(m *appModel, width int) string {
 
 	if m.running {
 		content = m.spinner.View() + "  " + s.statusKey.Render("aguardando resposta...")
-	} else if m.statusMsg != "" {
-		content = s.sysMsg.Render("  " + m.statusMsg)
 	} else {
 		prompt := s.inputPrompt.Render("> ")
 		content = prompt + renderInputLine(m)

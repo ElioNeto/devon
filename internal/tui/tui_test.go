@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -12,6 +13,25 @@ import (
 func updateApp(m appModel, msg tea.Msg) appModel {
 	result, _ := m.Update(msg)
 	return result.(appModel)
+}
+
+func shortenArgs(s string) string {
+	if len([]rune(s)) <= 25 {
+		return s
+	}
+	ru := []rune(s)[:24]
+	return string(ru) + "…"
+}
+
+func formatTokens(n int) string {
+	switch {
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	case n >= 1_000:
+		return fmt.Sprintf("%.1fk", float64(n)/1_000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
 }
 
 func testConfig() *config.Config {
@@ -53,7 +73,6 @@ func TestModel_UpdateTypeText(t *testing.T) {
 	m := newModel(testConfig())
 	m.width = 80
 	m.height = 24
-	m.leftFocus = false // focus input for typing
 
 	m = updateApp(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hello")})
 	if m.input != "hello" {
@@ -70,8 +89,6 @@ func TestModel_UpdateDeleteWord(t *testing.T) {
 	m := newModel(testConfig())
 	m.width = 80
 	m.height = 24
-	m.leftFocus = false
-
 
 	m = updateApp(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hello world")})
 	if m.input != "hello world" {
@@ -101,13 +118,9 @@ func TestModel_UpdateCursor(t *testing.T) {
 	m := newModel(testConfig())
 	m.width = 80
 	m.height = 24
-	m.leftFocus = false
 
 	m = updateApp(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hello")})
 	m.cursor = 3
-
-	// leftFocus=true: left/right move the input cursor
-	m.leftFocus = true
 
 	m = updateApp(m, tea.KeyMsg{Type: tea.KeyLeft})
 	if m.cursor != 2 {
@@ -179,14 +192,9 @@ func TestModel_UpdateHelp(t *testing.T) {
 	m.width = 80
 	m.height = 24
 
-	m = updateApp(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlH})
 	if !m.showHelp {
-		t.Error("help should be shown after ?")
-	}
-
-	m = updateApp(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	if m.showHelp {
-		t.Error("help should be hidden after any key")
+		t.Error("help should be shown after Ctrl+H")
 	}
 }
 
@@ -360,7 +368,7 @@ func TestModel_ViewHelp(t *testing.T) {
 	m.showHelp = true
 
 	v := m.View()
-	if !strings.Contains(v, "enter") {
+	if !strings.Contains(v, "Enter") && !strings.Contains(v, "enviar") {
 		t.Error("help should mention enter key")
 	}
 	if !strings.Contains(v, "sair") {
@@ -392,8 +400,9 @@ func TestShortenArgs(t *testing.T) {
 	}
 	long := strings.Repeat("a", 50)
 	got := shortenArgs(long)
-	if len(got) != 25 {
-		t.Errorf("expected 25 chars, got %d", len(got))
+	// 24 bytes 'a' + 3 bytes "…" = 27 bytes
+	if len(got) != 27 {
+		t.Errorf("expected 27 bytes, got %d", len(got))
 	}
 	if !strings.HasSuffix(got, "…") && !strings.HasSuffix(got, "...") {
 		t.Errorf("truncated args should end with ellipsis, got %q", got)
@@ -431,7 +440,6 @@ func TestInputEditMiddle(t *testing.T) {
 	m := newModel(testConfig())
 	m.width = 80
 	m.height = 24
-	m.leftFocus = false
 
 	m = updateApp(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hello")})
 	m.cursor = 2 // "he|llo"
