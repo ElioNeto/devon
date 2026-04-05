@@ -7,39 +7,50 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// renderStatusBar renderiza a barra superior com informações do projeto.
+// renderStatusBar renderiza a barra inferior de status — lazydocker style:
+//
+//	PgUp/PgDn: scroll · esc/q: close · x: menu · ← → ↑ ↓: navigate
 func renderStatusBar(m *appModel, width int) string {
 	s := m.styles
 
-	wd := m.cfg.WorkDir
-	if len(wd) > 28 {
-		wd = "…" + wd[len(wd)-27:]
+	var parts []string
+
+	// Navigation hints (left side)
+	navHints := []struct{ key, desc string }{
+		{"PgUp/PgDn", "scroll"},
+		{"esc/q", "close"},
+		{"x", "menu"},
+		{"← → ↑ ↓", "navigate"},
+	}
+	for i, h := range navHints {
+		if i > 0 {
+			parts = append(parts, s.statusSep.Render(","))
+			parts = append(parts, " ")
+		}
+		parts = append(parts, s.keyStyle.Render(h.key))
+		parts = append(parts, s.statusKey.Render(": "+h.desc))
 	}
 
-	totalTok := m.tracker.TotalInputTokens + m.tracker.TotalOutputTokens
-	costStr := formatCostStr(m.tracker.TotalCostUSD)
+	leftStr := strings.Join(parts, "")
 
-	parts := []string{
-		s.statusKey.Render("devon") + "  ",
-		s.statusKey.Render("dir:") + " " + s.statusVal.Render(wd),
-		s.statusSep.Render(" │ "),
-		s.statusKey.Render("modelo:") + " " + s.statusVal.Render(truncate(m.cfg.Model, 22)),
-		s.statusSep.Render(" │ "),
-		s.statusKey.Render("tokens:") + " " + s.statusVal.Render(formatShort(totalTok)),
-		s.statusSep.Render(" │ "),
-		s.statusKey.Render("custo:") + " " + s.statusVal.Render(costStr),
-		s.statusSep.Render(" │ "),
-		s.statusKey.Render("modo:") + " " + renderModeBadge(m),
+	// Right side: model + mode + cost
+	rightStr := s.statusKey.Render("modelo: ") +
+		s.statusVal.Render(truncate(m.cfg.Model, 20)) +
+		s.statusSep.Render(" │ ") +
+		s.statusKey.Render("modo: ") +
+		renderModeBadge(m) +
+		s.statusSep.Render(" │ ") +
+		s.statusKey.Render("custo: ") +
+		s.statusVal.Render(formatCostStr(m.tracker.TotalCostUSD))
+
+	leftW := lipgloss.Width(leftStr)
+	rightW := lipgloss.Width(rightStr)
+	gap := width - leftW - rightW - 2
+	if gap < 1 {
+		gap = 1
 	}
 
-	line := strings.Join(parts, "")
-
-	// Pad to full width
-	visibleLen := lipgloss.Width(line)
-	if visibleLen < width {
-		line += strings.Repeat(" ", width-visibleLen)
-	}
-
+	line := leftStr + strings.Repeat(" ", gap) + rightStr
 	return s.statusBar.Width(width).Render(line)
 }
 
@@ -57,21 +68,20 @@ func renderModeBadge(m *appModel) string {
 	return lipgloss.NewStyle().Foreground(color).Bold(true).Render(mode)
 }
 
-// renderHelp renderiza o painel de ajuda.
+// renderHelp renderiza o painel de ajuda inline.
 func renderHelp(m *appModel, width int) string {
 	s := m.styles
 	pairs := []struct{ k, v string }{
 		{"↑↓", "navegar"},
-		{"←→", "painéis"},
 		{"tab", "seção"},
 		{"enter", "selecionar"},
 		{"x", "menu contexto"},
 		{"e", "expandir"},
-		{"ctrl+c", "interromper/sair"},
+		{"ctrl+c", "sair"},
 		{"ctrl+l", "limpar"},
 		{"ctrl+k", "nova sessão"},
 		{"pgup/pgdn", "rolar"},
-		{"q/esc", "fechar menu"},
+		{"q/esc", "fechar"},
 		{"?", "ajuda"},
 	}
 	var sb strings.Builder

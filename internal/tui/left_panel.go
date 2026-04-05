@@ -7,7 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// leftSection identifica as seções do painel esquerdo.
+// ── Section types ────────────────────────────────────────────────────────────
+
 type leftSection int
 
 const (
@@ -26,80 +27,95 @@ var sectionLabels = []string{
 	"Tokens",
 }
 
-// leftItem representa um item navegável no painel esquerdo.
+// ── Item model ───────────────────────────────────────────────────────────────
+
 type leftItem struct {
-	Section  leftSection
-	Label    string
-	SubLabel string // ex: nome da ferramenta ou ID do turno
-	Index    int    // índice dentro da seção
-	Icon     string
+	Section    leftSection
+	Label      string
+	SubLabel   string
+	Index      int
+	Icon       string
+	StatusKind string // "running" | "exited" | "" (for section headers: "header")
+	CPU        string // optional right-aligned metric
 }
 
-// buildLeftItems constrói a lista flat de itens navegáveis a partir do estado.
+// ── Build items ──────────────────────────────────────────────────────────────
+
 func buildLeftItems(m *appModel) []leftItem {
 	var items []leftItem
 
-	// ── Sessão atual ──────────────────────────────────────────
-	items = append(items, leftItem{Section: secTurno, Label: sectionLabels[secTurno], Icon: "─"})
-
+	// ── Services (Sessão atual / tool runs) ───────────────────
+	items = append(items, leftItem{Section: secTurno, Label: "Services", StatusKind: "header"})
 	if m.running {
-		items = append(items, leftItem{Section: secTurno, Label: "▶ Turno ativo", Icon: "⏳", Index: 0})
-		for i, tr := range m.toolRuns {
-			icon := "⏳"
-			if tr.Status == "done" {
-				icon = "✔"
-			} else if tr.Status == "error" {
-				icon = "✘"
-			}
-			items = append(items, leftItem{
-				Section:  secTurno,
-				Label:    "  " + tr.Name,
-				SubLabel: shortenArgs(tr.Args),
-				Icon:     icon,
-				Index:    i + 1,
-			})
-		}
-	} else if len(m.messages) > 0 {
-		items = append(items, leftItem{Section: secTurno, Label: "Turno concluído", Icon: "✔", Index: 0})
-	}
-
-	// ── Histórico ─────────────────────────────────────────────
-	items = append(items, leftItem{Section: secHistorico, Label: sectionLabels[secHistorico], Icon: "─"})
-	for i, hm := range m.historyTurns {
-		lbl := truncate(hm.UserPrompt, 20)
 		items = append(items, leftItem{
-			Section:  secHistorico,
-			Label:    fmt.Sprintf("  Turno %d", i+1),
-			SubLabel: lbl,
-			Icon:     "○",
-			Index:    i,
+			Section: secTurno, Label: "agent", StatusKind: "running",
+			CPU: "…", Index: 0,
+		})
+	}
+	for i, tr := range m.toolRuns {
+		kind := "running"
+		if tr.Status == "done" {
+			kind = "running"
+		} else if tr.Status == "error" {
+			kind = "exited"
+		}
+		items = append(items, leftItem{
+			Section:    secTurno,
+			Label:      tr.Name,
+			SubLabel:   shortenArgs(tr.Args),
+			StatusKind: kind,
+			CPU:        "",
+			Index:      i + 1,
 		})
 	}
 
-	// ── Ferramentas ───────────────────────────────────────────
-	items = append(items, leftItem{Section: secFerramentas, Label: sectionLabels[secFerramentas], Icon: "─"})
+	// ── Standalone Containers (histórico de turnos) ───────────
+	items = append(items, leftItem{Section: secHistorico, Label: "Standalone Containers", StatusKind: "header"})
+	for i, ht := range m.historyTurns {
+		lbl := truncate(ht.UserPrompt, 18)
+		kind := "running"
+		if i < len(m.historyTurns)-1 {
+			kind = "exited"
+		}
+		items = append(items, leftItem{
+			Section:    secHistorico,
+			Label:      lbl,
+			StatusKind: kind,
+			Index:      i,
+		})
+	}
+
+	// ── Images (ferramentas disponíveis) ──────────────────────
+	items = append(items, leftItem{Section: secFerramentas, Label: "Images", StatusKind: "header"})
 	for name, stat := range m.toolStats {
 		items = append(items, leftItem{
 			Section:  secFerramentas,
-			Label:    fmt.Sprintf("  %-12s", name),
-			SubLabel: fmt.Sprintf("%dx %s", stat.Calls, formatDuration(stat.AvgMs)),
-			Icon:     "◆",
+			Label:    name,
+			SubLabel: fmt.Sprintf("%dx", stat.Calls),
+			CPU:      fmt.Sprintf("%d", stat.Calls),
+			Index:    0,
+		})
+	}
+	if len(m.toolStats) == 0 {
+		items = append(items, leftItem{Section: secFerramentas, Label: "<none>", SubLabel: "<none>", CPU: "0"})
+	}
+
+	// ── Volumes (tokens) ──────────────────────────────────────
+	items = append(items, leftItem{Section: secTokens, Label: "Volumes", StatusKind: "header"})
+	if m.tracker != nil {
+		items = append(items, leftItem{
+			Section:  secTokens,
+			Label:    "tokens",
+			SubLabel: formatShort(m.tracker.TotalInputTokens + m.tracker.TotalOutputTokens),
 			Index:    0,
 		})
 	}
 
-	// ── Memória ───────────────────────────────────────────────
-	items = append(items, leftItem{Section: secMemoria, Label: sectionLabels[secMemoria], Icon: "─"})
-	items = append(items, leftItem{Section: secMemoria, Label: "  Fatos do projeto", Icon: "◈", Index: 0})
-
-	// ── Tokens ────────────────────────────────────────────────
-	items = append(items, leftItem{Section: secTokens, Label: sectionLabels[secTokens], Icon: "─"})
-	items = append(items, leftItem{Section: secTokens, Label: "  Consumo por turno", Icon: "▦", Index: 0})
-
 	return items
 }
 
-// renderLeftPanel renderiza o painel esquerdo com lipgloss.
+// ── Renderer ─────────────────────────────────────────────────────────────────
+
 func renderLeftPanel(m *appModel, width, height int, focused bool) string {
 	items := buildLeftItems(m)
 	m.leftItems = items
@@ -108,46 +124,64 @@ func renderLeftPanel(m *appModel, width, height int, focused bool) string {
 	var lines []string
 
 	for i, item := range items {
-		// Cabeçalhos de seção
-		if item.Icon == "─" {
-			lbl := s.itemSection.Width(width - 2).Render(
-				"── " + strings.ToUpper(item.Label) + " " + strings.Repeat("─", max(0, width-7-len(item.Label))),
-			)
-			lines = append(lines, lbl)
+		// Section header row — lazydocker style ─ Services ──
+		if item.StatusKind == "header" {
+			avail := width - 4 - len(item.Label)
+			if avail < 0 {
+				avail = 0
+			}
+			headerLine := "─" + item.Label + strings.Repeat("─", avail)
+			lines = append(lines, s.itemSection.Width(width-2).Render(headerLine))
 			continue
 		}
 
 		isSelected := i == m.leftCursor
-		lineStr := item.Icon + " " + item.Label
-		if item.SubLabel != "" {
-			lineStr += "  " + item.SubLabel
+
+		// Status badge: "running" or "exited (N)"
+		var badge string
+		switch item.StatusKind {
+		case "running":
+			badge = s.statusRunning.Render("running")
+		case "exited":
+			badge = s.statusExited.Render("exited (1)")
+		default:
+			badge = ""
 		}
-		lineStr = truncate(lineStr, width-3)
+
+		// Right-side CPU/metric
+		cpuPart := ""
+		if item.CPU != "" {
+			cpuPart = s.statusVal.Render(item.CPU + "%")
+		}
+
+		// Compose line: " running label        0.01%"
+		labelTrunc := truncate(item.Label, width-22)
+		var lineStr string
+		if badge != "" {
+			lineStr = badge + " " + labelTrunc
+		} else {
+			lineStr = "         " + labelTrunc
+		}
+		if cpuPart != "" {
+			// pad to align right
+			pureLen := lipgloss.Width(badge) + 1 + len(labelTrunc)
+			pad := width - 4 - pureLen - lipgloss.Width(cpuPart)
+			if pad > 0 {
+				lineStr += strings.Repeat(" ", pad)
+			}
+			lineStr += cpuPart
+		}
 
 		var rendered string
-		if isSelected {
-			if focused {
-				rendered = lipgloss.NewStyle().
-					Foreground(colorText).
-					Background(colorSurface2).
-					Width(width - 2).
-					Render(lineStr)
-			} else {
-				rendered = s.itemSelected.Width(width - 2).Render(lineStr)
-			}
+		if isSelected && focused {
+			rendered = lipgloss.NewStyle().
+				Background(colorSurface2).
+				Width(width - 2).
+				Render(lineStr)
+		} else if isSelected {
+			rendered = s.itemSelected.Width(width - 2).Render(lineStr)
 		} else {
-			var style lipgloss.Style
-			switch item.Icon {
-			case "⏳":
-				style = s.toolRunning
-			case "✔":
-				style = s.toolDone
-			case "✘":
-				style = s.toolError
-			default:
-				style = s.itemNormal
-			}
-			rendered = style.Width(width - 2).Render(lineStr)
+			rendered = s.itemNormal.Width(width - 2).Render(lineStr)
 		}
 		lines = append(lines, rendered)
 	}
@@ -170,6 +204,8 @@ func renderLeftPanel(m *appModel, width, height int, focused bool) string {
 		Height(height).
 		Render(content)
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 func formatDuration(ms int64) string {
 	if ms >= 1000 {
