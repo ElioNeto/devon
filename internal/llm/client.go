@@ -116,7 +116,7 @@ func (c *Client) Stream(
 		Stream:   true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("llm: marshal request: %w", err)
+		return nil, fmt.Errorf("llm: nao foi possivel marshal a requisição: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(
@@ -125,7 +125,7 @@ func (c *Client) Stream(
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("llm: new request: %w", err)
+		return nil, fmt.Errorf("llm: nao foi possivel criar nova requisição: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.apiKey != "" {
@@ -134,11 +134,11 @@ func (c *Client) Stream(
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("llm: request failed: %w", err)
+		return nil, fmt.Errorf("llm: falha na requisição: %w", err)
 	}
 	if resp.StatusCode >= 400 {
 		resp.Body.Close()
-		return nil, fmt.Errorf("llm: provider returned HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("llm: provedor retornou HTTP %d", resp.StatusCode)
 	}
 
 	ch := make(chan StreamEvent, 32)
@@ -235,6 +235,6 @@ func parseSSE(ctx context.Context, body io.ReadCloser, ch chan<- StreamEvent) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		send(StreamEvent{Type: "error", Err: fmt.Errorf("llm: stream read error: %w", err)})
+		send(StreamEvent{Type: "error", Err: fmt.Errorf("llm: erro na leitura do stream: %w", err)})
 	}
 }

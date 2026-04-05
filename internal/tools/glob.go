@@ -11,7 +11,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 )
 
-// GlobTool busca arquivos por padrão glob (inclui ** para recursivo).
+// GlobTool busca arquivos por padrao glob (inclui ** para recursivo).
 type GlobTool struct {
 	Dir string
 }
@@ -21,14 +21,14 @@ type globParams struct {
 }
 
 func (t *GlobTool) Name() string        { return "glob" }
-func (t *GlobTool) Description() string { return "Search for files matching a glob pattern. Supports ** for recursive directory matching." }
+func (t *GlobTool) Description() string { return "Busca arquivos por padrao glob. Suporta ** para busca recursiva em diretorios." }
 func (t *GlobTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
 		"properties": {
 			"pattern": {
 				"type": "string",
-				"description": "Glob pattern to match files (e.g. **/*.go, src/**/*.ts)"
+				"description": "Padrao glob para buscar arquivos (ex: **/*.go, src/**/*.ts)"
 			}
 		},
 		"required": ["pattern"]
@@ -38,10 +38,10 @@ func (t *GlobTool) Schema() json.RawMessage {
 func (t *GlobTool) Execute(ctx context.Context, params json.RawMessage) (string, error) {
 	var p globParams
 	if err := json.Unmarshal(params, &p); err != nil {
-		return "", fmt.Errorf("glob: invalid params: %w", err)
+		return "", fmt.Errorf("glob: parametros invalidos: %w", err)
 	}
 	if p.Pattern == "" {
-		return "", fmt.Errorf("glob: pattern cannot be empty")
+		return "", fmt.Errorf("glob: padrao nao pode estar vazio")
 	}
 
 	dir := t.Dir
@@ -51,11 +51,11 @@ func (t *GlobTool) Execute(ctx context.Context, params json.RawMessage) (string,
 
 	matches, err := doublestar.Glob(os.DirFS(dir), p.Pattern)
 	if err != nil {
-		return "", fmt.Errorf("glob: pattern error: %w", err)
+		return "", fmt.Errorf("glob: erro no padrao: %w", err)
 	}
 
 	if len(matches) == 0 {
-		return "No files matched the pattern.", nil
+		return "Nenhum arquivo encontrado para o padrao.", nil
 	}
 
 	// Normaliza paths relativos ao workdir

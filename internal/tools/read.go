@@ -19,14 +19,14 @@ type readParams struct {
 }
 
 func (t *ReadTool) Name() string        { return "read" }
-func (t *ReadTool) Description() string { return "Read the contents of a file and return them as a string with line numbers." }
+func (t *ReadTool) Description() string { return "Le o conteudo de um arquivo e retorna como uma string com numeros de linha." }
 func (t *ReadTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
 		"properties": {
 			"file": {
 				"type": "string",
-				"description": "Path to the file to read, relative or absolute"
+				"description": "Caminho do arquivo para ler, relativo ou absoluto"
 			}
 		},
 		"required": ["file"]
@@ -36,31 +36,31 @@ func (t *ReadTool) Schema() json.RawMessage {
 func (t *ReadTool) Execute(ctx context.Context, params json.RawMessage) (string, error) {
 	var p readParams
 	if err := json.Unmarshal(params, &p); err != nil {
-		return "", fmt.Errorf("read: invalid params: %w", err)
+		return "", fmt.Errorf("read: parametros invalidos: %w", err)
 	}
 	if p.Path == "" {
-		return "", fmt.Errorf("read: path cannot be empty")
+		return "", fmt.Errorf("read: caminho nao pode estar vazio")
 	}
 
 	path := t.resolvePath(p.Path)
 
 	info, err := os.Stat(path)
 	if err != nil {
-		return "", fmt.Errorf("read: cannot access %q: %w", path, err)
+		return "", fmt.Errorf("read: nao foi possivel acessar %q: %w", path, err)
 	}
 	if info.Size() > 1024*1024 {
-		return "", fmt.Errorf("read: file %q too large (max 1 MB)", path)
+		return "", fmt.Errorf("read: arquivo %q muito grande (maximo 1 MB)", path)
 	}
 
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("read: cannot read %q: %w", path, err)
+		return "", fmt.Errorf("read: nao foi possivel ler %q: %w", path, err)
 	}
 
 	text := string(content)
 	if strings.HasSuffix(path, ".png") || strings.HasSuffix(path, ".jpg") ||
 		strings.HasSuffix(path, ".jpeg") || strings.HasSuffix(path, ".gif") {
-		return fmt.Sprintf("[binary file: %s, %d bytes]", filepath.Base(path), len(content)), nil
+		return fmt.Sprintf("[arquivo binario: %s, %d bytes]", filepath.Base(path), len(content)), nil
 	}
 
 	lines := strings.Split(text, "\n")

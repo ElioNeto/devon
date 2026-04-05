@@ -48,7 +48,7 @@ func TestGlobTool_Execute_NoMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() unexpected error: %v", err)
 	}
-	if result != "No files matched the pattern." {
+	if result != "Nenhum arquivo encontrado para o padrao." {
 		t.Errorf("expected no match message, got: %q", result)
 	}
 }

@@ -21,14 +21,14 @@ type bashParams struct {
 }
 
 func (t *BashTool) Name() string        { return "bash" }
-func (t *BashTool) Description() string { return "Execute a shell command and return its output. Use this for build, test, git operations, or any other command-line task." }
+func (t *BashTool) Description() string { return "Executa um comando shell e retorna sua saida. Use para construir, testar, operacoes git ou qualquer outra tarefa de linha de comando." }
 func (t *BashTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
 		"properties": {
 			"command": {
 				"type": "string",
-				"description": "The shell command to execute"
+				"description": "O comando shell a executar"
 			}
 		},
 		"required": ["command"]
@@ -38,10 +38,10 @@ func (t *BashTool) Schema() json.RawMessage {
 func (t *BashTool) Execute(ctx context.Context, params json.RawMessage) (string, error) {
 	var p bashParams
 	if err := json.Unmarshal(params, &p); err != nil {
-		return "", fmt.Errorf("bash: invalid params: %w", err)
+		return "", fmt.Errorf("bash: parametros invalidos: %w", err)
 	}
 	if p.Command == "" {
-		return "", fmt.Errorf("bash: command cannot be empty")
+		return "", fmt.Errorf("bash: comando nao pode estar vazio")
 	}
 
 	timeout := t.Timeout
@@ -72,13 +72,13 @@ func (t *BashTool) Execute(ctx context.Context, params json.RawMessage) (string,
 
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Sprintf("Command timed out after %v: %s", timeout, out), fmt.Errorf("bash: command timed out: %v", timeout)
+			return fmt.Sprintf("Comando excedeu o tempo limite apos %v: %s", timeout, out), fmt.Errorf("bash: comando excedeu o tempo limite: %v", timeout)
 		}
-		return out, fmt.Errorf("bash: exit error: %w", err)
+		return out, fmt.Errorf("bash: erro de execucao: %w", err)
 	}
 
 	if out == "" {
-		return "(no output)", nil
+		return "(sem saida)", nil
 	}
 	return out, nil
 }
@@ -87,7 +87,7 @@ func (t *BashTool) Execute(ctx context.Context, params json.RawMessage) (string,
 func sanitizeOutput(s string) string {
 	const maxLen = 32 * 1024 // 32 KB
 	if len(s) > maxLen {
-		return s[:maxLen] + "\n... [output truncated: exceeded 32 KB limit]"
+		return s[:maxLen] + "\n... [saida truncada: excedeu limite de 32 KB]"
 	}
 	return s
 }

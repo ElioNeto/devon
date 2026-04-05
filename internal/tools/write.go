@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-// WriteTool escreve conteúdo em um arquivo, criando diretórios intermediários.
+// WriteTool escreve conteudo em um arquivo, criando diretorios intermediarios.
 type WriteTool struct {
 	Dir string
 }
@@ -19,18 +19,18 @@ type writeParams struct {
 }
 
 func (t *WriteTool) Name() string        { return "write" }
-func (t *WriteTool) Description() string { return "Write content to a file. Creates parent directories if they don't existing files will be overwritten." }
+func (t *WriteTool) Description() string { return "Escreve conteudo em um arquivo. Cria diretorios intermediarios se necessario. Arquivos existentes serao sobrescritos." }
 func (t *WriteTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "Path to the file, relative or absolute"
+				"description": "Caminho do arquivo, relativo ou absoluto"
 			},
 			"content": {
 				"type": "string",
-				"description": "The content to write to the file"
+				"description": "O conteudo a ser escrito no arquivo"
 			}
 		},
 		"required": ["path", "content"]
@@ -40,26 +40,26 @@ func (t *WriteTool) Schema() json.RawMessage {
 func (t *WriteTool) Execute(ctx context.Context, params json.RawMessage) (string, error) {
 	var p writeParams
 	if err := json.Unmarshal(params, &p); err != nil {
-		return "", fmt.Errorf("write: invalid params: %w", err)
+		return "", fmt.Errorf("write: parametros invalidos: %w", err)
 	}
 	if p.Path == "" {
-		return "", fmt.Errorf("write: path cannot be empty")
+		return "", fmt.Errorf("write: caminho nao pode estar vazio")
 	}
 
 	path := t.resolvePath(p.Path)
 
-	// Cria diretórios intermediários
+	// Cria diretorios intermediarios
 	if dir := filepath.Dir(path); dir != "." && dir != "/" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return "", fmt.Errorf("write: cannot create directory %q: %w", dir, err)
+			return "", fmt.Errorf("write: nao foi possivel criar diretorio %q: %w", dir, err)
 		}
 	}
 
 	if err := os.WriteFile(path, []byte(p.Content), 0o644); err != nil {
-		return "", fmt.Errorf("write: cannot write %q: %w", path, err)
+		return "", fmt.Errorf("write: nao foi possivel escrever em %q: %w", path, err)
 	}
 
-	return fmt.Sprintf("Successfully wrote to %s (%d bytes)", t.relativePath(path), len(p.Content)), nil
+	return fmt.Sprintf("Arquivo escrito com sucesso em %s (%d bytes)", t.relativePath(path), len(p.Content)), nil
 }
 
 func (t *WriteTool) resolvePath(p string) string {

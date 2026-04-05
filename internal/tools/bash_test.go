@@ -38,8 +38,8 @@ func TestBashTool_Execute_NoOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
 	}
-	if result != "(no output)" {
-		t.Errorf("Execute() = %q, want %q", result, "(no output)")
+	if result != "(sem saida)" {
+		t.Errorf("Execute() = %q, want %q", result, "(sem saida)")
 	}
 }
 

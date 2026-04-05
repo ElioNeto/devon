@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// GrepTool busca conteúdo por regex em arquivos.
+// GrepTool busca conteudo por regex em arquivos.
 type GrepTool struct {
 	Dir       string
 	MaxLines  int
@@ -21,27 +21,27 @@ type GrepTool struct {
 
 type grepParams struct {
 	Pattern string `json:"pattern"`
-	Path    string `json:"path"`    // diretório ou arquivo (vazio = workdir)
+	Path    string `json:"path"`    // diretorio ou arquivo (vazio = workdir)
 	NoCase  bool   `json:"no_case"` // busca case-insensitive
 }
 
 func (t *GrepTool) Name() string        { return "grep" }
-func (t *GrepTool) Description() string { return "Search for a regex pattern in files. Returns matching lines with file and line numbers." }
+func (t *GrepTool) Description() string { return "Busca um padrao regex em arquivos. Retorna linhas com matches, arquivos e numeros de linha." }
 func (t *GrepTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
 		"properties": {
 			"pattern": {
 				"type": "string",
-				"description": "The regex pattern to search for"
+				"description": "O padrao regex a buscar"
 			},
 			"path": {
 				"type": "string",
-				"description": "File or directory to search in (defaults to the project root)"
+				"description": "Arquivo ou diretorio onde buscar (padrao: raiz do projeto)"
 			},
 			"no_case": {
 				"type": "boolean",
-				"description": "If true, perform case-insensitive search (default: false)"
+				"description": "Se true, busca case-insensitive (padrao: false)"
 			}
 		},
 		"required": ["pattern"]
@@ -51,10 +51,10 @@ func (t *GrepTool) Schema() json.RawMessage {
 func (t *GrepTool) Execute(ctx context.Context, params json.RawMessage) (string, error) {
 	var p grepParams
 	if err := json.Unmarshal(params, &p); err != nil {
-		return "", fmt.Errorf("grep: invalid params: %w", err)
+		return "", fmt.Errorf("grep: parametros invalidos: %w", err)
 	}
 	if p.Pattern == "" {
-		return "", fmt.Errorf("grep: pattern cannot be empty")
+		return "", fmt.Errorf("grep: padrao nao pode estar vazio")
 	}
 
 	dir := t.Dir
@@ -86,7 +86,7 @@ func (t *GrepTool) Execute(ctx context.Context, params json.RawMessage) (string,
 
 	err := filepath.WalkDir(searchPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil // skip errors, keep walking
+			return nil // ignora erros, continua andando
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -97,7 +97,7 @@ func (t *GrepTool) Execute(ctx context.Context, params json.RawMessage) (string,
 		if d.Type().IsRegular() {
 			fileCount++
 			if fileCount > maxFiles {
-				return fmt.Errorf("grep: reached max file limit (%d)", maxFiles)
+				return fmt.Errorf("grep: atingido limite maximo de arquivos (%d)", maxFiles)
 			}
 			lines, err := readFileMatches(ctx, path, opts, t.MaxLines)
 			if err != nil {
@@ -106,7 +106,7 @@ func (t *GrepTool) Execute(ctx context.Context, params json.RawMessage) (string,
 			for _, line := range lines {
 				results = append(results, fmt.Sprintf("%s:%d:%s", path, line.Num, line.Text))
 				if len(results) >= 200 {
-					return fmt.Errorf("grep: too many matches, truncating after 200")
+					return fmt.Errorf("grep: muitas correspondencias, truncado apos 200")
 				}
 			}
 		}
@@ -114,13 +114,13 @@ func (t *GrepTool) Execute(ctx context.Context, params json.RawMessage) (string,
 	})
 
 	if len(results) == 0 {
-		if err != nil && err.Error() == "grep: too many matches, truncating after 200" {
-			return strings.Join(results, "\n") + "\n... (truncated: 200+ matches)", nil
+		if err != nil && err.Error() == "grep: muitas correspondencias, truncado apos 200" {
+			return strings.Join(results, "\n") + "\n... (truncado: mais de 200 correspondencias)", nil
 		}
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("No matches found for pattern %q.", p.Pattern), nil
+		return fmt.Sprintf("Nenhuma correspondencia encontrada para o padrao %q.", p.Pattern), nil
 	}
 
 	out := strings.Join(results, "\n")
@@ -136,18 +136,18 @@ type lineMatch struct {
 func readFileMatches(ctx context.Context, path string, opts regexpSyntax, maxLines int) ([]lineMatch, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("grep open: %w", err)
+		return nil, fmt.Errorf("grep ao abrir: %w", err)
 	}
 	defer f.Close()
 
 	re, err := regexp.Compile(opts.pattern)
 	if err != nil {
-		return nil, fmt.Errorf("grep compile: %w", err)
+		return nil, fmt.Errorf("grep ao compilar padrao: %w", err)
 	}
 
 	var matches []lineMatch
 	scanner := bufio.NewScanner(f)
-	// Increase buffer size for long lines
+	// Aumenta buffer para linhas longas
 	scanner.Buffer(make([]byte, 0, 64*1024), 256*1024)
 	lineNum := 0
 
@@ -168,7 +168,7 @@ func readFileMatches(ctx context.Context, path string, opts regexpSyntax, maxLin
 	return matches, nil
 }
 
-// shouldSkipDir checks if a directory should be skipped during traversal.
+// shouldSkipDir verifica se um diretorio deve ser ignorado durante a busca.
 func shouldSkipDir(name string) bool {
 	skip := map[string]bool{
 		".git":    true,
@@ -197,7 +197,7 @@ func regexpOptions(p grepParams) regexpSyntax {
 func sanitizeLineLimit(s string) string {
 	const maxLen = 32 * 1024
 	if len(s) > maxLen {
-		return s[:maxLen] + "\n... [output truncated: exceeded 32 KB limit]"
+		return s[:maxLen] + "\n... [saida truncada: excedeu limite de 32 KB]"
 	}
 	return s
 }

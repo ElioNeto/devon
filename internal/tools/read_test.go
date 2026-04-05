@@ -127,7 +127,7 @@ func TestReadTool_Execute_BinaryFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
 	}
-	if result != "[binary file: image.png, 8 bytes]" {
+	if result != "[arquivo binario: image.png, 8 bytes]" {
 		t.Errorf("binary result = %q, expected binary message", result)
 	}
 }

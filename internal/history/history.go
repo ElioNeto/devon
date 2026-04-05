@@ -1,4 +1,4 @@
-// Package history persists and manages conversation sessions per project.
+// Package history persiste e gerencia sessoes de conversa por projeto.
 package history
 
 import (
@@ -48,7 +48,7 @@ func sessionDir(workDir string) (string, error) {
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(workDir)))[:12]
 	dir := filepath.Join(os.Getenv("HOME"), ".devon", "sessions", hash)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("history: create session dir: %w", err)
+		return "", fmt.Errorf("history: nao foi possivel criar diretorio da sessao: %w", err)
 	}
 	return dir, nil
 }
@@ -86,11 +86,11 @@ func createSession(dir string) (*Session, error) {
 	// Save initial session data
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("history: marshal session: %w", err)
+		return nil, fmt.Errorf("history: nao foi possivel marshal a sessao: %w", err)
 	}
 
 	if err := os.WriteFile(sessionFile(dir, id), data, 0o600); err != nil {
-		return nil, fmt.Errorf("history: write session file: %w", err)
+		return nil, fmt.Errorf("history: nao foi possivel escrever arquivo da sessao: %w", err)
 	}
 
 	return s, nil
@@ -119,12 +119,12 @@ func LoadLastSession(workDir string) (*Session, error) {
 
 	data, err := os.ReadFile(sessionPath)
 	if err != nil {
-		return nil, fmt.Errorf("history: read session %q: %w", recent, err)
+		return nil, fmt.Errorf("history: nao foi possivel ler sessao %q: %w", recent, err)
 	}
 
 	var s Session
 	if err := json.Unmarshal(data, &s); err != nil {
-		return nil, fmt.Errorf("history: unmarshal session %q: %w", recent, err)
+		return nil, fmt.Errorf("history: nao foi possivel unmarshal da sessao %q: %w", recent, err)
 	}
 
 	return &s, nil
@@ -141,11 +141,11 @@ func Save(workDir string, session *Session) error {
 
 	data, err := json.MarshalIndent(session, "", "  ")
 	if err != nil {
-		return fmt.Errorf("history: marshal session: %w", err)
+		return fmt.Errorf("history: nao foi possivel marshal a sessao: %w", err)
 	}
 
 	if err := os.WriteFile(sessionFile(dir, session.ID), data, 0o600); err != nil {
-		return fmt.Errorf("history: write session file: %w", err)
+		return fmt.Errorf("history: nao foi possivel escrever arquivo da sessao: %w", err)
 	}
 
 	return nil
@@ -164,7 +164,7 @@ func ListSessions(workDir string) ([]string, error) {
 func listSessions(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("history: read session dir: %w", err)
+		return nil, fmt.Errorf("history: nao foi possivel ler diretorio da sessao: %w", err)
 	}
 
 	var ids []string
@@ -192,12 +192,12 @@ func LoadSession(workDir string, id string) (*Session, error) {
 	sessionPath := sessionFile(dir, id)
 	data, err := os.ReadFile(sessionPath)
 	if err != nil {
-		return nil, fmt.Errorf("history: read session %q: %w", id, err)
+		return nil, fmt.Errorf("history: nao foi possivel ler sessao %q: %w", id, err)
 	}
 
 	var s Session
 	if err := json.Unmarshal(data, &s); err != nil {
-		return nil, fmt.Errorf("history: unmarshal session %q: %w", id, err)
+		return nil, fmt.Errorf("history: nao foi possivel unmarshal da sessao %q: %w", id, err)
 	}
 
 	return &s, nil
@@ -212,7 +212,7 @@ func ClearSession(workDir string, id string) error {
 
 	path := sessionFile(dir, id)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("history: remove session %q: %w", id, err)
+		return fmt.Errorf("history: nao foi possivel remover sessao %q: %w", id, err)
 	}
 
 	return nil
@@ -239,7 +239,7 @@ func SaveMessages(workDir string, id string, messages []llm.Message, usage *Usag
 
 	if data, err := os.ReadFile(sessionPath); err == nil {
 		if err := json.Unmarshal(data, &s); err != nil {
-			return fmt.Errorf("history: unmarshal session: %w", err)
+			return fmt.Errorf("history: nao foi possivel unmarshal da sessao: %w", err)
 		}
 	} else {
 		s = Session{
@@ -257,7 +257,7 @@ func SaveMessages(workDir string, id string, messages []llm.Message, usage *Usag
 
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
-		return fmt.Errorf("history: marshal session: %w", err)
+		return fmt.Errorf("history: nao foi possivel marshal a sessao: %w", err)
 	}
 
 	return os.WriteFile(sessionPath, data, 0o600)
@@ -275,7 +275,7 @@ func AppendMessage(workDir string, id string, msg llm.Message, usage *UsageSumma
 
 	if data, err := os.ReadFile(sessionPath); err == nil {
 		if err := json.Unmarshal(data, &s); err != nil {
-			return fmt.Errorf("history: unmarshal session: %w", err)
+			return fmt.Errorf("history: nao foi possivel unmarshal da sessao: %w", err)
 		}
 	}
 
@@ -297,7 +297,7 @@ func AppendMessage(workDir string, id string, msg llm.Message, usage *UsageSumma
 
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
-		return fmt.Errorf("history: marshal session: %w", err)
+		return fmt.Errorf("history: nao foi possivel marshal a sessao: %w", err)
 	}
 
 	return os.WriteFile(sessionPath, data, 0o600)
@@ -319,17 +319,17 @@ func SaveMessagesJSONL(workDir string, id string, msg llm.Message) error {
 	jsonlPath := filepath.Join(dir, id+".jsonl")
 	f, err := os.OpenFile(jsonlPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
-		return fmt.Errorf("history: open jsonl file: %w", err)
+		return fmt.Errorf("history: nao foi possivel abrir arquivo jsonl: %w", err)
 	}
 	defer f.Close()
 
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("history: marshal message: %w", err)
+		return fmt.Errorf("history: nao foi possivel marshal a mensagem: %w", err)
 	}
 
 	if _, err := f.Write(append(data, '\n')); err != nil {
-		return fmt.Errorf("history: write message: %w", err)
+		return fmt.Errorf("history: nao foi possivel escrever mensagem: %w", err)
 	}
 
 	return nil
@@ -345,7 +345,7 @@ func LoadMessagesJSONL(workDir string, id string) ([]llm.Message, error) {
 	jsonlPath := filepath.Join(dir, id+".jsonl")
 	f, err := os.Open(jsonlPath)
 	if err != nil {
-		return nil, fmt.Errorf("history: open jsonl file: %w", err)
+		return nil, fmt.Errorf("history: nao foi possivel abrir arquivo jsonl: %w", err)
 	}
 	defer f.Close()
 
@@ -359,7 +359,7 @@ func LoadMessagesJSONL(workDir string, id string) ([]llm.Message, error) {
 		messages = append(messages, msg)
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("history: read jsonl: %w", err)
+		return nil, fmt.Errorf("history: nao foi possivel ler jsonl: %w", err)
 	}
 
 	return messages, nil

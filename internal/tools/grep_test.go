@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -49,7 +50,7 @@ func TestGrepTool_Execute_NoMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() unexpected error: %v", err)
 	}
-	if result != "No matches found for pattern \"nonexistent\"." {
+	if !strings.Contains(result, "correspondencia") {
 		t.Errorf("expected no match message, got: %q", result)
 	}
 }
