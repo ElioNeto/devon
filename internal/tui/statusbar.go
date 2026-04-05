@@ -10,20 +10,23 @@ import (
 	"github.com/ElioNeto/devon/internal/cost"
 )
 
+// Trunc is a package-level helper for safely truncating display strings.
+func Trunc(s string, n int) string {
+	return truncate(s, n)
+}
+
 // renderStatusBar renderiza a barra inferior de status — lazydocker style:
 //
-//	PgUp/PgDn: scroll · esc/q: close · x: menu · ← → ↑ ↓: navigate
+//	PgUp/PgDn: scroll · esc/q: fechar · x: menu · ← → ↑ ↓: navegar
 func renderStatusBar(m *appModel, width int) string {
 	s := m.styles
 
 	var parts []string
-
-	// Navigation hints (left side)
 	navHints := []struct{ key, desc string }{
 		{"PgUp/PgDn", "scroll"},
-		{"Ctrl+Q", "close"},
-		{"Ctrl+Tab", "panel"},
-		{"← → ↑ ↓", "navigate"},
+		{"esc/q", "fechar"},
+		{"x", "menu"},
+		{"← → ↑ ↓", "navegar"},
 	}
 	for i, h := range navHints {
 		if i > 0 {
@@ -33,10 +36,8 @@ func renderStatusBar(m *appModel, width int) string {
 		parts = append(parts, s.keyStyle.Render(h.key))
 		parts = append(parts, s.statusKey.Render(": "+h.desc))
 	}
-
 	leftStr := strings.Join(parts, "")
 
-	// Right side: model + mode + cost
 	rightStr := s.statusKey.Render("modelo: ") +
 		s.statusVal.Render(Trunc(m.cfg.Model, 20)) +
 		s.statusSep.Render(" │ ") +

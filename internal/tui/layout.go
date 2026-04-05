@@ -1,181 +1,170 @@
 package tui
 
-import (
-	"fmt"
-	"strings"
+import "fmt"
+
+// leftPanelSection define as seções do painel esquerdo (para layout.go compat).
+// O tipo canônico para navegação é leftSection em messages.go.
+type leftPanelSection int
+
+const (
+	SectionSession  leftPanelSection = iota
+	SectionHistory
+	SectionTools
+	SectionTokens
 )
 
-// layout dimensions
-type layout struct {
-	width   int
-	height  int
-	hdrH    int
-	dividerH int
-	inputH  int
-	footerH int
-	panelH  int
-	leftW   int
-	rightW  int
+func (s leftPanelSection) String() string {
+	return [...]string{"Sessao", "Historico", "Ferramentas", "Tokens"}[s]
 }
+
+// Layout dimensions calculadas dinamicamente.
+type layout struct {
+	width      int
+	height     int
+	headerH    int
+	separatorH int
+	inputH     int
+	statusBarH int
+	chatH      int
+
+	leftPanelW  int
+	rightPanelW int
+	panelSepH   int
+
+	leftFocus  leftPanelSection
+	rightFocus rightPanel
+	panelFocus panelFocus
+}
+
+type panelFocus int
+
+const (
+	FocusLeft  panelFocus = iota
+	FocusRight
+	FocusInput
+)
+
+type rightPanel = string
+
+const (
+	RightChat    rightPanel = "chat"
+	RightSession rightPanel = "session"
+	RightHistory rightPanel = "history"
+	RightTools   rightPanel = "tools"
+	RightTokens  rightPanel = "tokens"
+	RightMemory  rightPanel = "memory"
+	RightContext rightPanel = "context"
+)
 
 func calcLayout(w, h int) layout {
 	l := layout{width: w, height: h}
-	l.hdrH = 1
-	l.dividerH = 1
+	l.headerH = 1
+	l.separatorH = 1
 	l.inputH = 1
-	l.footerH = 1
-	l.panelH = h - l.hdrH - l.dividerH - l.inputH - l.footerH
-	if l.panelH < 3 {
-		l.panelH = 3
+	l.statusBarH = 1
+	l.chatH = h - l.headerH - l.separatorH - l.inputH - l.statusBarH
+	if l.chatH < 1 {
+		l.chatH = 1
 	}
-	l.leftW = w / 3
-	if l.leftW < 20 {
-		l.leftW = 20
+	l.leftPanelW = w / 3
+	if l.leftPanelW < 24 {
+		l.leftPanelW = 24
 	}
-	if l.leftW > 36 {
-		l.leftW = 36
+	if l.leftPanelW > 48 {
+		l.leftPanelW = 48
 	}
-	l.rightW = w - l.leftW - 1
+	l.rightPanelW = w - l.leftPanelW
+	l.panelSepH = h - l.inputH - l.statusBarH
+	l.leftFocus = SectionSession
+	l.rightFocus = RightChat
 	return l
 }
 
-// ═══════════════════ ASCII Charts ═══════════════════════════════════
+func (l layout) HeaderBar() string  { return "" }
 
-// HorzBar renders: label [████░░░░] meta
-func HorzBar(label string, value, maxV, availW, labelW int) string {
-	if maxV <= 0 {
-		maxV = 1
-	}
-	barW := availW - labelW - 8
-	if barW < 2 {
-		barW = 2
-	}
-	fill := int(float64(barW) * float64(value) / float64(maxV))
-	if fill < 0 {
-		fill = 0
-	}
-	if fill > barW {
-		fill = barW
-	}
-	bar := "[" + strings.Repeat("█", fill) + strings.Repeat("░", barW-fill) + "]"
-	return fmt.Sprintf("%-*s %s %s", labelW, label, bar, fmtShort(value))
-}
-
-func fmtShort(n int) string {
-	switch {
-	case n >= 1_000_000:
-		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
-	case n >= 1_000:
-		return fmt.Sprintf("%.1fk", float64(n)/1_000)
-	default:
-		return fmt.Sprintf("%d", n)
-	}
-}
-
-// LineChart renders a simple ASCII area chart.
-func LineChart(values []int, width, height int, prefix string) []string {
-	if len(values) == 0 {
-		return []string{prefix + "(sem dados)"}
-	}
-	maxV := 1
-	for _, v := range values {
-		if v > maxV {
-			maxV = v
-		}
-	}
-	// Sample to fit width
-	n := len(values)
-	sampled := make([]int, width)
-	step := float64(n) / float64(width)
-	for x := 0; x < width; x++ {
-		idx := int(float64(x) * step)
-		if idx >= n {
-			idx = n - 1
-		}
-		sampled[x] = values[idx]
-	}
-
-	rows := make([]string, height)
-	for y := 0; y < height; y++ {
-		thr := int(float64(maxV) * float64(height-y) / float64(height))
-		line := make([]rune, 0, len(prefix)+width)
-		line = append(line, []rune(prefix)...)
-		for _, v := range sampled {
-			if v >= thr {
-				line = append(line, '█')
-			} else if v >= thr-int(float64(maxV)/float64(height)*1) {
-				line = append(line, '▓')
-			} else if v >= thr-int(float64(maxV)/float64(height)*2) {
-				line = append(line, '▒')
-			} else {
-				line = append(line, '░')
-			}
-		}
-		rows[y] = string(line)
-	}
-	return rows
-}
-
-// Sparkline renders a compact single-line sparkline.
-func Sparkline(values []int, width int) string {
-	if len(values) == 0 || width < 1 {
+func (l layout) ProgressBar(pct float64, width int) string {
+	if width < 2 {
 		return ""
 	}
-	maxV := 1
-	for _, v := range values {
-		if v > maxV {
-			maxV = v
+	filled := int(float64(width-2) * pct)
+	if filled < 0 {
+		filled = 0
+	}
+	if filled > width-2 {
+		filled = width - 2
+	}
+	bar := "["
+	for i := 0; i < filled; i++ {
+		bar += "█"
+	}
+	for i := filled; i < width-2; i++ {
+		bar += "░"
+	}
+	bar += "]"
+	return bar
+}
+
+func (l layout) Separator(w int) string {
+	sep := "─"
+	if w > 0 {
+		return sep + "─" + sep
+	}
+	return sep
+}
+
+// BarChartASCII desenha barras horizontais.
+func (l layout) BarChartASCII(rows []BarRow, maxWidth int) string {
+	if len(rows) == 0 {
+		return "(sem dados)"
+	}
+	maxVal := 1
+	for _, r := range rows {
+		if r.Value > maxVal {
+			maxVal = r.Value
 		}
 	}
-	runes := []rune(" ▁▂▃▄▅▆▇█")
-	s := len(runes)
-	var sb strings.Builder
-	step := float64(len(values)) / float64(width)
-	for i := 0; i < width; i++ {
-		idx := int(float64(i) * step)
-		if idx >= len(values) {
-			idx = len(values) - 1
+	labelW := 0
+	for _, r := range rows {
+		n := len(r.Label)
+		if n > labelW {
+			labelW = n
 		}
-		ratio := float64(values[idx]) / float64(maxV)
-		rIdx := int(ratio*float64(s-1) + 0.5)
-		if rIdx >= s {
-			rIdx = s - 1
+	}
+	if labelW < 6 {
+		labelW = 6
+	}
+	var lines []string
+	for _, r := range rows {
+		barW := 0
+		if maxVal > 0 {
+			barW = int(float64(r.Value) / float64(maxVal) * float64(maxWidth))
 		}
-		sb.WriteRune(runes[rIdx])
+		if barW < 1 && r.Value > 0 {
+			barW = 1
+		}
+		bar := ""
+		for i := 0; i < barW; i++ {
+			bar += "█"
+		}
+		line := fmt.Sprintf("%-*s %s  %s", labelW, r.Label, bar, r.Meta)
+		lines = append(lines, line)
 	}
-	return sb.String()
+	return formatList(lines)
 }
 
-func Trunc(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	if n <= 1 {
-		return "…"
-	}
-	return s[:n-1] + "…"
+type BarRow struct {
+	Label string
+	Value int
+	Meta  string
 }
 
-func joinH(lines []string, h int) string {
-	for len(lines) < h {
-		lines = append(lines, "")
+func formatList(lines []string) string {
+	s := ""
+	for i, line := range lines {
+		if i > 0 {
+			s += "\n"
+		}
+		s += line
 	}
-	if len(lines) > h {
-		lines = lines[:h]
-	}
-	return strings.Join(lines, "\n")
-}
-
-func minI(a int, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxI(a int, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+	return s
 }
