@@ -114,6 +114,14 @@ type memoryFact struct {
 	Value    string
 }
 
+// ── Message types ──────────────────────────────────────────────────────────────
+
+type agentEventMsg agent.Event
+
+type agentResult struct {
+	events []agent.Event
+}
+
 // ── Initialization ─────────────────────────────────────────────────────────────
 
 func newModel(cfg *config.Config) appModel {
@@ -727,6 +735,9 @@ func (m *appModel) processAgentEvent(ev agent.Event) {
 			if tr.Name == ev.Tool && tr.Status == "running" {
 				m.toolRuns[i].Result = ev.Result
 				m.toolRuns[i].Status = "done"
+				if m.toolStats == nil {
+					m.toolStats = make(map[string]*toolStat)
+				}
 				if st, ok := m.toolStats[ev.Tool]; ok {
 					st.Calls++
 				} else {
@@ -908,24 +919,6 @@ func wrapLine(s string, width int) []string {
 	return lines
 }
 
-func truncate(s string, n int) string {
-	ru := []rune(s)
-	if len(ru) <= n {
-		return s
-	}
-	return string(ru[:n-1]) + "…"
-}
-
-func formatShort(n int) string {
-	switch {
-	case n >= 1_000_000:
-		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
-	case n >= 1_000:
-		return fmt.Sprintf("%.1fK", float64(n)/1_000)
-	default:
-		return fmt.Sprintf("%d", n)
-	}
-}
 
 func formatTokens(n int) string {
 	return formatShort(n)
@@ -936,4 +929,39 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// ── Menu action ────────────────────────────────────────────────────────────────
+
+type MenuAction struct {
+	Key    string
+	Label  string
+	Action func(*appModel)
+}
+
+func contextMenuFor(m *appModel) []MenuAction {
+	if m.running {
+		return []MenuAction{
+			{"ctrl+c", "Interromper agente", func(m *appModel) { if m.cancel != nil { m.cancel(); m.cancel = nil; m.running = false; m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Agente interrompido."}) }}},
+			{"k", "Nova sessão", func(m *appModel) { m.messages = nil; m.toolRuns = nil; m.scroll = 0; m.tracker = cost.NewSession(m.cfg.Model); ses, _ := history.CreateSession(m.cfg.WorkDir); m.session = ses }},
+		}
+	}
+	actions := []MenuAction{}
+	if m.session != nil {
+		actions = append(actions, MenuAction{"k", "Nova sessão", func(m *appModel) { m.messages = nil; m.toolRuns = nil; m.scroll = 0; m.tracker = cost.NewSession(m.cfg.Model); m.session, _ = history.CreateSession(m.cfg.WorkDir) }})
+	}
+	sessions, _ := history.ListSessions(m.cfg.WorkDir)
+	if len(sessions) > 0 {
+		actions = append(actions, MenuAction{"h", "Historico", func(m *appModel) { m.popup = ""
+			sessions, _ := history.ListSessions(m.cfg.WorkDir)
+			var sb strings.Builder
+			sb.WriteString("Sessoes:\n")
+			for _, id := range sessions {
+				sb.WriteString("  " + id + "\n")
+			}
+			m.popup = sb.String()
+		}})
+	}
+	actions = append(actions, MenuAction{"?", "Ajuda", func(m *appModel) { m.showHelp = true }})
+	return actions
 }
