@@ -4,21 +4,21 @@ import (
 	"strings"
 )
 
-// ═══════════════════ Legacy chart functions ═══════════════════════════════
-// Kept only for backward compat: HorizBar, VertBars, centerStr, formatShort,
-// truncate. The new chart functions live in layout.go.
+// ═══════════════════ chart.go ═══════════════════════════════
+// Standalone chart primitives.
+// HorzBar, fmtShort, Sparkline, Trunc → helpers.go
 
 const (
 	barFull  = "█"
 	barEmpty = "░"
 )
 
-// HorizBar (compat alias to HorzBar).
+// HorizBar is a compat alias for HorzBar (keeps old call sites working).
 func HorizBar(label string, value, maxV, width int, labelW int) string {
 	return HorzBar(label, value, maxV, width, labelW)
 }
 
-// VertBars renders a vertical bar chart.
+// VertBars renders a vertical bar chart as a slice of strings (rows).
 func VertBars(labels []string, values []int, width, height int) []string {
 	if len(values) == 0 {
 		return []string{"(sem dados)"}
@@ -62,12 +62,4 @@ func centerStr(s string, w int) string {
 	left := pad / 2
 	right := pad - left
 	return strings.Repeat(" ", left) + s + strings.Repeat(" ", right)
-}
-
-func truncate(s string, max int) string {
-	return Trunc(s, max)
-}
-
-func formatShort(n int) string {
-	return fmtShort(n)
 }
