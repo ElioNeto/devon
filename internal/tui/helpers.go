@@ -26,7 +26,7 @@ func fmtShort(n int) string {
 	case n >= 1_000_000:
 		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
 	case n >= 1_000:
-		return fmt.Sprintf("%.1fK", float64(n)/1_000)
+		return fmt.Sprintf("%.1fk", float64(n)/1_000)
 	default:
 		return fmt.Sprintf("%d", n)
 	}
@@ -34,6 +34,9 @@ func fmtShort(n int) string {
 
 // formatShort is the unexported alias used throughout the package.
 func formatShort(n int) string { return fmtShort(n) }
+
+// formatTokens is an alias to formatShort used in tests.
+func formatTokens(n int) string { return fmtShort(n) }
 
 // HorzBar renders a single labelled horizontal bar.
 //

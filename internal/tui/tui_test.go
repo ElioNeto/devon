@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -12,26 +11,7 @@ import (
 
 func updateApp(m appModel, msg tea.Msg) appModel {
 	result, _ := m.Update(msg)
-	return result.(appModel)
-}
-
-func shortenArgs(s string) string {
-	if len([]rune(s)) <= 25 {
-		return s
-	}
-	ru := []rune(s)[:24]
-	return string(ru) + "…"
-}
-
-func formatTokens(n int) string {
-	switch {
-	case n >= 1_000_000:
-		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
-	case n >= 1_000:
-		return fmt.Sprintf("%.1fk", float64(n)/1_000)
-	default:
-		return fmt.Sprintf("%d", n)
-	}
+	return *(result.(*appModel))
 }
 
 func testConfig() *config.Config {
