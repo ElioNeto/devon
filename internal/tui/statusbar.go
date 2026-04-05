@@ -10,11 +10,6 @@ import (
 	"github.com/ElioNeto/devon/internal/cost"
 )
 
-// Trunc is a package-level helper for safely truncating display strings.
-func Trunc(s string, n int) string {
-	return truncate(s, n)
-}
-
 // renderStatusBar renderiza a barra inferior de status — lazydocker style:
 //
 //	PgUp/PgDn: scroll · esc/q: fechar · x: menu · ← → ↑ ↓: navegar
