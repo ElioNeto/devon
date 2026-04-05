@@ -10,37 +10,33 @@ import (
 	"github.com/ElioNeto/devon/internal/cost"
 )
 
-// renderStatusBar renderiza a barra inferior de status — lazydocker style:
+// appVersion é a versão exibida na status bar.
+const appVersion = "0.4.1"
+
+// renderStatusBar renderiza a barra inferior — fiel à imagem:
 //
-//	PgUp/PgDn: scroll · esc/q: fechar · x: menu · ← → ↑ ↓: navegar
+//	PgUp/PgDn: scroll   esc/q: quit   Tab: focus   ↑↓: navigate   Enter: select   x: menu
 func renderStatusBar(m *appModel, width int) string {
 	s := m.styles
 
-	var parts []string
 	navHints := []struct{ key, desc string }{
 		{"PgUp/PgDn", "scroll"},
-		{"esc/q", "fechar"},
+		{"esc/q", "quit"},
+		{"Tab", "focus"},
+		{"↑↓", "navigate"},
+		{"Enter", "select"},
 		{"x", "menu"},
-		{"← → ↑ ↓", "navegar"},
 	}
+	var parts []string
 	for i, h := range navHints {
 		if i > 0 {
-			parts = append(parts, s.statusSep.Render(","))
-			parts = append(parts, " ")
+			parts = append(parts, s.statusSep.Render("   "))
 		}
-		parts = append(parts, s.keyStyle.Render(h.key))
-		parts = append(parts, s.statusKey.Render(": "+h.desc))
+		parts = append(parts, s.keyStyle.Render(h.key)+s.statusKey.Render(": "+h.desc))
 	}
 	leftStr := strings.Join(parts, "")
 
-	rightStr := s.statusKey.Render("modelo: ") +
-		s.statusVal.Render(Trunc(m.cfg.Model, 20)) +
-		s.statusSep.Render(" │ ") +
-		s.statusKey.Render("modo: ") +
-		renderModeBadge(m) +
-		s.statusSep.Render(" │ ") +
-		s.statusKey.Render("custo: ") +
-		s.statusVal.Render(cost.FormatCost(m.tracker.TotalCostUSD))
+	rightStr := s.statusVal.Render("devon ") + s.keyStyle.Render("v"+appVersion)
 
 	leftW := lipgloss.Width(leftStr)
 	rightW := lipgloss.Width(rightStr)
@@ -67,7 +63,7 @@ func renderModeBadge(m *appModel) string {
 	return lipgloss.NewStyle().Foreground(color).Bold(true).Render(mode)
 }
 
-// renderInputBar renderiza a barra de input na parte inferior.
+// renderInputBar renderiza a barra de input.
 func renderInputBar(m *appModel, width int) string {
 	s := m.styles
 	var content string
@@ -79,9 +75,7 @@ func renderInputBar(m *appModel, width int) string {
 		content = prompt + renderInputLine(m)
 	}
 
-	return s.inputBar.
-		Width(width - 2).
-		Render(content)
+	return s.inputBar.Width(width - 2).Render(content)
 }
 
 func renderInputLine(m *appModel) string {
@@ -97,4 +91,12 @@ func renderInputLine(m *appModel) string {
 	cur := s.cursorStyle.Render(string(ru[m.cursor]))
 	after := string(ru[m.cursor+1:])
 	return before + cur + after
+}
+
+// renderCostBar renderiza a barra de custo/progresso (usada em renderStatusBar modo verboso).
+func renderCostBar(m *appModel) string {
+	if m.tracker == nil {
+		return ""
+	}
+	return cost.FormatCost(m.tracker.TotalCostUSD)
 }

@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ElioNeto/devon/internal/agent"
 	"github.com/charmbracelet/lipgloss"
@@ -16,124 +17,215 @@ type agentResult struct {
 	events []agent.Event
 }
 
-// ── Left panel: sections & items ─────────────────────────────────────────────
+// ── Left panel sections ───────────────────────────────────────────────────────
 
 type leftSection int
 
 const (
-	secTurno      leftSection = iota // current turn + tool calls
-	secHistorico                     // past turns
-	secFerramentas                   // tool stats
-	secMemoria                       // memory facts
-	secTokens                        // token chart
+	secTurno      leftSection = iota // Tasks (turno ativo + tool calls)
+	secHistorico                     // não usado no left mas mantido para syncRightView
+	secFerramentas                   // Tools ativos
+	secMemoria                       // Files Modified
+	secTokens                        // Memory / Context
 )
 
 type leftItem struct {
 	Label      string
-	StatusKind string // "header" | "running" | "done" | "error" | "system" | ""
+	StatusKind string // "header"|"running"|"waiting"|"pending"|"done"|"error"|"failed"|"system"|"file"|"mem"|"prog"
 	Section    leftSection
-	Index      int // position within section (0 = section header item)
+	Index      int
+	Meta       string // texto alinhado à direita (tempo, diff)
 }
 
-// buildLeftItems creates the full flat list for the left panel.
+// ── Log event (right panel) ───────────────────────────────────────────────────
+
+type logEvent struct {
+	Ts     string // HH:MM:SS
+	Actor  string // "agent" | "tool" | "warn" | "ok"
+	Msg    string
+	Detail string // inline detail colorido (ex: "→ 3.2kb" ou "… created")
+}
+
+// fileChange rastreia um arquivo modificado.
+type fileChange struct {
+	Path   string
+	Status string // "M" | "A" | "D"
+	Lines  int    // +lines para A/M, -lines para D
+}
+
+// ── buildLeftItems ────────────────────────────────────────────────────────────
+
 func buildLeftItems(m *appModel) []leftItem {
 	var items []leftItem
 
-	// ── Seção: Turno Ativo ──────────────────────────────────
-	items = append(items, leftItem{Label: "Turno Ativo", StatusKind: "header", Section: secTurno})
+	// ══ Tasks ════════════════════════════════════════════════
+	items = append(items, leftItem{Label: "Tasks", StatusKind: "header", Section: secTurno})
+
 	if m.running {
-		items = append(items, leftItem{Label: "  " + m.spinner.View() + " processando...", StatusKind: "running", Section: secTurno})
-	} else if len(m.messages) > 0 {
-		last := m.messages[len(m.messages)-1]
-		lbl := truncate(firstLine(last.Content), 28)
+		task := truncate(m.currentTask, 22)
+		if task == "" {
+			task = "processando..."
+		}
+		items = append(items, leftItem{
+			Label:      task,
+			StatusKind: "running",
+			Section:    secTurno,
+			Index:      0,
+			Meta:       m.spinner.View(),
+		})
+	}
+
+	for i, ht := range m.historyTurns {
+		lbl := truncate(firstLine(ht.UserPrompt), 22)
+		if lbl == "" {
+			lbl = fmt.Sprintf("turno %d", i+1)
+		}
 		kind := "done"
-		if last.IsError {
-			kind = "error"
+		meta := ""
+		if ht.Elapsed > 0 {
+			meta = fmtElapsed(ht.Elapsed)
 		}
-		items = append(items, leftItem{Label: "  " + lbl, StatusKind: kind, Section: secTurno})
-	}
-	for i, tr := range m.toolRuns {
-		icon := "⚙"
-		switch tr.Status {
-		case "running":
-			icon = "⟳"
-		case "done":
-			icon = "✓"
-		case "error":
-			icon = "✗"
-		}
-		lbl := fmt.Sprintf("  %s %s %s", icon, truncate(tr.Name, 14), truncate(shortenArgs(tr.Args), 10))
-		items = append(items, leftItem{Label: lbl, StatusKind: tr.Status, Section: secTurno, Index: i + 1})
+		items = append(items, leftItem{
+			Label:   lbl,
+			StatusKind: kind,
+			Section: secTurno,
+			Index:   i,
+			Meta:    meta,
+		})
 	}
 
-	// ── Seção: Histórico ────────────────────────────────────
-	items = append(items, leftItem{Label: "Histórico", StatusKind: "header", Section: secHistorico})
-	if len(m.historyTurns) == 0 {
-		items = append(items, leftItem{Label: "  (sem histórico)", StatusKind: "system", Section: secHistorico})
+	if len(m.pendingTasks) > 0 {
+		for _, pt := range m.pendingTasks {
+			items = append(items, leftItem{
+				Label:      truncate(pt.Label, 22),
+				StatusKind: pt.Status,
+				Section:    secTurno,
+				Meta:       pt.Meta,
+			})
+		}
+	}
+
+	// ══ Tools ═════════════════════════════════════════════════
+	items = append(items, leftItem{Label: "Tools", StatusKind: "header", Section: secFerramentas})
+
+	if len(m.toolRuns) == 0 {
+		items = append(items, leftItem{Label: "  —", StatusKind: "system", Section: secFerramentas})
 	} else {
-		for i, ht := range m.historyTurns {
-			lbl := truncate(firstLine(ht.UserPrompt), 28)
-			if lbl == "" {
-				lbl = "(turno " + fmt.Sprint(i+1) + ")"
+		for i, tr := range m.toolRuns {
+			meta := ""
+			switch tr.Status {
+			case "done":
+				meta = formatShort(tr.DurationMs) + "ms"
+			case "running":
+				meta = "—"
 			}
-			items = append(items, leftItem{Label: "  " + lbl, StatusKind: "done", Section: secHistorico, Index: i})
+			items = append(items, leftItem{
+				Label:      truncate(tr.Name, 22),
+				StatusKind: tr.Status,
+				Section:    secFerramentas,
+				Index:      i + 1,
+				Meta:       meta,
+			})
 		}
 	}
 
-	// ── Seção: Ferramentas ──────────────────────────────────
-	items = append(items, leftItem{Label: "Ferramentas", StatusKind: "header", Section: secFerramentas})
-	if len(m.toolStats) == 0 {
-		items = append(items, leftItem{Label: "  (sem chamadas)", StatusKind: "system", Section: secFerramentas})
+	// ══ Files Modified ════════════════════════════════════════
+	items = append(items, leftItem{Label: "Files Modified", StatusKind: "header", Section: secMemoria})
+
+	if len(m.fileChanges) == 0 {
+		items = append(items, leftItem{Label: "  —", StatusKind: "system", Section: secMemoria})
 	} else {
-		for name, st := range m.toolStats {
-			lbl := fmt.Sprintf("  %-14s %2dx", truncate(name, 14), st.Calls)
-			items = append(items, leftItem{Label: lbl, StatusKind: "done", Section: secFerramentas})
+		for _, fc := range m.fileChanges {
+			sign := "+"
+			if fc.Status == "D" {
+				sign = "-"
+			}
+			meta := fmt.Sprintf("%s%d", sign, fc.Lines)
+			items = append(items, leftItem{
+				Label:      truncate(fc.Path, 22),
+				StatusKind: "file:" + fc.Status,
+				Section:    secMemoria,
+				Meta:       meta,
+			})
 		}
 	}
 
-	// ── Seção: Memória ──────────────────────────────────────
-	items = append(items, leftItem{Label: "Memória", StatusKind: "header", Section: secMemoria})
-	if len(m.memoryFacts) == 0 {
-		items = append(items, leftItem{Label: "  (vazio)", StatusKind: "system", Section: secMemoria})
-	} else {
-		for _, f := range m.memoryFacts {
-			lbl := fmt.Sprintf("  %s: %s", truncate(f.Key, 10), truncate(f.Value, 16))
-			items = append(items, leftItem{Label: lbl, StatusKind: "", Section: secMemoria})
-		}
-	}
+	// ══ Memory / Context ══════════════════════════════════════
+	items = append(items, leftItem{Label: "Memory / Context", StatusKind: "header", Section: secTokens})
 
-	// ── Seção: Tokens ───────────────────────────────────────
-	items = append(items, leftItem{Label: "Tokens", StatusKind: "header", Section: secTokens})
 	if m.tracker != nil {
 		totalTok := m.tracker.TotalInputTokens + m.tracker.TotalOutputTokens
+		maxCtx := m.maxContextTokens
+		if maxCtx <= 0 {
+			maxCtx = 32000
+		}
 		items = append(items, leftItem{
-			Label:      fmt.Sprintf("  total: %s", formatShort(totalTok)),
+			Label:      "context window",
 			StatusKind: "system",
 			Section:    secTokens,
+			Meta:       fmt.Sprintf("%s / %s", formatShort(totalTok), formatShort(maxCtx)),
 		})
-		if len(m.tokenPerTurn) > 0 {
-			spark := Sparkline(m.tokenPerTurn, 20)
-			items = append(items, leftItem{Label: "  " + spark, StatusKind: "", Section: secTokens})
+		// barra de progresso
+		items = append(items, leftItem{
+			Label:      progressBar(totalTok, maxCtx, 20),
+			StatusKind: "prog",
+			Section:    secTokens,
+		})
+		items = append(items, leftItem{
+			Label:      "cost estimate",
+			StatusKind: "system",
+			Section:    secTokens,
+			Meta:       fmt.Sprintf("$%.4f", m.tracker.TotalCostUSD),
+		})
+		if len(m.fileChanges) > 0 {
+			items = append(items, leftItem{
+				Label:      "files in context",
+				StatusKind: "system",
+				Section:    secTokens,
+				Meta:       fmt.Sprintf("%d", len(m.fileChanges)),
+			})
 		}
 	}
 
 	return items
 }
 
-// ── Right panel views ─────────────────────────────────────────────────────────
+// ── progressBar ───────────────────────────────────────────────────────────────
+
+func progressBar(val, max, width int) string {
+	if max <= 0 || width <= 0 {
+		return strings.Repeat("░", width)
+	}
+	filled := int(float64(val) / float64(max) * float64(width))
+	if filled > width {
+		filled = width
+	}
+	if filled < 0 {
+		filled = 0
+	}
+	return strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
+}
+
+// ── Right panel: tab enum ─────────────────────────────────────────────────────
 
 type rightView int
 
 const (
-	viewTurnoAtivo    rightView = iota
-	viewToolCall
-	viewHistoricoTurno
-	viewFerramentas
-	viewMemoria
-	viewTokens
+	viewLogs    rightView = iota // tab 1: Logs — stream de eventos
+	viewDiff                     // tab 2: Diff — último diff de arquivo
+	viewConfig                   // tab 3: Config — variáveis / sessão
+	viewSteps                    // tab 4: Steps — histórico de turno selecionado
+
+	// aliases para syncRightView (compatibilidade)
+	viewTurnoAtivo    = viewLogs
+	viewToolCall      = viewLogs
+	viewHistoricoTurno = viewSteps
+	viewFerramentas   = viewLogs
+	viewMemoria       = viewConfig
+	viewTokens        = viewConfig
 )
 
-// ── Context menu (action-func style for updateMenu) ───────────────────────────
+// ── Context menu ──────────────────────────────────────────────────────────────
 
 type menuAction struct {
 	Label  string
@@ -148,7 +240,7 @@ func contextMenuFor(m *appModel) []menuAction {
 			if m.cancel != nil {
 				m.cancel()
 				m.running = false
-				m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Agente interrompido."})
+				m.appendLog("system", "Agente interrompido.", "")
 			}
 		}})
 	}
@@ -156,10 +248,13 @@ func contextMenuFor(m *appModel) []menuAction {
 		m.messages = nil
 		m.toolRuns = nil
 		m.historyTurns = nil
+		m.fileChanges = nil
+		m.logEvents = nil
 	}})
 	actions = append(actions, menuAction{"Limpar chat [Ctrl+L]", "l", func(m *appModel) {
 		m.messages = nil
 		m.toolRuns = nil
+		m.logEvents = nil
 	}})
 	actions = append(actions, menuAction{"Ver uso de tokens", "t", func(m *appModel) {
 		if m.tracker != nil {
@@ -179,417 +274,369 @@ func renderLeftPanel(m *appModel, width, height int, focused bool) string {
 	items := buildLeftItems(m)
 	m.leftItems = items
 
+	innerW := width - 2 // subtrair bordas
+
 	var lines []string
+
+	// Header da sessão (linha 0 do painel)
+	sessionLine := s.configKey.Render(" devon ") +
+		s.configVal.Render("v"+appVersion) +
+		"  " +
+		s.statusVal.Render("session "+ truncate(m.sessionID(), 8)) +
+		"  " +
+		s.statusVal.Render("model "+ truncate(m.cfg.Model, 12)) +
+		"  tokens " +
+		s.configVal.Render(fmtShort(m.totalTokens()))
+	lines = append(lines, sessionLine)
+	lines = append(lines, "")
 
 	for idx, item := range items {
 		var line string
+
 		if item.StatusKind == "header" {
-			// Section header: ─── Label ───
-			titleW := width - 4
-			if titleW < 4 {
-				titleW = 4
-			}
+			// ─Tasks─
 			dash := strings.Repeat("─", 2)
-			lbl := s.itemSection.Render(item.Label)
-			line = dash + lbl + dash
+			line = s.itemSection.Render(dash+item.Label+dash)
+		} else if item.StatusKind == "prog" {
+			// barra de progresso verde
+			line = " " + s.progFill.Render(item.Label)
 		} else {
-			labelStyle := s.itemNormal
+			// item normal: badge + label + meta
+			badgeStr, labelStyle := badgeAndStyle(s, item)
 			if idx == m.leftCursor {
 				labelStyle = s.itemSelected
 			}
-			// Status icon on left
-			var statusSfx string
-			switch item.StatusKind {
-			case "running":
-				statusIcon := s.toolRunning.Render("●")
-				statusLine := item.Label
-				pad := width - lipgloss.Width(statusLine) - 2
-				if pad < 0 {
-					pad = 0
-				}
-				line = labelStyle.Render(statusLine) + strings.Repeat(" ", pad) + statusIcon
-				lines = append(lines, line)
-				continue
-			case "done":
-				statusIcon := s.toolDone.Render("●")
-				pad := width - lipgloss.Width(item.Label) - 2
-				if pad < 0 {
-					pad = 0
-				}
-				line = labelStyle.Render(item.Label) + strings.Repeat(" ", pad) + statusIcon
-				lines = append(lines, line)
-				continue
-			case "error":
-				statusIcon := s.toolError.Render("●")
-				pad := width - lipgloss.Width(item.Label) - 2
-				if pad < 0 {
-					pad = 0
-				}
-				line = labelStyle.Render(item.Label) + strings.Repeat(" ", pad) + statusIcon
-				lines = append(lines, line)
-				continue
-			default:
-				_ = statusSfx
-				line = labelStyle.Width(width - 1).Render(item.Label)
+
+			// calcular padding para alinhar Meta à direita
+			labelTxt := item.Label
+			prefixW := lipgloss.Width(badgeStr) + 1
+			maxLabel := innerW - prefixW - lipgloss.Width(item.Meta) - 1
+			if maxLabel < 4 {
+				maxLabel = 4
 			}
+			labelTxt = truncate(labelTxt, maxLabel)
+			gap := innerW - prefixW - lipgloss.Width(labelTxt) - lipgloss.Width(item.Meta)
+			if gap < 1 {
+				gap = 1
+			}
+			line = badgeStr + " " + labelStyle.Render(labelTxt) +
+				strings.Repeat(" ", gap) +
+				metaStyle(s, item)
 		}
 		lines = append(lines, line)
 	}
 
-	// Pad to height
-	for len(lines) < height {
+	// pad to height
+	for len(lines) < height-2 {
 		lines = append(lines, "")
 	}
-	if len(lines) > height {
-		lines = lines[:height]
+	if len(lines) > height-2 {
+		lines = lines[:height-2]
 	}
 
 	content := strings.Join(lines, "\n")
-
 	borderStyle := s.panelBase
 	if focused {
 		borderStyle = s.panelFocused
 	}
-	return borderStyle.
-		Width(width - 2).
-		Height(height - 2).
-		Render(content)
+	return borderStyle.Width(innerW).Height(height - 2).Render(content)
+}
+
+// badgeAndStyle returns the coloured status badge string and label style for an item.
+func badgeAndStyle(s uiStyles, item leftItem) (string, lipgloss.Style) {
+	switch item.StatusKind {
+	case "running":
+		return s.statusRunning.Render("● running"), s.itemNormal
+	case "waiting":
+		return s.statusWaiting.Render("● waiting"), s.itemNormal
+	case "pending":
+		return s.statusPending.Render("● pending"), s.itemNormal
+	case "done":
+		return s.statusDone.Render("● done  "), s.itemNormal
+	case "error", "failed":
+		return s.statusError.Render("● " + item.StatusKind + " "), s.itemNormal
+	case "active":
+		return s.statusRunning.Render("● active "), s.itemNormal
+	case "file:M":
+		return s.fileModified.Render("M"), s.itemNormal
+	case "file:A":
+		return s.fileAdded.Render("A"), s.itemNormal
+	case "file:D":
+		return s.fileDeleted.Render("D"), s.itemNormal
+	case "system":
+		return " ", s.itemNormal
+	default:
+		return " ", s.itemNormal
+	}
+}
+
+// metaStyle renders the right-aligned meta text with appropriate color.
+func metaStyle(s uiStyles, item leftItem) string {
+	if item.Meta == "" {
+		return ""
+	}
+	switch item.StatusKind {
+	case "file:A":
+		return s.fileAdded.Render(item.Meta)
+	case "file:D":
+		return s.fileDeleted.Render(item.Meta)
+	case "running":
+		return s.statusRunning.Render(item.Meta)
+	case "error", "failed":
+		return s.statusError.Render(item.Meta)
+	default:
+		return s.fileLines.Render(item.Meta)
+	}
 }
 
 // ── Rendering: Right Panel ────────────────────────────────────────────────────
 
 func renderRightPanel(m *appModel, width, height int, focused bool) string {
 	s := m.styles
-	var content string
+	innerW := width - 2
 
-	switch m.rightView {
-	case viewTurnoAtivo:
-		content = renderViewTurno(m, width-4, height-2)
-	case viewToolCall:
-		content = renderViewToolCall(m, width-4, height-2)
-	case viewHistoricoTurno:
-		content = renderViewHistorico(m, width-4, height-2)
-	case viewFerramentas:
-		content = renderViewFerramentas(m, width-4, height-2)
-	case viewMemoria:
-		content = renderViewMemoria(m, width-4, height-2)
-	case viewTokens:
-		content = renderViewTokens(m, width-4, height-2)
-	default:
-		content = renderViewTurno(m, width-4, height-2)
+	// ── Tab bar
+	tabs := []struct {
+		label string
+		view  rightView
+	}{
+		{"Logs", viewLogs},
+		{"Diff", viewDiff},
+		{"Config", viewConfig},
+		{"Steps", viewSteps},
+	}
+	var tabParts []string
+	for _, t := range tabs {
+		if m.rightView == t.view {
+			tabParts = append(tabParts, s.tabActive.Render(t.label))
+		} else {
+			tabParts = append(tabParts, s.tabInactive.Render(t.label))
+		}
+	}
+	tabBar := s.itemSection.Render("─") + strings.Join(tabParts, s.statusSep.Render(" ")) +
+		s.itemSection.Render(strings.Repeat("─", max(0, innerW-30)))
+
+	contentH := height - 2 - 1 // height - borders - tabbar
+	if contentH < 1 {
+		contentH = 1
 	}
 
+	var content string
+	switch m.rightView {
+	case viewLogs:
+		content = renderViewLogs(m, innerW, contentH)
+	case viewDiff:
+		content = renderViewDiff(m, innerW, contentH)
+	case viewConfig:
+		content = renderViewConfig(m, innerW, contentH)
+	case viewSteps:
+		content = renderViewSteps(m, innerW, contentH)
+	}
+
+	full := tabBar + "\n" + content
 	borderStyle := s.panelBase
 	if focused {
 		borderStyle = s.panelFocused
 	}
-	return borderStyle.
-		Width(width - 2).
-		Height(height - 2).
-		Render(content)
+	return borderStyle.Width(innerW).Height(height - 2).Render(full)
 }
 
-// ── Right Panel Views ─────────────────────────────────────────────────────────
+// ── View: Logs ────────────────────────────────────────────────────────────────
 
-func renderViewTurno(m *appModel, width, height int) string {
+func renderViewLogs(m *appModel, width, height int) string {
 	s := m.styles
+
+	events := m.logEvents
+	if len(events) == 0 {
+		return s.sysMsg.Render("  Aguardando eventos…")
+	}
+
+	// janela deslizante: mostra as últimas `height` linhas com scroll
 	var lines []string
-
-	// Title row
-	titleStr := s.itemSection.Render("─── Turno Ativo ───")
-	lines = append(lines, titleStr)
-	lines = append(lines, "")
-
-	if len(m.messages) == 0 {
-		lines = append(lines, s.sysMsg.Render("  Nenhuma mensagem ainda."))
-		lines = append(lines, "")
-		lines = append(lines, s.sysMsg.Render("  Digite uma mensagem abaixo e pressione Enter."))
-		lines = append(lines, s.sysMsg.Render("  Use x para o menu de contexto."))
-	} else {
-		// Show messages, scrolled
-		var msgLines []string
-		for _, msg := range m.messages {
-			switch msg.Sender {
-			case "user":
-				msgLines = append(msgLines, s.userMsg.Render("▸ "+truncate(msg.Content, width-4)))
-			case "devon":
-				if msg.IsError {
-					for _, l := range wrapLine(msg.Content, width-4) {
-						msgLines = append(msgLines, s.errMsg.Render("  "+l))
-					}
-				} else {
-					for _, l := range wrapLine(msg.Content, width-4) {
-						msgLines = append(msgLines, s.agentMsg.Render("  "+l))
-					}
-				}
-			case "system":
-				msgLines = append(msgLines, s.sysMsg.Render("  "+truncate(msg.Content, width-4)))
-			}
-			msgLines = append(msgLines, "")
-		}
-
-		// Apply scroll offset
-		avail := height - 3
-		start := 0
-		if len(msgLines) > avail {
-			start = len(msgLines) - avail - m.rightScroll*2
-			if start < 0 {
-				start = 0
-			}
-		}
-		visible := msgLines[start:]
-		if len(visible) > avail {
-			visible = visible[:avail]
-		}
-		lines = append(lines, visible...)
+	for _, ev := range events {
+		line := renderLogLine(s, ev, width)
+		lines = append(lines, line)
 	}
 
-	// Tool runs
-	if len(m.toolRuns) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, s.itemSection.Render("─── Ferramentas ───"))
-		for _, tr := range m.toolRuns {
-			var style lipgloss.Style
-			var icon string
-			switch tr.Status {
-			case "running":
-				style = s.toolRunning
-				icon = "⟳"
-			case "done":
-				style = s.toolDone
-				icon = "✓"
-			case "error":
-				style = s.toolError
-				icon = "✗"
-			default:
-				style = s.sysMsg
-				icon = "·"
-			}
-			line := fmt.Sprintf("  %s %-16s %s", icon, truncate(tr.Name, 16), truncate(shortenArgs(tr.Args), width-24))
-			lines = append(lines, style.Render(line))
-			if tr.Status != "running" && tr.Result != "" {
-				result := truncate(firstLine(tr.Result), width-6)
-				lines = append(lines, s.sysMsg.Render("    → "+result))
-			}
+	start := 0
+	if len(lines) > height {
+		start = len(lines) - height - m.rightScroll
+		if start < 0 {
+			start = 0
 		}
 	}
+	end := start + height
+	if end > len(lines) {
+		end = len(lines)
+	}
 
-	return strings.Join(lines, "\n")
+	return strings.Join(lines[start:end], "\n")
 }
 
-func renderViewToolCall(m *appModel, width, height int) string {
-	s := m.styles
-	var lines []string
+func renderLogLine(s uiStyles, ev logEvent, _ int) string {
+	ts := s.actorTs.Render(ev.Ts)
 
-	if m.selectedTool == nil {
-		return s.sysMsg.Render("  Selecione uma tool call no painel esquerdo.")
-	}
-	tr := m.selectedTool
-
-	lines = append(lines, s.itemSection.Render("─── Tool Call: "+tr.Name+" ───"))
-	lines = append(lines, "")
-
-	// Status badge
-	var statusStyle lipgloss.Style
-	switch tr.Status {
-	case "running":
-		statusStyle = s.toolRunning
-	case "done":
-		statusStyle = s.toolDone
-	case "error":
-		statusStyle = s.toolError
+	var actor string
+	switch ev.Actor {
+	case "agent":
+		actor = s.actorAgent.Render("[agent]")
+	case "tool":
+		actor = s.actorTool.Render("[tool] ")
+	case "warn":
+		actor = s.actorWarn.Render("[warn] ")
+	case "ok":
+		actor = s.actorOk.Render("[ok]   ")
 	default:
-		statusStyle = s.sysMsg
+		actor = s.sysMsg.Render("[sys]  ")
 	}
-	lines = append(lines, s.configKey.Render("Status: ")+statusStyle.Render(tr.Status))
+
+	msg := ev.Msg
+	if ev.Detail != "" {
+		msg += " " + ev.Detail
+	}
+
+	return ts + " " + actor + " " + msg
+}
+
+// ── View: Diff ────────────────────────────────────────────────────────────────
+
+func renderViewDiff(m *appModel, width, height int) string {
+	s := m.styles
+	if m.lastDiff == "" {
+		return s.sysMsg.Render("  Nenhum diff disponível.")
+	}
+	lines := strings.Split(m.lastDiff, "\n")
+	avail := height
+	start := 0
+	if len(lines) > avail {
+		start = len(lines) - avail - m.rightScroll
+		if start < 0 {
+			start = 0
+		}
+	}
+	end := start + avail
+	if end > len(lines) {
+		end = len(lines)
+	}
+	var out []string
+	for _, l := range lines[start:end] {
+		if strings.HasPrefix(l, "+") {
+			out = append(out, s.diffAdd.Render(l))
+		} else if strings.HasPrefix(l, "-") {
+			out = append(out, s.diffDel.Render(l))
+		} else if strings.HasPrefix(l, "@@") {
+			out = append(out, s.diffHunk.Render(l))
+		} else {
+			out = append(out, l)
+		}
+	}
+	_ = width
+	return strings.Join(out, "\n")
+}
+
+// ── View: Config ──────────────────────────────────────────────────────────────
+
+func renderViewConfig(m *appModel, width, height int) string {
+	s := m.styles
+	var lines []string
+
+	kv := func(k, v string) {
+		lines = append(lines, s.configKey.Render(fmt.Sprintf("  %-18s", k))+s.configVal.Render(v))
+	}
+
+	kv("session", m.sessionID())
+	kv("model", m.cfg.Model)
+	kv("mode", m.cfg.Mode.String())
+	kv("work dir", truncate(m.cfg.WorkDir, width-22))
 	lines = append(lines, "")
 
-	// Args section
-	lines = append(lines, s.configKey.Render("Input:"))
-	for _, l := range wrapLine(tr.Args, width-4) {
-		lines = append(lines, s.configVal.Render("  "+l))
+	if m.tracker != nil {
+		kv("input tokens", formatShort(m.tracker.TotalInputTokens))
+		kv("output tokens", formatShort(m.tracker.TotalOutputTokens))
+		kv("total tokens", formatShort(m.tracker.TotalInputTokens+m.tracker.TotalOutputTokens))
+		kv("cost USD", fmt.Sprintf("$%.4f", m.tracker.TotalCostUSD))
+		kv("requests", fmt.Sprintf("%d", m.tracker.TotalRequests))
 	}
 	lines = append(lines, "")
 
-	// Result section
-	if tr.Result != "" {
-		lines = append(lines, s.configKey.Render("Output:"))
-		resultLines := strings.Split(tr.Result, "\n")
-		maxResultLines := height - len(lines) - 2
-		if maxResultLines < 3 {
-			maxResultLines = 3
-		}
-		shown := resultLines
-		if len(shown) > maxResultLines {
-			shown = shown[:maxResultLines]
-			shown = append(shown, s.sysMsg.Render("  ... (truncado, "+fmt.Sprint(len(resultLines)-maxResultLines)+" linhas)"))
-		}
-		for _, l := range shown {
-			// Basic diff coloring
-			if strings.HasPrefix(l, "+") {
-				lines = append(lines, s.diffAdd.Render(l))
-			} else if strings.HasPrefix(l, "-") {
-				lines = append(lines, s.diffDel.Render(l))
-			} else if strings.HasPrefix(l, "@@") {
-				lines = append(lines, s.diffHunk.Render(l))
-			} else {
-				lines = append(lines, s.sysMsg.Render("  "+l))
-			}
+	if len(m.memoryFacts) > 0 {
+		lines = append(lines, s.itemSection.Render("──Memory──"))
+		for _, f := range m.memoryFacts {
+			lines = append(lines, s.configKey.Render(fmt.Sprintf("  [%s] %s: ", f.Category, f.Key))+
+				s.configVal.Render(truncate(f.Value, width-30)))
 		}
 	}
 
+	// trim to height
+	if len(lines) > height {
+		lines = lines[:height]
+	}
 	return strings.Join(lines, "\n")
 }
 
-func renderViewHistorico(m *appModel, width, height int) string {
+// ── View: Steps ───────────────────────────────────────────────────────────────
+
+func renderViewSteps(m *appModel, width, height int) string {
 	s := m.styles
 	var lines []string
 
 	idx := m.selectedTurnIdx
 	if idx < 0 || idx >= len(m.historyTurns) {
-		lines = append(lines, s.sysMsg.Render("  Selecione um turno no painel esquerdo."))
+		if len(m.messages) == 0 {
+			return s.sysMsg.Render("  Nenhum turno selecionado.")
+		}
+		// mostra turno ativo
+		for _, msg := range m.messages {
+			switch msg.Sender {
+			case "user":
+				lines = append(lines, s.userMsg.Render("▸ "+truncate(msg.Content, width-4)))
+			case "devon":
+				if msg.IsError {
+					for _, l := range wrapLine(msg.Content, width-4) {
+						lines = append(lines, s.errMsg.Render("  "+l))
+					}
+				} else {
+					for _, l := range wrapLine(msg.Content, width-4) {
+						lines = append(lines, s.agentMsg.Render("  "+l))
+					}
+				}
+			case "system":
+				lines = append(lines, s.sysMsg.Render("  "+truncate(msg.Content, width-4)))
+			}
+			lines = append(lines, "")
+		}
+		if len(lines) > height {
+			lines = lines[len(lines)-height:]
+		}
 		return strings.Join(lines, "\n")
 	}
 
 	ht := m.historyTurns[idx]
-	lines = append(lines, s.itemSection.Render(fmt.Sprintf("─── Turno %d ───", idx+1)))
+	lines = append(lines, s.configKey.Render(fmt.Sprintf("  Turno %d — %s", idx+1, ht.Timestamp)))
 	lines = append(lines, "")
-	lines = append(lines, s.configKey.Render("Prompt:"))
+	lines = append(lines, s.configKey.Render("  Prompt:"))
 	for _, l := range wrapLine(ht.UserPrompt, width-4) {
-		lines = append(lines, s.userMsg.Render("  "+l))
+		lines = append(lines, s.userMsg.Render("    "+l))
 	}
 	lines = append(lines, "")
-	lines = append(lines, s.configKey.Render("Resposta:"))
+	lines = append(lines, s.configKey.Render("  Resposta:"))
 	for _, l := range wrapLine(ht.AgentReply, width-4) {
-		lines = append(lines, s.agentMsg.Render("  "+l))
+		lines = append(lines, s.agentMsg.Render("    "+l))
 	}
 	if ht.ToolSummary != "" {
 		lines = append(lines, "")
-		lines = append(lines, s.configKey.Render("Tools: ")+s.sysMsg.Render(ht.ToolSummary))
+		lines = append(lines, s.configKey.Render("  Tools: ")+s.sysMsg.Render(ht.ToolSummary))
 	}
 	if ht.PromptTokens+ht.CompletionTokens > 0 {
 		lines = append(lines, "")
-		lines = append(lines, s.configKey.Render("Tokens: ")+
+		lines = append(lines, s.configKey.Render("  Tokens: ")+
 			s.configVal.Render(fmt.Sprintf("in=%s out=%s",
 				formatShort(ht.PromptTokens),
 				formatShort(ht.CompletionTokens))))
 	}
-
-	_ = height
-	return strings.Join(lines, "\n")
-}
-
-func renderViewFerramentas(m *appModel, width, height int) string {
-	s := m.styles
-	var lines []string
-
-	lines = append(lines, s.itemSection.Render("─── Ferramentas ───"))
-	lines = append(lines, "")
-
-	if len(m.toolStats) == 0 {
-		lines = append(lines, s.sysMsg.Render("  Nenhuma ferramenta usada ainda."))
-		return strings.Join(lines, "\n")
+	if len(lines) > height {
+		lines = lines[:height]
 	}
-
-	// Table header
-	heatWidth := width - 4
-	lines = append(lines, s.tableHeader.Render(
-		fmt.Sprintf("  %-20s %6s %8s %8s", "Ferramenta", "Calls", "AvgMs", "MaxMs"),
-	))
-	lines = append(lines, s.tableHeader.Render(strings.Repeat("─", min(heatWidth, 50))))
-
-	maxCalls := 1
-	for _, st := range m.toolStats {
-		if st.Calls > maxCalls {
-			maxCalls = st.Calls
-		}
-	}
-
-	for name, st := range m.toolStats {
-		barW := int(float64(st.Calls) / float64(maxCalls) * 20)
-		bar := strings.Repeat("█", barW) + strings.Repeat("░", 20-barW)
-		row := fmt.Sprintf("  %-20s %6d |%s| %5dms",
-			truncate(name, 20), st.Calls, bar, st.MaxMs)
-		lines = append(lines, s.tableRow.Render(row))
-	}
-
-	_ = height
-	return strings.Join(lines, "\n")
-}
-
-func renderViewMemoria(m *appModel, width, height int) string {
-	s := m.styles
-	var lines []string
-
-	lines = append(lines, s.itemSection.Render("─── Memória ───"))
-	lines = append(lines, "")
-
-	if len(m.memoryFacts) == 0 {
-		lines = append(lines, s.sysMsg.Render("  Nenhum fato memorizado."))
-		return strings.Join(lines, "\n")
-	}
-
-	for _, f := range m.memoryFacts {
-		key := s.configKey.Render(fmt.Sprintf("  [%s] %s: ", f.Category, f.Key))
-		val := s.configVal.Render(truncate(f.Value, width-30))
-		lines = append(lines, key+val)
-	}
-
-	_ = height
-	return strings.Join(lines, "\n")
-}
-
-func renderViewTokens(m *appModel, width, height int) string {
-	s := m.styles
-	var lines []string
-
-	lines = append(lines, s.itemSection.Render("─── Uso de Tokens ───"))
-	lines = append(lines, "")
-
-	if m.tracker == nil {
-		lines = append(lines, s.sysMsg.Render("  Sem dados."))
-		return strings.Join(lines, "\n")
-	}
-
-	// KPIs
-	totalIn := m.tracker.TotalInputTokens
-	totalOut := m.tracker.TotalOutputTokens
-	total := totalIn + totalOut
-	lines = append(lines, s.configKey.Render("  Input:  ")+s.configVal.Render(formatShort(totalIn)))
-	lines = append(lines, s.configKey.Render("  Output: ")+s.configVal.Render(formatShort(totalOut)))
-	lines = append(lines, s.configKey.Render("  Total:  ")+s.configVal.Render(formatShort(total)))
-	lines = append(lines, s.configKey.Render("  Custo:  ")+s.configVal.Render(m.tracker.Format()))
-	lines = append(lines, "")
-
-	// Sparkline
-	if len(m.tokenPerTurn) > 1 {
-		lines = append(lines, s.configKey.Render("  Tokens por turno:"))
-		spark := Sparkline(m.tokenPerTurn, width-6)
-		lines = append(lines, "  "+s.configVal.Render(spark))
-		lines = append(lines, "")
-	}
-
-	// Bar chart por turno
-	if len(m.tokenPerTurn) > 0 {
-		lines = append(lines, s.configKey.Render("  Detalhes:"))
-		maxT := 1
-		for _, v := range m.tokenPerTurn {
-			if v > maxT {
-				maxT = v
-			}
-		}
-		for i, v := range m.tokenPerTurn {
-			barW := int(float64(v) / float64(maxT) * float64(width-20))
-			if barW < 1 {
-				barW = 1
-			}
-			bar := strings.Repeat("█", barW)
-			row := fmt.Sprintf("  T%-3d %s %s", i+1, bar, formatShort(v))
-			lines = append(lines, s.tableRow.Render(row))
-		}
-	}
-
-	_ = height
 	return strings.Join(lines, "\n")
 }
 
@@ -598,7 +645,7 @@ func renderViewTokens(m *appModel, width, height int) string {
 func renderHelp(m *appModel, width int) string {
 	s := m.styles
 	var lines []string
-	lines = append(lines, s.itemSection.Render("─── Ajuda ───"))
+	lines = append(lines, s.itemSection.Render("──Ajuda──"))
 	lines = append(lines, "")
 	for _, h := range AllHints() {
 		lines = append(lines, s.keyStyle.Render(fmt.Sprintf("  %-18s", h.Keys))+s.helpStyle.Render(h.Action))
@@ -606,4 +653,51 @@ func renderHelp(m *appModel, width int) string {
 	lines = append(lines, "")
 	lines = append(lines, s.sysMsg.Render("  Pressione qualquer tecla para fechar."))
 	return s.menuStyle.Width(min(width-4, 60)).Render(strings.Join(lines, "\n"))
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// appendLog adiciona um evento ao stream de logs do painel direito.
+func (m *appModel) appendLog(actor, msg, detail string) {
+	m.logEvents = append(m.logEvents, logEvent{
+		Ts:     time.Now().Format("15:04:05"),
+		Actor:  actor,
+		Msg:    msg,
+		Detail: detail,
+	})
+}
+
+// sessionID retorna o ID curto da sessão ativa.
+func (m *appModel) sessionID() string {
+	if m.session != nil {
+		return truncate(m.session.ID, 8)
+	}
+	return "—"
+}
+
+// totalTokens retorna o total de tokens da sessão.
+func (m *appModel) totalTokens() int {
+	if m.tracker == nil {
+		return 0
+	}
+	return m.tracker.TotalInputTokens + m.tracker.TotalOutputTokens
+}
+
+// fmtElapsed formata uma duração em ms para exibição.
+func fmtElapsed(ms int64) string {
+	if ms >= 60000 {
+		return fmt.Sprintf("%dm%ds", ms/60000, (ms%60000)/1000)
+	}
+	if ms >= 1000 {
+		return fmt.Sprintf("%ds", ms/1000)
+	}
+	return fmt.Sprintf("%dms", ms)
+}
+
+// max returns the larger of two ints.
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

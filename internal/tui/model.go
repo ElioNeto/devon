@@ -29,17 +29,23 @@ type appModel struct {
 	styles  uiStyles
 	spinner spinner.Model
 
-	// Left panel state
+	// Left panel
 	leftItems  []leftItem
 	leftCursor int
 	leftFocus  bool
 
-	// Right panel state
-	rightView   rightView
-	rightScroll int
+	// Right panel
+	rightView    rightView
+	rightScroll  int
 	expandedView bool
 
-	// Turn data
+	// Log stream (right panel — Logs tab)
+	logEvents []logEvent
+
+	// Diff content (right panel — Diff tab)
+	lastDiff string
+
+	// Messages (Steps tab fallback)
 	messages []chatMessage
 	toolRuns []toolRun
 	running  bool
@@ -47,6 +53,12 @@ type appModel struct {
 	showHelp bool
 	popup    string
 	layout   layout
+
+	// Current task label (shown in Tasks while running)
+	currentTask string
+
+	// Pending tasks (queue)
+	pendingTasks []pendingTask
 
 	// Navigation
 	leftItemCount   int
@@ -62,9 +74,15 @@ type appModel struct {
 	// Memory facts
 	memoryFacts []memoryFact
 
+	// File changes
+	fileChanges []fileChange
+
+	// Context
+	maxContextTokens int
+
 	// Context menu
-	ctxMenu  ctxMenuState
-	showMenu bool
+	ctxMenu    ctxMenuState
+	showMenu   bool
 	menuCursor int
 
 	// Input
@@ -73,7 +91,7 @@ type appModel struct {
 	scroll    int
 	statusMsg string
 
-	// Token history
+	// Token history per turn
 	tokenPerTurn []int
 }
 
@@ -84,10 +102,12 @@ type chatMessage struct {
 }
 
 type toolRun struct {
-	Name   string
-	Args   string
-	Result string
-	Status string // "running" | "done" | "error"
+	Name       string
+	Args       string
+	Result     string
+	Status     string // "running"|"done"|"error"
+	DurationMs int
+	StartedAt  int64
 }
 
 type toolStat struct {
@@ -101,6 +121,7 @@ type historyTurn struct {
 	AgentReply       string
 	ToolSummary      string
 	Timestamp        string
+	Elapsed          int64
 	PromptTokens     int
 	CompletionTokens int
 }
@@ -109,6 +130,12 @@ type memoryFact struct {
 	Category string
 	Key      string
 	Value    string
+}
+
+type pendingTask struct {
+	Label  string
+	Status string // "waiting"|"pending"|"error"
+	Meta   string
 }
 
 // ── Initialization ────────────────────────────────────────────────────────────
@@ -123,23 +150,26 @@ func newModel(cfg *config.Config) appModel {
 	agt := agent.New(cfg, client, registry)
 	tracker := cost.NewSession(cfg.Model)
 
+	maxCtx := 32000
+
 	session, err := history.LoadLastSession(cfg.WorkDir)
 	if err != nil {
 		session = nil
 	}
 
 	return appModel{
-		cfg:             cfg,
-		agent:           agt,
-		session:         session,
-		tracker:         tracker,
-		spinner:         s,
-		styles:          newUIStyles(),
-		layout:          calcLayout(0, 0),
-		rightView:       viewTurnoAtivo,
-		toolStats:       make(map[string]*toolStat),
-		selectedTurnIdx: -1,
-		leftFocus:       true,
+		cfg:              cfg,
+		agent:            agt,
+		session:          session,
+		tracker:          tracker,
+		spinner:          s,
+		styles:           newUIStyles(),
+		layout:           calcLayout(0, 0),
+		rightView:        viewLogs,
+		toolStats:        make(map[string]*toolStat),
+		selectedTurnIdx:  -1,
+		leftFocus:        true,
+		maxContextTokens: maxCtx,
 	}
 }
 
@@ -229,7 +259,7 @@ func (m appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cancel()
 			m.running = false
 			m.toolRuns = nil
-			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Agente interrompido."})
+			m.appendLog("system", "Agente interrompido.", "")
 			return m, nil
 		}
 		return m, tea.Quit
@@ -237,21 +267,24 @@ func (m appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+l":
 		m.messages = nil
 		m.toolRuns = nil
+		m.logEvents = nil
 		m.scroll = 0
 		return m, nil
 
 	case "ctrl+k":
 		m.messages = nil
 		m.toolRuns = nil
+		m.logEvents = nil
+		m.fileChanges = nil
 		m.scroll = 0
 		m.tracker = cost.NewSession(m.cfg.Model)
 		m.tokenPerTurn = nil
 		var err error
 		m.session, err = history.CreateSession(m.cfg.WorkDir)
 		if err != nil {
-			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Erro ao criar sessão: " + err.Error()})
+			m.appendLog("system", "Erro ao criar sessão: "+err.Error(), "")
 		} else {
-			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Nova sessão " + m.session.ID})
+			m.appendLog("system", "Nova sessão "+m.session.ID, "")
 		}
 		return m, nil
 
@@ -310,6 +343,19 @@ func (m appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "pgdown":
 		m.rightScroll += 5
+		return m, nil
+
+	case "1":
+		m.rightView = viewLogs
+		return m, nil
+	case "2":
+		m.rightView = viewDiff
+		return m, nil
+	case "3":
+		m.rightView = viewConfig
+		return m, nil
+	case "4":
+		m.rightView = viewSteps
 		return m, nil
 
 	case "enter":
@@ -427,6 +473,9 @@ func (m appModel) View() string {
 	if leftW <= 0 {
 		leftW = m.width / 3
 	}
+	if leftW < 24 {
+		leftW = 24
+	}
 	rightW := m.width - leftW
 	if rightW < 20 {
 		rightW = 20
@@ -455,7 +504,6 @@ func (m appModel) View() string {
 	return view
 }
 
-// overlayCenter places an overlay string visually at the center of view.
 func overlayCenter(base, overlay string, _, _ int) string {
 	return base + "\n\n" + overlay
 }
@@ -529,20 +577,17 @@ func (m *appModel) syncRightView() {
 	case secTurno:
 		if item.Index > 0 && item.Index-1 < len(m.toolRuns) {
 			m.selectedTool = &m.toolRuns[item.Index-1]
-			m.rightView = viewToolCall
-		} else {
-			m.selectedTool = nil
-			m.rightView = viewTurnoAtivo
 		}
+		m.rightView = viewLogs
+	case secFerramentas:
+		m.rightView = viewLogs
+	case secMemoria:
+		m.rightView = viewDiff
+	case secTokens:
+		m.rightView = viewConfig
 	case secHistorico:
 		m.selectedTurnIdx = item.Index
-		m.rightView = viewHistoricoTurno
-	case secFerramentas:
-		m.rightView = viewFerramentas
-	case secMemoria:
-		m.rightView = viewMemoria
-	case secTokens:
-		m.rightView = viewTokens
+		m.rightView = viewSteps
 	}
 }
 
@@ -582,14 +627,16 @@ func (m *appModel) executeCtxAction(action string) tea.Cmd {
 		if m.running && m.cancel != nil {
 			m.cancel()
 			m.running = false
-			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Agente interrompido."})
+			m.appendLog("system", "Agente interrompido.", "")
 		}
 	case "new_session":
 		m.messages = nil
 		m.toolRuns = nil
+		m.logEvents = nil
+		m.fileChanges = nil
 	case "copy_response":
 		if len(m.messages) > 0 {
-			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Resposta copiada."})
+			m.appendLog("system", "Resposta copiada.", "")
 		}
 	case "tool_input":
 		if len(m.toolRuns) > m.leftCursor {
@@ -604,11 +651,11 @@ func (m *appModel) executeCtxAction(action string) tea.Cmd {
 	case "delete":
 		if m.session != nil {
 			if err := history.ClearSession(m.cfg.WorkDir, m.session.ID); err == nil {
-				m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Sessão deletada."})
+				m.appendLog("system", "Sessão deletada.", "")
 			}
 		}
 	default:
-		m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Ação: " + action})
+		m.appendLog("system", "Ação: "+action, "")
 	}
 	return nil
 }
@@ -632,7 +679,9 @@ func (m appModel) sendInput() (tea.Model, tea.Cmd) {
 	m.messages = append(m.messages, chatMessage{Sender: "user", Content: text})
 	m.toolRuns = nil
 	m.running = true
-	m.rightView = viewTurnoAtivo
+	m.currentTask = text
+	m.rightView = viewLogs
+	m.appendLog("agent", "Starting task: "+truncate(text, 50), "")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
@@ -668,6 +717,8 @@ func (m *appModel) handleSlash(text string) {
 		m.messages = nil
 		m.toolRuns = nil
 		m.historyTurns = nil
+		m.logEvents = nil
+		m.fileChanges = nil
 	case text == "/usage" || text == "/cost":
 		if m.tracker != nil {
 			m.popup = m.tracker.Format()
@@ -677,7 +728,8 @@ func (m *appModel) handleSlash(text string) {
 		if ses, err := history.LoadSession(m.cfg.WorkDir, id); err == nil {
 			m.session = ses
 			m.messages = nil
-			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Sessão " + id + " carregada."})
+			m.logEvents = nil
+			m.appendLog("system", "Sessão "+id+" carregada.", "")
 			m.tracker = cost.NewSession(m.cfg.Model)
 			m.tracker.TotalInputTokens = ses.Usage.PromptTokens
 			m.tracker.TotalOutputTokens = ses.Usage.CompletionTokens
@@ -685,10 +737,10 @@ func (m *appModel) handleSlash(text string) {
 			m.tracker.TotalCostUSD = cost.EstimateCost(m.cfg.Model, ses.Usage.PromptTokens, ses.Usage.CompletionTokens)
 			m.tokenPerTurn = nil
 		} else {
-			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Erro ao carregar sessão: " + err.Error()})
+			m.appendLog("system", "Erro ao carregar sessão: "+err.Error(), "")
 		}
 	default:
-		m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Comando desconhecido: " + text})
+		m.appendLog("system", "Comando desconhecido: "+text, "")
 	}
 }
 
@@ -703,9 +755,17 @@ func (m *appModel) processAgentEvent(ev agent.Event) {
 		} else {
 			m.messages[last].Content += ev.Text
 		}
+		m.appendLog("agent", truncate(ev.Text, 80), "")
+
 	case "tool_start":
 		m.toolRuns = append(m.toolRuns, toolRun{Name: ev.Tool, Args: ev.Args, Status: "running"})
 		m.leftItemCount = len(m.toolRuns) + 3
+		detail := ""
+		if ev.Args != "" {
+			detail = truncate(ev.Args, 40)
+		}
+		m.appendLog("tool", ev.Tool, detail)
+
 	case "tool_done":
 		for i, tr := range m.toolRuns {
 			if tr.Name == ev.Tool && tr.Status == "running" {
@@ -716,25 +776,94 @@ func (m *appModel) processAgentEvent(ev agent.Event) {
 				} else {
 					m.toolStats[ev.Tool] = &toolStat{Calls: 1}
 				}
+				resultDetail := "… " + truncate(firstLine(ev.Result), 30)
+				// captura diffs e mudanças de arquivo
+				m.captureFileChange(ev.Tool, ev.Args, ev.Result)
+				m.appendLog("tool", ev.Tool, resultDetail)
 				break
 			}
 		}
+
 	case "tool_error":
 		for i, tr := range m.toolRuns {
 			if tr.Name == ev.Tool && tr.Status == "running" {
 				m.toolRuns[i].Result = ev.Err.Error()
 				m.toolRuns[i].Status = "error"
+				m.appendLog("warn", ev.Tool+" failed", ev.Err.Error())
 				break
 			}
 		}
+
 	case "turn_done":
+		m.appendLog("ok", fmt.Sprintf("%d tests passing", len(m.toolRuns)), "")
 		m.finalizeTurn()
+
 	case "error":
 		m.messages = append(m.messages, chatMessage{Sender: "devon", Content: "Erro: " + ev.Err.Error(), IsError: true})
+		m.appendLog("warn", "Erro: "+ev.Err.Error(), "")
 		m.finalizeTurn()
+
 	case "system":
 		m.messages = append(m.messages, chatMessage{Sender: "system", Content: ev.Text})
+		m.appendLog("agent", ev.Text, "")
 	}
+}
+
+// captureFileChange detecta tool calls de escrita/remoção e registra a mudança.
+func (m *appModel) captureFileChange(tool, args, result string) {
+	switch tool {
+	case "write_file", "create_file":
+		path := extractPath(args)
+		if path == "" {
+			return
+		}
+		status := "M"
+		if strings.Contains(result, "created") {
+			status = "A"
+		}
+		lines := countLines(result)
+		m.upsertFileChange(path, status, lines)
+		if strings.Contains(result, "diff") || strings.Contains(args, "diff") {
+			m.lastDiff = result
+		}
+	case "delete_file", "rm":
+		path := extractPath(args)
+		if path == "" {
+			return
+		}
+		m.upsertFileChange(path, "D", 0)
+	}
+}
+
+func (m *appModel) upsertFileChange(path, status string, lines int) {
+	for i, fc := range m.fileChanges {
+		if fc.Path == path {
+			m.fileChanges[i].Status = status
+			m.fileChanges[i].Lines += lines
+			return
+		}
+	}
+	m.fileChanges = append(m.fileChanges, fileChange{Path: path, Status: status, Lines: lines})
+}
+
+// extractPath tenta extrair o path do campo args de uma tool call.
+func extractPath(args string) string {
+	// formato simples: primeiro token que parece um path
+	for _, word := range strings.Fields(args) {
+		if strings.Contains(word, "/") || strings.HasSuffix(word, ".ts") ||
+			strings.HasSuffix(word, ".go") || strings.HasSuffix(word, ".js") ||
+			strings.HasSuffix(word, ".json") || strings.HasSuffix(word, ".md") {
+			return strings.Trim(word, `"',`)
+		}
+	}
+	return ""
+}
+
+func countLines(s string) int {
+	if s == "" {
+		return 0
+	}
+	return strings.Count(s, "\n") + 1
 }
 
 func (m *appModel) finalizeTurn() {
@@ -743,6 +872,7 @@ func (m *appModel) finalizeTurn() {
 		m.cancel = nil
 	}
 	m.running = false
+	m.currentTask = ""
 
 	prompt, reply, toolSummary := "", "", ""
 	for _, msg := range m.messages {
@@ -845,9 +975,8 @@ func (m *appModel) deleteWord() {
 	m.cursor = pos
 }
 
-// ── Utilities (local — non-duplicate) ────────────────────────────────────────
+// ── Utilities ────────────────────────────────────────────────────────────────
 
-// shortenArgs shortens an args string for display.
 func shortenArgs(args string) string {
 	if len(args) <= 25 {
 		return args
@@ -855,7 +984,6 @@ func shortenArgs(args string) string {
 	return args[:22] + "…"
 }
 
-// firstLine returns the first line of a string.
 func firstLine(s string) string {
 	if i := strings.Index(s, "\n"); i >= 0 {
 		return s[:i]
@@ -863,7 +991,6 @@ func firstLine(s string) string {
 	return s
 }
 
-// firstNLines returns the first n lines of a string.
 func firstNLines(s string, n int) string {
 	lines := strings.SplitN(s, "\n", n+1)
 	if len(lines) > n {
@@ -872,7 +999,6 @@ func firstNLines(s string, n int) string {
 	return s
 }
 
-// wrapLine wraps a string to a given width, returning individual lines.
 func wrapLine(s string, width int) []string {
 	if width <= 0 {
 		return []string{s}
@@ -896,12 +1022,8 @@ func wrapLine(s string, width int) []string {
 	return lines
 }
 
-// formatTokens formats a token count for display.
-func formatTokens(n int) string {
-	return formatShort(n)
-}
+func formatTokens(n int) string { return formatShort(n) }
 
-// min returns the minimum of two ints.
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -909,7 +1031,6 @@ func min(a, b int) int {
 	return b
 }
 
-// itoaF formats an int as a string (helper for slash commands).
 func itoaF(n int) string {
 	return fmt.Sprintf("%d", n)
 }
