@@ -4,7 +4,7 @@ import "fmt"
 
 // ContextAction representa uma ação no menu de contexto.
 type ContextAction struct {
-	Label string
+	Label  string
 	Action string // identificador para execução
 }
 

@@ -2,17 +2,17 @@ package tui
 
 // Key bindings centralizados da TUI.
 const (
-	KeyQuit      = "ctrl+c"
-	KeySend      = "enter"
-	KeyClear     = "ctrl+l"
-	KeyNewSession = "ctrl+k"
-	KeyClearInput = "ctrl+u"
-	KeyDeleteWord = "ctrl+w"
+	KeyQuit         = "ctrl+c"
+	KeySend         = "enter"
+	KeyClear        = "ctrl+l"
+	KeyNewSession   = "ctrl+k"
+	KeyClearInput   = "ctrl+u"
+	KeyDeleteWord   = "ctrl+w"
 	KeyDeleteWordBS = "ctrl+backspace"
 
 	// Navegação de painéis (Tab para painel, setas para cursor)
-	KeyTabNext     = "tab"
-	KeyTabPrev     = "shift+tab"
+	KeyTabNext = "tab"
+	KeyTabPrev = "shift+tab"
 
 	// Navegação de itens
 	KeyUp    = "up"
@@ -28,16 +28,16 @@ const (
 	KeyRight     = "right"
 
 	// UI
-	KeyHelp     = "?"
-	KeyContext  = "x"
-	KeyEscape   = "esc"
-	KeyExpand   = "e"
+	KeyHelp    = "?"
+	KeyContext = "x"
+	KeyEscape  = "esc"
+	KeyExpand  = "e"
 )
 
 // KeyHint descreve um atalho para exibição na ajuda.
 type KeyHint struct {
-	Keys    string
-	Action  string
+	Keys   string
+	Action string
 }
 
 // AllHints retorna todos os atalhos para exibição.

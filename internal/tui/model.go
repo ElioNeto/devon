@@ -19,18 +19,31 @@ import (
 
 // appModel is the main Bubble Tea model with multi-panel layout.
 type appModel struct {
+	// Dimensões do terminal
 	width  int
 	height int
 
-	cfg      *config.Config
-	agent    *agent.Agent
-	session  *history.Session
-	tracker  *cost.Session
+	// Deps
+	cfg     *config.Config
+	agent   *agent.Agent
+	session *history.Session
+	tracker *cost.Session
+	styles  uiStyles
+	spinner spinner.Model
+
+	// Painel esquerdo
+	leftItems  []leftItem
+	leftCursor int
+	leftFocus  bool // true = foco no painel esquerdo
+
+	// Painel direito
+	rightView    rightView
+	rightScroll  int
+	expandedView bool
+
+	// Dados do turno atual
 	messages []chatMessage
 	toolRuns []toolRun
-	input    string
-	cursor   int
-	scroll   int
 	running  bool
 	cancel   context.CancelFunc
 	showHelp bool
@@ -141,18 +154,27 @@ func newStyles() styles {
 	return s
 }
 
+type memoryFact struct {
+	Category string
+	Key      string
+	Value    string
+}
+
+// ── Inicialização ────────────────────────────────────────────────────────────
+
 func newModel(cfg *config.Config) appModel {
 	s := spinner.New()
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#8B5CF6"))
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(colorPrimary)
+
 	registry := tools.NewRegistry()
 	client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
 	agt := agent.New(cfg, client, registry)
 	tracker := cost.NewSession(cfg.Model)
 
-	// Try to load last session
 	session, err := history.LoadLastSession(cfg.WorkDir)
 	if err != nil {
-		session = nil // start fresh if history fails
+		session = nil
 	}
 
 	return appModel{
@@ -167,26 +189,22 @@ func newModel(cfg *config.Config) appModel {
 	}
 }
 
-// --- Messages ---
-
-type agentEventMsg agent.Event
-
-// --- Init ---
+// ── Init ─────────────────────────────────────────────────────────────────────
 
 func (m appModel) Init() tea.Cmd {
-	welcomeText := "Devon pronto. Digite sua mensagem e pressione Enter."
+	welcome := "Devon pronto. Use ↑↓ para navegar, Enter para selecionar, x para menu."
 	if m.session != nil {
-		welcomeText = fmt.Sprintf("Sessao %s carregada. Digite sua mensagem ou use comandos: /history /usage /clear", m.session.ID)
+		welcome = fmt.Sprintf("Sessão %s carregada.", m.session.ID)
 	}
 	return tea.Sequence(
 		m.spinner.Tick,
 		func() tea.Msg {
-			return agentEventMsg(agent.Event{Type: "system", Text: welcomeText})
+			return agentEventMsg(agent.Event{Type: "system", Text: welcome})
 		},
 	)
 }
 
-// --- Slash command handling ---
+// ── Mensagens do Bubble Tea ──────────────────────────────────────────────────
 
 func (m *appModel) handleSlash(text string) {
 	switch {
@@ -443,7 +461,6 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case agentEventMsg:
 		m.processAgentEvent(agent.Event(msg))
-		m.scroll = 0
 		return m, m.spinner.Tick
 
 	case agentResult:
@@ -603,13 +620,227 @@ func (m *appModel) agentMessages() []llm.Message {
 			if cm.IsError {
 				role = llm.RoleTool // treat errors as tool messages
 			}
-			msgs = append(msgs, llm.Message{Role: role, Content: cm.Content})
+		}
+		return m, nil
+
+	case "down":
+		if m.leftFocus {
+			m.navigateLeft(1)
+		} else {
+			m.rightScroll++
+		}
+		return m, nil
+
+	case "pgup":
+		if m.rightScroll > 0 {
+			m.rightScroll -= 10
+			if m.rightScroll < 0 {
+				m.rightScroll = 0
+			}
+		}
+		return m, nil
+
+	case "pgdown":
+		m.rightScroll += 10
+		return m, nil
+
+	case "enter":
+		if m.leftFocus {
+			m.selectLeftItem()
+			return m, nil
+		}
+		// Foco no input (painel direito)
+		return m.sendInput()
+
+	case "x":
+		actions := contextMenuFor(&m)
+		if len(actions) > 0 {
+			m.showMenu = true
+			m.menuCursor = 0
+		}
+		return m, nil
+
+	case "e":
+		m.expandedView = !m.expandedView
+		return m, nil
+
+	case "?":
+		m.showHelp = true
+		return m, nil
+
+	case "q", "esc":
+		m.showMenu = false
+		m.popup = ""
+		m.showHelp = false
+		return m, nil
+
+	case "backspace":
+		if !m.leftFocus && m.cursor > 0 {
+			m.deleteCharBefore()
+		}
+		return m, nil
+
+	case "ctrl+u":
+		if !m.leftFocus {
+			m.input = ""
+			m.cursor = 0
+		}
+		return m, nil
+
+	case "ctrl+w":
+		if !m.leftFocus {
+			m.deleteWord()
+		}
+		return m, nil
+
+	default:
+		// Qualquer tecla de texto vai para o input (independente do foco)
+		if msg.Type == tea.KeyRunes && !m.leftFocus {
+			for _, r := range msg.Runes {
+				m.insertRune(r)
+			}
+		}
+		// Se há pendingInput (de re-executar), manda pro input
+		if m.pendingInput != "" && !m.running {
+			m.input = m.pendingInput
+			m.cursor = len([]rune(m.input))
+			m.pendingInput = ""
+			m.leftFocus = false
 		}
 	}
-	return msgs
+
+	return m, nil
 }
 
-// --- View ---
+func (m appModel) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
+	actions := contextMenuFor(&m)
+	if kMsg, ok := msg.(tea.KeyMsg); ok {
+		switch kMsg.String() {
+		case "up":
+			if m.menuCursor > 0 {
+				m.menuCursor--
+			}
+		case "down":
+			if m.menuCursor < len(actions)-1 {
+				m.menuCursor++
+			}
+		case "enter":
+			if m.menuCursor < len(actions) {
+				actions[m.menuCursor].Action(&m)
+			}
+			m.showMenu = false
+		case "esc", "q", "x":
+			m.showMenu = false
+		default:
+			// Atalho de tecla direto
+			for _, a := range actions {
+				if a.Key == kMsg.String() {
+					a.Action(&m)
+					m.showMenu = false
+					break
+				}
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m *appModel) navigateLeft(dir int) {
+	items := m.leftItems
+	if len(items) == 0 {
+		return
+	}
+	next := m.leftCursor + dir
+	// Pula cabeçalhos de seção
+	for next >= 0 && next < len(items) && items[next].Icon == "─" {
+		next += dir
+	}
+	if next >= 0 && next < len(items) {
+		m.leftCursor = next
+		m.syncRightView()
+	}
+}
+
+func (m *appModel) cycleSection() {
+	current := leftSection(-1)
+	if m.leftCursor < len(m.leftItems) {
+		current = m.leftItems[m.leftCursor].Section
+	}
+	nextSec := (current + 1) % (secTokens + 1)
+	for i, item := range m.leftItems {
+		if item.Section == nextSec && item.Icon != "─" {
+			m.leftCursor = i
+			m.syncRightView()
+			return
+		}
+	}
+}
+
+func (m *appModel) selectLeftItem() {
+	if m.leftCursor >= len(m.leftItems) {
+		return
+	}
+	item := m.leftItems[m.leftCursor]
+	if item.Icon == "─" {
+		return
+	}
+	m.syncRightView()
+	m.leftFocus = false // move foco para painel direito após selecionar
+}
+
+func (m *appModel) syncRightView() {
+	if m.leftCursor >= len(m.leftItems) {
+		return
+	}
+	item := m.leftItems[m.leftCursor]
+	switch item.Section {
+	case secTurno:
+		if item.Index > 0 && item.Index-1 < len(m.toolRuns) {
+			m.selectedTool = &m.toolRuns[item.Index-1]
+			m.rightView = viewToolCall
+		} else {
+			m.selectedTool = nil
+			m.rightView = viewTurnoAtivo
+		}
+	case secHistorico:
+		m.selectedTurnIdx = item.Index
+		m.rightView = viewHistoricoTurno
+	case secFerramentas:
+		m.rightView = viewFerramentas
+	case secMemoria:
+		m.rightView = viewMemoria
+	case secTokens:
+		m.rightView = viewTokens
+	}
+}
+
+func (m appModel) sendInput() (tea.Model, tea.Cmd) {
+	text := strings.TrimSpace(m.input)
+	if text == "" || m.running {
+		return m, nil
+	}
+
+	m.input = ""
+	m.cursor = 0
+	m.statusMsg = ""
+
+	if strings.HasPrefix(text, "/") {
+		m.handleSlash(text)
+		return m, nil
+	}
+
+	m.messages = append(m.messages, chatMessage{Sender: "user", Content: text})
+	m.toolRuns = nil
+	m.running = true
+	m.rightView = viewTurnoAtivo
+
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancel = cancel
+	cmd := startAgent(ctx, m.agent, text)
+	return m, tea.Batch(m.spinner.Tick, cmd)
+}
+
+// ── View ──────────────────────────────────────────────────────────────────────
 
 func (m appModel) View() string {
 	if m.height == 0 || m.width == 0 {
@@ -641,7 +872,7 @@ func (m appModel) View() string {
 	// Help
 	if m.showHelp {
 		sb.WriteString("\n")
-		sb.WriteString(m.renderHelp())
+		sb.WriteString(renderHelp(&m, m.width))
 	}
 
 	// Popup overlay
@@ -1175,6 +1406,9 @@ func (m *appModel) processAgentEvent(ev agent.Event) {
 			if tr.Name == ev.Tool && tr.Status == "running" {
 				m.toolRuns[i].Result = ev.Result
 				m.toolRuns[i].Status = "done"
+				if st, ok := m.toolStats[ev.Tool]; ok {
+					st.Calls++
+				}
 				break
 			}
 		}
@@ -1200,18 +1434,108 @@ func (m *appModel) processAgentEvent(ev agent.Event) {
 		}
 	case "error":
 		m.messages = append(m.messages, chatMessage{Sender: "devon", Content: "Erro: " + ev.Err.Error(), IsError: true})
-		if m.cancel != nil {
-			m.cancel()
-			m.cancel = nil
-		}
-		m.running = false
-		m.toolRuns = nil
+		m.finalizeTurn()
 	case "system":
 		m.messages = append(m.messages, chatMessage{Sender: "system", Content: ev.Text})
 	}
 }
 
-// --- Input manipulation ---
+func (m *appModel) finalizeTurn() {
+	if m.cancel != nil {
+		m.cancel()
+		m.cancel = nil
+	}
+	m.running = false
+
+	// Salva turno no histórico
+	prompt := ""
+	reply := ""
+	for _, msg := range m.messages {
+		if msg.Sender == "user" && prompt == "" {
+			prompt = msg.Content
+		}
+		if msg.Sender == "devon" {
+			reply = msg.Content
+		}
+	}
+	toolSummary := ""
+	for _, tr := range m.toolRuns {
+		toolSummary += tr.Name + " "
+	}
+
+	m.historyTurns = append(m.historyTurns, historyTurn{
+		UserPrompt:  prompt,
+		AgentReply:  reply,
+		ToolSummary: strings.TrimSpace(toolSummary),
+		Timestamp:   "agora",
+	})
+
+	// Salva sessão
+	if m.session != nil {
+		_ = history.SaveMessages(m.cfg.WorkDir, m.session.ID, m.agentMessages(), &m.session.Usage)
+	}
+	m.toolRuns = nil
+}
+
+func (m *appModel) finalizeAgentResult(res agentResult) {
+	for _, ev := range res.events {
+		m.processAgentEvent(ev)
+	}
+}
+
+func (m *appModel) agentMessages() []llm.Message {
+	var msgs []llm.Message
+	for _, cm := range m.messages {
+		switch cm.Sender {
+		case "user":
+			msgs = append(msgs, llm.Message{Role: llm.RoleUser, Content: cm.Content})
+		case "devon":
+			role := llm.RoleAssistant
+			if cm.IsError {
+				role = llm.RoleTool
+			}
+			msgs = append(msgs, llm.Message{Role: role, Content: cm.Content})
+		}
+	}
+	return msgs
+}
+
+// ── Slash commands ────────────────────────────────────────────────────────────
+
+func (m *appModel) handleSlash(text string) {
+	switch {
+	case text == "/history" || text == "/sessions":
+		sessions, err := history.ListSessions(m.cfg.WorkDir)
+		if err != nil {
+			m.popup = "Erro: " + err.Error()
+			return
+		}
+		if len(sessions) == 0 {
+			m.popup = "Nenhuma sessão salva."
+			return
+		}
+		var sb strings.Builder
+		sb.WriteString("Sessões:\n")
+		for _, id := range sessions {
+			mark := " "
+			if m.session != nil && m.session.ID == id {
+				mark = "▶"
+			}
+			sb.WriteString(fmt.Sprintf("  %s %s\n", mark, id))
+		}
+		m.popup = sb.String()
+	case text == "/clear":
+		m.messages = nil
+		m.toolRuns = nil
+		m.historyTurns = nil
+	case text == "/usage" || text == "/cost":
+		m.popup = m.tracker.Format()
+	default:
+		m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Comando desconhecido: " + text})
+	}
+}
+
+// ── Input manipulation ────────────────────────────────────────────────────────
 
 func (m *appModel) insertRune(r rune) {
 	ru := []rune(m.input)
@@ -1228,15 +1552,6 @@ func (m *appModel) deleteCharBefore() {
 	ru = append(ru[:m.cursor-1], ru[m.cursor:]...)
 	m.input = string(ru)
 	m.cursor--
-}
-
-func (m *appModel) deleteCharAfter() {
-	ru := []rune(m.input)
-	if m.cursor >= len(ru) {
-		return
-	}
-	ru = append(ru[:m.cursor], ru[m.cursor+1:]...)
-	m.input = string(ru)
 }
 
 func (m *appModel) deleteWord() {
@@ -1256,11 +1571,7 @@ func (m *appModel) deleteWord() {
 	m.cursor = pos
 }
 
-// --- Commands ---
-
-type agentResult struct {
-	events []agent.Event
-}
+// ── Agent command ─────────────────────────────────────────────────────────────
 
 func startAgent(ctx context.Context, a *agent.Agent, input string) tea.Cmd {
 	return func() tea.Msg {
@@ -1273,13 +1584,13 @@ func startAgent(ctx context.Context, a *agent.Agent, input string) tea.Cmd {
 	}
 }
 
-// --- Utilities ---
+// ── Utilities ─────────────────────────────────────────────────────────────────
 
 func shortenArgs(args string) string {
 	if len(args) <= 25 {
 		return args
 	}
-	return args[:22] + "..."
+	return args[:22] + "…"
 }
 
 func firstLine(s string) string {
@@ -1289,28 +1600,22 @@ func firstLine(s string) string {
 	return s
 }
 
-func formatTokens(n int) string {
-	if n >= 1_000_000 {
-		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
-	}
-	if n >= 1_000 {
-		return fmt.Sprintf("%.1fk", float64(n)/1_000)
-	}
-	return fmt.Sprintf("%d", n)
-}
-
 func wrapLine(s string, width int) []string {
 	if width <= 0 {
 		return []string{s}
 	}
 	var lines []string
-	for len(s) > width {
-		idx := strings.LastIndex(s[:width], " ")
-		if idx < 0 {
-			idx = width
+	for len([]rune(s)) > width {
+		ru := []rune(s)
+		idx := width
+		for i := width - 1; i > 0; i-- {
+			if ru[i] == ' ' {
+				idx = i
+				break
+			}
 		}
-		lines = append(lines, s[:idx])
-		s = strings.TrimLeft(s[idx:], " ")
+		lines = append(lines, string(ru[:idx]))
+		s = strings.TrimLeft(string(ru[idx:]), " ")
 	}
 	if s != "" {
 		lines = append(lines, s)
@@ -1319,15 +1624,7 @@ func wrapLine(s string, width int) []string {
 }
 
 func itoaF(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	s := ""
-	for n > 0 {
-		s = string(rune('0'+n%10)) + s
-		n /= 10
-	}
-	return s
+	return fmt.Sprintf("%d", n)
 }
 
 // buildChatLines creates the rendered chat lines for the chat view.
