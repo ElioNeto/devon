@@ -1,12 +1,32 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"strings"
 
+	agentpkg "github.com/ElioNeto/devon/internal/agent"
 	"github.com/ElioNeto/devon/internal/config"
+	"github.com/ElioNeto/devon/internal/llm"
+	"github.com/ElioNeto/devon/internal/tools"
 	"github.com/ElioNeto/devon/internal/tui"
 	"github.com/spf13/cobra"
 )
+
+// exitCoder is used to pass exit codes through Cobra's error handling.
+type exitCoder struct {
+	err  error
+	code int
+}
+
+func (e *exitCoder) Error() string { return e.err.Error() }
+func (e *exitCoder) ExitCode() int { return e.code }
+
+func configError(err error) *exitCoder { return &exitCoder{err: err, code: 2} }
+func exitError(err error) *exitCoder   { return &exitCoder{err: err, code: 1} }
 
 var version = "dev"
 
@@ -32,6 +52,28 @@ func newRootCommand() *cobra.Command {
 	}
 	root.AddCommand(doctor)
 
+	// Subcomando run (one-shot non-interactive)
+	runCmd := &cobra.Command{
+		Use:   "run <tarefa>",
+		Short: "Executa uma tarefa de forma não-interativa",
+		Long: `Executa uma tarefa sem abrir a TUI, retornando o resultado via stdout.
+
+Exemplos:
+  devon run "crie a função main.go"
+  echo "refatore auth.go" | devon run
+  devon run "adicione testes ao read.go" --mode yolo
+
+Exit codes:
+  0   Sucesso
+  1   Erro na execução
+  2   Erro de configuração
+  130 Cancelado (SIGINT/Ctrl+C)`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: runTask,
+	}
+	runCmd.Flags().String("mode", "auto", "Modo de permissão: auto | safe | yolo")
+	root.AddCommand(runCmd)
+
 	return root
 }
 
@@ -50,6 +92,77 @@ func runAgent(cmd *cobra.Command, _ []string) error {
 	}
 
 	return tui.Run(cfg)
+}
+
+func runTask(cmd *cobra.Command, args []string) error {
+	task := strings.Join(args, " ")
+
+	// Se stdin é um pipe, lê conteúdo e anexa à tarefa
+	if hasStdinPipe() {
+		stdinContent, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("falha ao ler stdin: %w", err)
+		}
+		if s := strings.TrimSpace(string(stdinContent)); s != "" {
+			task = task + "\n\n" + s
+		}
+	}
+
+	envFile, _ := cmd.Flags().GetString("env")
+	cfg, err := config.Load(envFile)
+	if err != nil {
+		return configError(fmt.Errorf("falha ao carregar configuração: %w", err))
+	}
+
+	mode, _ := cmd.Flags().GetString("mode")
+	cfg.Mode = config.ParseMode(mode)
+
+	if override, _ := cmd.Flags().GetString("model"); override != "" {
+		cfg.Model = override
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	result, err := runOneShot(ctx, cfg, task)
+	if err != nil {
+		return exitError(err)
+	}
+	fmt.Println(result)
+	return nil
+}
+
+func hasStdinPipe() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeNamedPipe != 0 || info.Size() > 0
+}
+
+func runOneShot(ctx context.Context, cfg *config.Config, task string) (string, error) {
+	client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
+	registry := tools.NewRegistry()
+	agent := agentpkg.New(cfg, client, registry)
+
+	events := agent.Run(ctx, task)
+
+	var text strings.Builder
+	for ev := range events {
+		switch ev.Type {
+		case "text":
+			text.WriteString(ev.Text)
+		case "tool_start":
+			fmt.Fprintf(os.Stderr, "tool: %s\n", ev.Tool)
+		case "tool_done":
+			fmt.Fprintf(os.Stderr, "tool: %s done\n", ev.Tool)
+		case "tool_error":
+			fmt.Fprintf(os.Stderr, "tool: %s error: %v\n", ev.Tool, ev.Err)
+		case "error":
+			return "", fmt.Errorf("agente: %w", ev.Err)
+		}
+	}
+	return strings.TrimSpace(text.String()), nil
 }
 
 func runDoctor(cmd *cobra.Command, _ []string) error {

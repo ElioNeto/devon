@@ -219,3 +219,64 @@ devon --mode auto    # padrão: leitura livre, escrita/shell pedem confirmação
 devon --mode safe    # toda ferramenta pede confirmação
 devon --mode yolo    # executa tudo sem perguntar
 ```
+
+---
+
+## Modo Non-Interactive (`devon run`)
+
+O subcomando `run` executa uma tarefa de forma não-interativa, sem abrir a TUI. Ideal para scripts, CI/CD e automações.
+
+### Uso
+
+```bash
+# argumento direto
+devon run "crie a função main.go"
+
+# via stdin pipe
+echo "refatore auth.go" | devon run
+
+# combinando argumento + stdin
+echo "adicione testes" | devon run "no arquivo read.go"
+
+# com modo de permissão
+devon run "adicione testes ao read.go" --mode yolo
+```
+
+O conteúdo do stdin é anexado à tarefa, separado por duas quebras de linha.
+
+### Output
+
+- **stdout**: texto da resposta do agente (para capturar ou pipear)
+- **stderr**: informações de execução (tool calls, erros)
+
+```bash
+# capturar resposta
+resultado=$(devon run "explique o código em auth.go")
+
+# redirecionar tools para arquivo
+devon run "refatore auth.go" 2> tools.log
+```
+
+### Exit Codes
+
+| Código | Significado |
+|---|---|
+| `0` | Sucesso |
+| `1` | Erro na execução (falha do agente ou LLM) |
+| `2` | Erro de configuração (`.env` ausente, variáveis faltando) |
+| `130` | Cancelado pelo usuário (SIGINT / Ctrl+C) |
+
+```bash
+devon run "tarefa impossível"
+if [ $? -eq 2 ]; then
+  echo "Configuração inválida — verifique o .env"
+fi
+```
+
+### Flags
+
+| Flag | Descrição |
+|---|---|
+| `--mode` | Modo de permissão: `auto` (padrão), `safe`, `yolo` |
+| `--model` | Sobrescreve o modelo configurado no `.env` |
+| `--env` | Caminho para o arquivo `.env` (padrão: `.env` no diretório atual) |
