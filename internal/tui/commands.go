@@ -29,6 +29,7 @@ func (m *appModel) sendInput() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	m.inputHist.push(text)
 	m.messages = append(m.messages, chatMessage{Sender: "user", Content: text})
 	m.toolRuns = nil
 	m.running = true

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ElioNeto/devon/internal/agent"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -596,8 +597,9 @@ func renderViewSteps(m *appModel, width, height int) string {
 						lines = append(lines, s.errMsg.Render("  "+l))
 					}
 				} else {
-					for _, l := range wrapLine(msg.Content, width-4) {
-						lines = append(lines, s.agentMsg.Render("  "+l))
+					md := renderMarkdown(msg.Content, width-4)
+					for _, l := range strings.Split(md, "\n") {
+						lines = append(lines, "  "+l)
 					}
 				}
 			case "system":
@@ -620,8 +622,11 @@ func renderViewSteps(m *appModel, width, height int) string {
 	}
 	lines = append(lines, "")
 	lines = append(lines, s.configKey.Render("  Resposta:"))
-	for _, l := range wrapLine(ht.AgentReply, width-4) {
-		lines = append(lines, s.agentMsg.Render("    "+l))
+	if ht.AgentReply != "" {
+		md := renderMarkdown(ht.AgentReply, width-4)
+		for _, l := range strings.Split(md, "\n") {
+			lines = append(lines, "    "+l)
+		}
 	}
 	if ht.ToolSummary != "" {
 		lines = append(lines, "")
@@ -644,18 +649,43 @@ func renderViewSteps(m *appModel, width, height int) string {
 
 func renderHelp(m *appModel, width int) string {
 	s := m.styles
-	var lines []string
-	lines = append(lines, s.itemSection.Render("──Ajuda──"))
-	lines = append(lines, "")
-	for _, h := range AllHints() {
-		lines = append(lines, s.keyStyle.Render(fmt.Sprintf("  %-18s", h.Keys))+s.helpStyle.Render(h.Action))
+	hints := AllHints()
+	half := (len(hints) + 1) / 2
+
+	var left, right []string
+	left = append(left, s.itemSection.Render("──Ajuda──"))
+	left = append(left, "")
+	for _, h := range hints[:half] {
+		left = append(left, s.keyStyle.Render(fmt.Sprintf("  %-18s", h.Keys))+s.helpStyle.Render(h.Action))
 	}
-	lines = append(lines, "")
-	lines = append(lines, s.sysMsg.Render("  Pressione qualquer tecla para fechar."))
-	return s.menuStyle.Width(min(width-4, 60)).Render(strings.Join(lines, "\n"))
+	if len(hints) > half {
+		right = append(right, s.itemSection.Render("──More──"))
+		right = append(right, "")
+		for _, h := range hints[half:] {
+			right = append(right, s.keyStyle.Render(fmt.Sprintf("  %-18s", h.Keys))+s.helpStyle.Render(h.Action))
+		}
+	}
+
+	bottom := s.sysMsg.Render("  Pressione qualquer tecla para fechar.")
+	joined := lipgloss.JoinHorizontal(lipgloss.Top, strings.Join(left, "\n"), strings.Join(right, "\n"))
+	body := lipgloss.JoinVertical(lipgloss.Left, joined, "", bottom)
+	return s.menuStyle.Width(min(width-4, 60)).Render(body)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// renderMarkdown renders a string as Markdown using Glamour.
+func renderMarkdown(text string, width int) string {
+	style := glamour.WithStandardStyle("dark")
+	styleOpts := []glamour.TermRendererOption{
+		style,
+		glamour.WithWordWrap(width - 2),
+	}
+	if out, err := glamour.Render(text, styleOpts...); err == nil {
+		return strings.TrimRight(out, "\n ")
+	}
+	return text
+}
 
 // appendLog adiciona um evento ao stream de logs do painel direito.
 func (m *appModel) appendLog(actor, msg, detail string) {

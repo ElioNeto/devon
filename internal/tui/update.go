@@ -170,6 +170,11 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "up":
 		if m.leftFocus {
 			m.navigateLeft(-1)
+		} else if m.inputHist.entries != nil {
+			if hist := m.inputHist.navigateUp(); hist != "" {
+				m.input = hist
+				m.cursor = len([]rune(m.input))
+			}
 		} else if m.rightScroll > 0 {
 			m.rightScroll--
 		}
@@ -178,6 +183,11 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down":
 		if m.leftFocus {
 			m.navigateLeft(1)
+		} else if m.inputHist.entries != nil {
+			if hist := m.inputHist.navigateDown(); hist != "" {
+				m.input = hist
+				m.cursor = len([]rune(m.input))
+			}
 		} else {
 			m.rightScroll++
 		}
@@ -214,6 +224,10 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "pgdown":
 		m.rightScroll += 5
+		return m, nil
+
+	case "?":
+		m.showHelp = true
 		return m, nil
 
 	case "!":
