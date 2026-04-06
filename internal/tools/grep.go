@@ -64,11 +64,11 @@ func (t *GrepTool) Execute(ctx context.Context, params json.RawMessage) (string,
 
 	searchPath := dir
 	if p.Path != "" {
-		if !filepath.IsAbs(p.Path) {
-			searchPath = filepath.Join(dir, p.Path)
-		} else {
-			searchPath = p.Path
+		resolved, err := ensurePath(p.Path, t.Dir)
+		if err != nil {
+			return "", fmt.Errorf("grep: %w", err)
 		}
+		searchPath = resolved
 	}
 
 	opts := regexpOptions(p)

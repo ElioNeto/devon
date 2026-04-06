@@ -54,7 +54,10 @@ func (t *ReadTool) Execute(ctx context.Context, params json.RawMessage) (string,
 		return "", fmt.Errorf("read: caminho nao pode estar vazio")
 	}
 
-	path := t.resolvePath(p.Path)
+	path, err := ensurePath(p.Path, t.Dir)
+	if err != nil {
+		return "", fmt.Errorf("read: %w", err)
+	}
 
 	info, err := os.Stat(path)
 	if err != nil {

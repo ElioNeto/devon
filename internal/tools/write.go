@@ -46,7 +46,10 @@ func (t *WriteTool) Execute(ctx context.Context, params json.RawMessage) (string
 		return "", fmt.Errorf("write: caminho nao pode estar vazio")
 	}
 
-	path := t.resolvePath(p.Path)
+	path, err := ensurePath(p.Path, t.Dir)
+	if err != nil {
+		return "", fmt.Errorf("write: %w", err)
+	}
 
 	// Cria diretorios intermediarios
 	if dir := filepath.Dir(path); dir != "." && dir != "/" {

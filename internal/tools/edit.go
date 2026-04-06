@@ -57,7 +57,10 @@ func (t *EditTool) Execute(ctx context.Context, params json.RawMessage) (string,
 		return "", fmt.Errorf("edit: old_string nao pode estar vazio")
 	}
 
-	path := t.resolvePath(p.Path)
+	path, err := ensurePath(p.Path, t.Dir)
+	if err != nil {
+		return "", fmt.Errorf("edit: %w", err)
+	}
 
 	content, err := os.ReadFile(path)
 	if err != nil {

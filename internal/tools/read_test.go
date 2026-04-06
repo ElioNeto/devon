@@ -68,13 +68,25 @@ func TestReadTool_Execute_AbsolutePath(t *testing.T) {
 	if err := os.WriteFile(absPath, []byte("abs content"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tool := &ReadTool{Dir: "/wrong"}
+	tool := &ReadTool{Dir: dir}
 	result, err := tool.Execute(context.Background(), json.RawMessage(`{"file":"`+absPath+`"}`))
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
 	}
 	if result == "" {
 		t.Error("expected non-empty output for absolute path")
+	}
+}
+
+func TestReadTool_Execute_PathOutsideDir(t *testing.T) {
+	dir := t.TempDir()
+	outsideDir := t.TempDir()
+	outsideFile := filepath.Join(outsideDir, "secret.txt")
+	os.WriteFile(outsideFile, []byte("secret"), 0o644)
+	tool := &ReadTool{Dir: dir}
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{"file":"`+outsideFile+`"}`))
+	if err == nil {
+		t.Fatal("expected error for path outside WorkDir")
 	}
 }
 

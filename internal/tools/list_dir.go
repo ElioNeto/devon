@@ -39,7 +39,19 @@ func (t *ListDirTool) Execute(ctx context.Context, params json.RawMessage) (stri
 	var p listDirParams
 	_ = json.Unmarshal(params, &p) // path é opcional
 
-	path := t.resolvePath(p.Path)
+	var path string
+	if p.Path == "" {
+		path = t.Dir
+		if path == "" {
+			path = "."
+		}
+	} else {
+		var err error
+		path, err = ensurePath(p.Path, t.Dir)
+		if err != nil {
+			return "", fmt.Errorf("list_dir: %w", err)
+		}
+	}
 
 	info, err := os.Stat(path)
 	if err != nil {

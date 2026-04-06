@@ -74,8 +74,9 @@ func TestWriteTool_Execute_InvalidParams(t *testing.T) {
 
 func TestWriteTool_Execute_AbsolutePath(t *testing.T) {
 	dir := t.TempDir()
+	// Write to an absolute path inside the Dir — should succeed
+	tool := &WriteTool{Dir: dir}
 	absPath := filepath.Join(dir, "abs.txt")
-	tool := &WriteTool{Dir: "/wrong"}
 	_, err := tool.Execute(context.Background(), json.RawMessage(`{"path":"`+absPath+`","content":"abs"}`))
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
@@ -83,6 +84,17 @@ func TestWriteTool_Execute_AbsolutePath(t *testing.T) {
 	content, _ := os.ReadFile(absPath)
 	if string(content) != "abs" {
 		t.Errorf("file content = %q, want %q", content, "abs")
+	}
+}
+
+func TestWriteTool_Execute_PathOutsideDir(t *testing.T) {
+	dir := t.TempDir()
+	outsideDir := t.TempDir()
+	outsideFile := filepath.Join(outsideDir, "out.txt")
+	tool := &WriteTool{Dir: dir}
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{"path":"`+outsideFile+`","content":"out"}`))
+	if err == nil {
+		t.Fatal("expected error for path outside WorkDir")
 	}
 }
 
