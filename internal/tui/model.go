@@ -90,6 +90,7 @@ type appModel struct {
 	// Command menu (! — shows available commands in a sidebar)
 	showCmdMenu   bool
 	cmdMenuCursor int
+	cmdMenuFilter string
 
 	// Input
 	input     string

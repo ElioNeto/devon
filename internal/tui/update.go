@@ -37,15 +37,35 @@ func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc", "!":
 				m.showCmdMenu = false
 				m.cmdMenuCursor = 0
+				m.cmdMenuFilter = ""
 			case "enter":
-				m.execCmdMenuAction()
+				if filtered := m.filteredCmdMenuActions(); len(filtered) > 0 && m.cmdMenuCursor < len(filtered) {
+					filtered[m.cmdMenuCursor].Action(m)
+				}
+				m.showCmdMenu = false
+				m.cmdMenuCursor = 0
+				m.cmdMenuFilter = ""
 			case "up":
 				if m.cmdMenuCursor > 0 {
 					m.cmdMenuCursor--
 				}
 			case "down":
-				if m.cmdMenuCursor < len(cmdMenuActions)-1 {
+				if m.cmdMenuCursor < len(m.filteredCmdMenuActions())-1 {
 					m.cmdMenuCursor++
+				}
+			case "backspace":
+				if len(m.cmdMenuFilter) > 0 {
+					runes := []rune(m.cmdMenuFilter)
+					m.cmdMenuFilter = string(runes[:len(runes)-1])
+					m.cmdMenuCursor = 0
+				}
+			case "ctrl+u":
+				m.cmdMenuFilter = ""
+				m.cmdMenuCursor = 0
+			default:
+				if msg.Type == tea.KeyRunes {
+					m.cmdMenuFilter += string(msg.Runes)
+					m.cmdMenuCursor = 0
 				}
 			}
 			return m, nil
@@ -218,7 +238,7 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.switchWorkspace(2)
 		return m, nil
 
-	case "?", "ctrl+h":
+	case "ctrl+h":
 		m.showHelp = true
 		return m, nil
 

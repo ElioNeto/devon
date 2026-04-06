@@ -24,9 +24,25 @@ var cmdMenuActions = []cmdMenuAction{
 
 func (m *appModel) toggleCmdMenu() {
 	m.showCmdMenu = !m.showCmdMenu
-	if m.showCmdMenu && m.cmdMenuCursor == 0 {
-		// reset cursor on open
+	if m.showCmdMenu {
+		m.cmdMenuCursor = 0
+		m.cmdMenuFilter = ""
 	}
+}
+
+// filteredCmdMenuActions returns the command menu actions filtered by the current search text.
+func (m *appModel) filteredCmdMenuActions() []cmdMenuAction {
+	if m.cmdMenuFilter == "" {
+		return cmdMenuActions
+	}
+	filter := strings.ToLower(m.cmdMenuFilter)
+	var filtered []cmdMenuAction
+	for _, a := range cmdMenuActions {
+		if strings.Contains(strings.ToLower(a.Label), filter) {
+			filtered = append(filtered, a)
+		}
+	}
+	return filtered
 }
 
 func (m *appModel) execCmdMenuAction() {
