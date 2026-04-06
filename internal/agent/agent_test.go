@@ -2,10 +2,7 @@ package agent
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"os"
-	"sync"
 	"testing"
 	"time"
 
@@ -14,21 +11,7 @@ import (
 	"github.com/ElioNeto/devon/internal/tools"
 )
 
-func sseHandler(text string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"" + text + "\"}}]}\n"))
-		w.Write([]byte("data: {\"choices\":[],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":5,\"total_tokens\":10}}\n\n"))
-	}
-}
-
-func sseHandlerEmpty() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("data: [DONE]\n"))
-	}
-}
-
 func newTestConfig() *config.Config {
-	// Ensure WorkDir exists for bash tool
 	workDir := "/tmp/test-workdir-" + os.Getenv("USER")
 	os.MkdirAll(workDir, 0755)
 	return &config.Config{
@@ -37,23 +20,44 @@ func newTestConfig() *config.Config {
 		BaseURL:  "http://localhost:11434/v1",
 		MaxTurns: 5,
 		Timeout:  5 * time.Second,
-		Mode:     config.ModeAuto,
+		Mode:     config.ModeYolo, // skip permission prompts in tests
 	}
 }
+
+func collectEvents(ch <-chan Event) []Event {
+	var events []Event
+	for e := range ch {
+		events = append(events, e)
+	}
+	return events
+}
+
+func hasEventType(events []Event, t string) bool {
+	for _, e := range events {
+		if e.Type == t {
+			return true
+		}
+	}
+	return false
+}
+
+// ------------------------------------------------------------------
+//  Agent construction & system messages
+// ------------------------------------------------------------------
 
 func TestAgent_New(t *testing.T) {
 	cfg := newTestConfig()
 	r := tools.NewRegistry()
-	c := llm.New("", "http://localhost:11434/v1", "test", 5*time.Second)
-	agent := New(cfg, c, r)
-	if agent == nil {
+	mc := &llm.MockClient{}
+	a := New(cfg, mc, r)
+	if a == nil {
 		t.Fatal("New() returned nil")
 	}
-	if agent.registry == nil {
+	if a.registry == nil {
 		t.Error("registry is nil")
 	}
-	if len(agent.history) != 1 {
-		t.Errorf("expected 1 system message, got %d", len(agent.history))
+	if len(a.history) != 1 {
+		t.Errorf("expected 1 system message, got %d", len(a.history))
 	}
 }
 
@@ -61,9 +65,9 @@ func TestAgent_BuildSystemMessages_WithContextDoc(t *testing.T) {
 	cfg := newTestConfig()
 	cfg.ContextDoc = "This is my project."
 	r := tools.NewRegistry()
-	c := llm.New("", cfg.BaseURL, "test", 5*time.Second)
-	agent := New(cfg, c, r)
-	msgs := agent.history
+	mc := &llm.MockClient{}
+	a := New(cfg, mc, r)
+	msgs := a.history
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(msgs))
 	}
@@ -73,100 +77,388 @@ func TestAgent_BuildSystemMessages_WithContextDoc(t *testing.T) {
 	if msgs[0].Role != llm.RoleSystem {
 		t.Errorf("role = %q, want %q", msgs[0].Role, llm.RoleSystem)
 	}
+	if msgs[0].Content == "" || msgs[0].Content[0] == 0 {
+		t.Error("system message content missing")
+	}
 }
 
+// ------------------------------------------------------------------
+//  Simple response (no tool calls)
+// ------------------------------------------------------------------
+
 func TestAgent_Run_SimpleResponse(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping in short mode")
-	}
-
-	srv := httptest.NewServer(sseHandler("I can help!"))
-	defer srv.Close()
-
 	cfg := newTestConfig()
 	r := tools.NewRegistry()
-	c := llm.New("", srv.URL, "test", 5*time.Second)
-	agent := New(cfg, c, r)
-
-	var mu sync.Mutex
-	var events []Event
-	ch := agent.Run(context.Background(), "hello")
-	for e := range ch {
-		mu.Lock()
-		events = append(events, e)
-		mu.Unlock()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{Text: "I can help!"},
+		},
 	}
+	a := New(cfg, mc, r)
+	events := collectEvents(a.Run(context.Background(), "hello"))
 
-	mu.Lock()
-	defer mu.Unlock()
-
-	foundText := false
-	foundDone := false
-	for _, e := range events {
-		if e.Type == "text" {
-			foundText = true
-		}
-		if e.Type == "turn_done" {
-			foundDone = true
-		}
-	}
-	if !foundText {
+	if !hasEventType(events, "text") {
 		t.Error("expected text event")
 	}
-	if !foundDone {
+	if !hasEventType(events, "turn_done") {
 		t.Error("expected turn_done event")
 	}
 }
 
-func TestAgent_Run_Error(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping in short mode")
-	}
+// ------------------------------------------------------------------
+//  Single tool call with result
+// ------------------------------------------------------------------
+
+func TestAgent_Run_SingleToolCall(t *testing.T) {
+	dir := t.TempDir()
 
 	cfg := newTestConfig()
-	r := tools.NewRegistry()
-	c := llm.New("", "http://127.0.0.1:19999", "test", 500*time.Millisecond)
-	agent := New(cfg, c, r)
+	cfg.WorkDir = dir
+	cfg.MaxTurns = 5
+	cfg.Mode = config.ModeYolo
 
-	ch := agent.Run(context.Background(), "test")
-	for e := range ch {
-		if e.Type == "error" {
-			return
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:   "t1",
+						Type: "function",
+						Function: llm.ToolCallFunction{
+							Name:      "write",
+							Arguments: `{"path":"` + dir + `/hello.txt","content":"world"}`,
+						},
+					},
+				},
+			},
+			{Text: "File created!"},
+		},
+	}
+	a := New(cfg, mc, r)
+	events := collectEvents(a.Run(context.Background(), "create a file"))
+
+	if !hasEventType(events, "tool_start") {
+		t.Errorf("expected tool_start, got: %v", eventTypeSlice(events))
+	}
+	if !hasEventType(events, "tool_done") {
+		t.Errorf("expected tool_done, got: %v", eventTypeSlice(events))
+	}
+	if !hasEventType(events, "text") {
+		t.Errorf("expected text response after tool, got: %v", eventTypeSlice(events))
+	}
+	if !hasEventType(events, "turn_done") {
+		t.Errorf("expected turn_done, got: %v", eventTypeSlice(events))
+	}
+}
+
+// ------------------------------------------------------------------
+//  Multiple sequential tool calls
+// ------------------------------------------------------------------
+
+func TestAgent_Run_MultipleToolCalls(t *testing.T) {
+	dir := t.TempDir()
+
+	cfg := newTestConfig()
+	cfg.WorkDir = dir
+	cfg.MaxTurns = 5
+	cfg.Mode = config.ModeYolo
+
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			// First turn: write file
+			{
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:   "t1",
+						Type: "function",
+						Function: llm.ToolCallFunction{
+							Name:      "write",
+							Arguments: `{"path":"` + dir + `/a.txt","content":"hello"}`,
+						},
+					},
+				},
+			},
+			// Second turn: read file
+			{
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:   "t2",
+						Type: "function",
+						Function: llm.ToolCallFunction{
+							Name:      "read",
+							Arguments: `{"file":"` + dir + `/a.txt"}`,
+						},
+					},
+				},
+			},
+			// Third turn: text response
+			{Text: "Done reading the file."},
+		},
+	}
+	a := New(cfg, mc, r)
+	events := collectEvents(a.Run(context.Background(), "write and then read file"))
+
+	toolStarts := 0
+	toolDones := 0
+	texts := 0
+	for _, e := range events {
+		switch e.Type {
+		case "tool_start":
+			toolStarts++
+		case "tool_done":
+			toolDones++
+		case "text":
+			texts++
 		}
 	}
-	t.Fatal("expected error event")
+	if toolStarts < 2 {
+		t.Errorf("expected at least 2 tool_start events, got %d", toolStarts)
+	}
+	if toolDones < 2 {
+		t.Errorf("expected at least 2 tool_done events, got %d", toolDones)
+	}
+	if texts < 1 {
+		t.Errorf("expected at least 1 text event, got %d", texts)
+	}
+	if !hasEventType(events, "turn_done") {
+		t.Error("expected turn_done")
+	}
 }
 
-func TestAgent_Run_ContextCancelled(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping in short mode")
-	}
+// ------------------------------------------------------------------
+//  Tool call error
+// ------------------------------------------------------------------
 
-	ctx, cancel := context.WithCancel(context.Background())
-	srv := httptest.NewServer(sseHandler("reply"))
-	defer srv.Close()
-	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cancel()
-		time.Sleep(100 * time.Millisecond)
-		w.Write([]byte("data: [DONE]\n"))
-	})
+func TestAgent_Run_ToolCall_Error(t *testing.T) {
+	dir := t.TempDir()
 
 	cfg := newTestConfig()
-	r := tools.NewRegistry()
-	c := llm.New("", srv.URL, "test", 5*time.Second)
-	agent := New(cfg, c, r)
+	cfg.WorkDir = dir
+	cfg.Mode = config.ModeYolo
 
-	ch := agent.Run(ctx, "test")
-	for range ch {
-		// drain
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:   "t1",
+						Type: "function",
+						Function: llm.ToolCallFunction{
+							Name:      "read",
+							Arguments: `{"file":"/nonexistent/file.xyz"}`,
+						},
+					},
+				},
+			},
+			{Text: "That file does not exist."},
+		},
+	}
+	a := New(cfg, mc, r)
+	events := collectEvents(a.Run(context.Background(), "read a nonexistent file"))
+
+	if !hasEventType(events, "tool_error") {
+		t.Errorf("expected tool_error event, got: %v", eventTypeSlice(events))
 	}
 }
+
+// ------------------------------------------------------------------
+//  Unknown tool (LLM calls a tool not in registry)
+// ------------------------------------------------------------------
+
+func TestAgent_Run_UnknownTool(t *testing.T) {
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:   "t1",
+						Type: "function",
+						Function: llm.ToolCallFunction{
+							Name:      "nonexistent_tool",
+							Arguments: "{}",
+						},
+					},
+				},
+			},
+		},
+	}
+	// MaxTurns=1 so it returns after the unknown tool call + text response
+	cfg := newTestConfig()
+	cfg.MaxTurns = 1
+	// Second response for after the tool error
+	mc.Responses = append(mc.Responses, llm.MockResponse{Text: "I don't know that tool."})
+	a := New(cfg, mc, r)
+	events := collectEvents(a.Run(context.Background(), "do something"))
+
+	if !hasEventType(events, "tool_error") {
+		t.Errorf("expected tool_error for unknown tool, got: %v", eventTypeSlice(events))
+	}
+}
+
+// ------------------------------------------------------------------
+//  Context cancellation
+// ------------------------------------------------------------------
+
+func TestAgent_Run_ContextCancelled(t *testing.T) {
+	cfg := newTestConfig()
+	r := tools.NewRegistry()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Cancel before the agent loop can make a second call
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{Text: "thinking..."},
+		},
+	}
+	a := New(cfg, mc, r)
+
+	// Cancel after the first response is consumed
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	events := collectEvents(a.Run(ctx, "hello"))
+	// should not hang
+	if len(events) == 0 {
+		t.Error("expected at least one event before cancellation")
+	}
+}
+
+func TestAgent_Run_ContextCancelled_BeforeCall(t *testing.T) {
+	cfg := newTestConfig()
+	r := tools.NewRegistry()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately — before any work
+
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{Text: "should not be reached"},
+		},
+	}
+	a := New(cfg, mc, r)
+
+	events := collectEvents(a.Run(ctx, "test"))
+	// Context is already cancelled, run() checks ctx.Err() at loop start
+	// so it should return without events
+	if len(events) > 0 {
+		t.Errorf("expected no events with pre-cancelled context, got: %v", eventTypeSlice(events))
+	}
+}
+
+// ------------------------------------------------------------------
+//  MaxTurns limit reached
+// ------------------------------------------------------------------
+
+func TestAgent_Run_MaxTurnsLimit(t *testing.T) {
+	dir := t.TempDir()
+
+	cfg := newTestConfig()
+	cfg.WorkDir = dir
+	cfg.MaxTurns = 2 // Only allow 2 turns
+	cfg.Mode = config.ModeYolo
+
+	r := tools.NewRegistry()
+	// Every response asks for another tool call — will exceed MaxTurns
+	toolCallResp := func(id string) llm.MockResponse {
+		return llm.MockResponse{
+			ToolCalls: []llm.ToolCall{
+				{
+					ID:   id,
+					Type: "function",
+					Function: llm.ToolCallFunction{
+						Name:      "write",
+						Arguments: `{"path":"` + dir + `/` + id + `.txt","content":"data"}`,
+					},
+				},
+			},
+		}
+	}
+
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			toolCallResp("t1"), // turn 1: asks for tool
+			toolCallResp("t2"), // turn 2: asks for another tool
+			toolCallResp("t3"), // exceeded max turns
+		},
+	}
+	a := New(cfg, mc, r)
+	events := collectEvents(a.Run(context.Background(), "keep doing things"))
+
+	if !hasEventType(events, "error") {
+		t.Errorf("expected error event when MaxTurns reached, got: %v", eventTypeSlice(events))
+	} else {
+		for _, e := range events {
+			if e.Type == "error" && e.Err != nil {
+				if e.Err.Error() == "" {
+					t.Error("error event has empty message")
+				}
+			}
+		}
+	}
+}
+
+// ------------------------------------------------------------------
+//  LLM Stream error
+// ------------------------------------------------------------------
+
+func TestAgent_Run_LLMStreamError(t *testing.T) {
+	cfg := newTestConfig()
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{Err: &mockError{msg: "connection timeout"}},
+		},
+	}
+	a := New(cfg, mc, r)
+	events := collectEvents(a.Run(context.Background(), "test"))
+
+	if !hasEventType(events, "error") {
+		t.Errorf("expected error event on LLM failure, got: %v", eventTypeSlice(events))
+	}
+}
+
+// ------------------------------------------------------------------
+//  User message is added to history
+// ------------------------------------------------------------------
+
+func TestAgent_Run_UserMessageInHistory(t *testing.T) {
+	cfg := newTestConfig()
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{Text: "Got it"},
+		},
+	}
+	a := New(cfg, mc, r)
+	events := collectEvents(a.Run(context.Background(), "my question"))
+
+	_ = events // just checking no error occurred
+	// Verify history has system + user messages
+	if len(a.history) < 2 {
+		t.Errorf("expected at least 2 history entries (system+user), got %d", len(a.history))
+	}
+	if a.history[len(a.history)-2].Role != llm.RoleUser {
+		t.Errorf("expected user role, got %q", a.history[len(a.history)-2].Role)
+	}
+	if a.history[len(a.history)-2].Content != "my question" {
+		t.Errorf("history user content = %q, want %q", a.history[len(a.history)-2].Content, "my question")
+	}
+}
+
+// ------------------------------------------------------------------
+//  executeTool with unknown tool (unit test)
+// ------------------------------------------------------------------
 
 func TestAgent_ExecuteTool_UnknownTool(t *testing.T) {
 	cfg := newTestConfig()
 	r := tools.NewRegistry()
-	c := llm.New("", "http://localhost:11434/v1", "test", 5*time.Second)
-	agent := New(cfg, c, r)
+	mc := &llm.MockClient{}
+	a := New(cfg, mc, r)
 
 	tc := llm.ToolCall{
 		ID:   "t1",
@@ -177,177 +469,181 @@ func TestAgent_ExecuteTool_UnknownTool(t *testing.T) {
 		},
 	}
 
-	_, err := agent.executeTool(context.Background(), tc)
+	_, err := a.executeTool(context.Background(), tc)
 	if err == nil {
 		t.Fatal("expected error for unknown tool")
 	}
 }
 
+// ------------------------------------------------------------------
+//  No tool calls (empty LLM response)
+// ------------------------------------------------------------------
+
 func TestAgent_Run_NoToolCalls(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping in short mode")
-	}
-
-	srv := httptest.NewServer(sseHandlerEmpty())
-	defer srv.Close()
-
-	cfg := newTestConfig()
 	r := tools.NewRegistry()
-	c := llm.New("", srv.URL, "test", 5*time.Second)
-	agent := New(cfg, c, r)
-
-	foundDone := false
-	ch := agent.Run(context.Background(), "test")
-	for e := range ch {
-		if e.Type == "turn_done" {
-			foundDone = true
-		}
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{Text: "Just a plain answer"},
+		},
 	}
+	cfg := newTestConfig()
+	a := New(cfg, mc, r)
+	events := collectEvents(a.Run(context.Background(), "test"))
 
-	if !foundDone {
-		t.Error("expected turn_done when no tool calls")
+	if !hasEventType(events, "text") {
+		t.Error("expected text event")
+	}
+	if !hasEventType(events, "turn_done") {
+		t.Error("expected turn_done event")
 	}
 }
 
-func TestAgent_Run_ContextCancelledBeforeCall(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping in short mode")
-	}
+// ------------------------------------------------------------------
+//  Permission checker — blocked tool
+// ------------------------------------------------------------------
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // cancel before calling Stream
-
-	srv := httptest.NewServer(sseHandler("reply"))
-	defer srv.Close()
-
+func TestAgent_Checker_Blocklist(t *testing.T) {
 	cfg := newTestConfig()
+	cfg.Mode = config.ModeYolo
 	r := tools.NewRegistry()
-	c := llm.New("", srv.URL, "test", 5*time.Second)
-	agent := New(cfg, c, r)
+	mc := &llm.MockClient{}
+	a := New(cfg, mc, r)
 
-	ch := agent.Run(ctx, "test")
-	for range ch {
-		// drain
+	// Verify the checker has a blocklist
+	if a.checker == nil {
+		t.Fatal("checker is nil")
+	}
+	if len(a.checker.Blocklist) == 0 {
+		t.Error("blocklist should not be empty")
 	}
 }
 
-func TestAgent_Run_ToolCalls(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping in short mode")
-	}
+// ------------------------------------------------------------------
+//  Multiple tool calls in a single turn (parallel)
+// ------------------------------------------------------------------
 
+func TestAgent_Run_ParallelToolCalls(t *testing.T) {
 	dir := t.TempDir()
-
-	// First call returns tool_calls, then tool results are processed
-	calls := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls++
-		if calls == 1 {
-			w.Write([]byte("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"t1\",\"function\":{\"name\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"echo hi\\\"}\"}}]}}]}\n\n"))
-			w.Write([]byte("data: [DONE]\n\n"))
-		} else {
-			w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"done!\"}}]}\n\n"))
-			w.Write([]byte("data: [DONE]\n\n"))
-		}
-	}))
-	defer srv.Close()
 
 	cfg := newTestConfig()
 	cfg.WorkDir = dir
-	cfg.MaxTurns = 5
-	r := tools.NewRegistry()
-	c := llm.New("", srv.URL, "test", 5*time.Second)
-	agent := New(cfg, c, r)
+	cfg.Mode = config.ModeYolo
 
-	var events []string
-	ch := agent.Run(context.Background(), "test")
-	for e := range ch {
-		events = append(events, e.Type)
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			// Two tool calls in one turn
+			{
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:   "t1",
+						Type: "function",
+						Function: llm.ToolCallFunction{
+							Name:      "write",
+							Arguments: `{"path":"` + dir + `/file1.txt","content":"one"}`,
+						},
+					},
+					{
+						ID:   "t2",
+						Type: "function",
+						Function: llm.ToolCallFunction{
+							Name:      "write",
+							Arguments: `{"path":"` + dir + `/file2.txt","content":"two"}`,
+						},
+					},
+				},
+			},
+			{Text: "Both files created."},
+		},
+	}
+	a := New(cfg, mc, r)
+	events := collectEvents(a.Run(context.Background(), "create two files"))
+
+	// Count tool execution events
+	toolStarts := 0
+	toolDoneOrErr := 0
+	for _, e := range events {
 		switch e.Type {
 		case "tool_start":
-			events = append(events, "tool="+e.Tool)
-		case "tool_done":
-			events = append(events, "tool="+e.Tool)
-		case "tool_error":
-			events = append(events, "tool="+e.Tool+" err="+e.Err.Error())
-		case "turn_done":
-		case "error":
-			events = append(events, "err="+e.Err.Error())
+			toolStarts++
+		case "tool_done", "tool_error":
+			toolDoneOrErr++
 		}
 	}
-
-	has := func(s string) bool {
-		for _, e := range events {
-			if e == s {
-				return true
-			}
-		}
-		return false
+	if toolStarts != 2 {
+		t.Errorf("expected 2 tool_start events, got %d", toolStarts)
 	}
-
-	if !has("tool_start") {
-		t.Errorf("expected tool_start event, got: %v", events)
-	}
-	if !has("tool_done") {
-		t.Errorf("expected tool_done event, got: %v", events)
-	}
-	if !has("turn_done") {
-		t.Errorf("expected turn_done, got: %v", events)
+	if toolDoneOrErr != 2 {
+		t.Errorf("expected 2 tool_done/error events, got %d", toolDoneOrErr)
 	}
 }
 
-func TestAgent_Run_LLM_ErrorEvent(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping in short mode")
-	}
+// ------------------------------------------------------------------
+//  Event ordering: tool_start before tool_done
+// ------------------------------------------------------------------
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Send an error event via parseSSE
-		w.Write([]byte("data: {\"bad_json\":}\n"))
-		w.Write([]byte("data: [DONE]\n"))
-	}))
-	defer srv.Close()
-
-	cfg := newTestConfig()
-	r := tools.NewRegistry()
-	c := llm.New("", srv.URL, "test", 5*time.Second)
-	agent := New(cfg, c, r)
-
-	ch := agent.Run(context.Background(), "test")
-	for range ch {
-		// Drain - no panic
-	}
-}
-
-func TestAgent_Run_ToolError(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping in short mode")
-	}
-
+func TestAgent_Run_EventOrder(t *testing.T) {
 	dir := t.TempDir()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"t1\",\"function\":{\"name\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"false\\\"}\"}}]}}]}\n\n"))
-		w.Write([]byte("data: [DONE]\n\n"))
-	}))
-	defer srv.Close()
 
 	cfg := newTestConfig()
 	cfg.WorkDir = dir
-	cfg.MaxTurns = 5
-	r := tools.NewRegistry()
-	c := llm.New("", srv.URL, "test", 5*time.Second)
-	agent := New(cfg, c, r)
+	cfg.Mode = config.ModeYolo
 
-	var toolError bool
-	ch := agent.Run(context.Background(), "test")
-	for e := range ch {
-		if e.Type == "tool_error" {
-			toolError = true
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:   "t1",
+						Type: "function",
+						Function: llm.ToolCallFunction{
+							Name:      "write",
+							Arguments: `{"path":"` + dir + `/order.txt","content":"test"}`,
+						},
+					},
+				},
+			},
+			{Text: "done"},
+		},
+	}
+	a := New(cfg, mc, r)
+	events := collectEvents(a.Run(context.Background(), "test order"))
+
+	toolStartIdx := -1
+	toolDoneIdx := -1
+	for i, e := range events {
+		if e.Type == "tool_start" && toolStartIdx == -1 {
+			toolStartIdx = i
+		}
+		if e.Type == "tool_done" && toolDoneIdx == -1 {
+			toolDoneIdx = i
 		}
 	}
-
-	if !toolError {
-		t.Error("expected tool_error event for failed command")
+	if toolStartIdx == -1 {
+		t.Fatal("no tool_start event found")
+	}
+	if toolDoneIdx == -1 {
+		t.Fatal("no tool_done event found")
+	}
+	if toolDoneIdx <= toolStartIdx {
+		t.Errorf("tool_done (idx %d) should come after tool_start (idx %d)", toolDoneIdx, toolStartIdx)
 	}
 }
+
+// ------------------------------------------------------------------
+//  Helper
+// ------------------------------------------------------------------
+
+func eventTypeSlice(events []Event) []string {
+	types := make([]string, len(events))
+	for i, e := range events {
+		types[i] = e.Type
+	}
+	return types
+}
+
+// mockError for TestAgent_Run_LLMStreamError
+type mockError struct{ msg string }
+
+func (e *mockError) Error() string { return e.msg }

@@ -84,6 +84,12 @@ type Usage struct {
 
 // --- Cliente ---
 
+// Streamer é a interface para envio de requisições com streaming.
+// Permite mockar o cliente LLM em testes.
+type Streamer interface {
+	Stream(ctx context.Context, messages []Message, tools []ToolDef) (<-chan StreamEvent, error)
+}
+
 // Client é um cliente HTTP para APIs OpenAI-compatible.
 type Client struct {
 	apiKey  string

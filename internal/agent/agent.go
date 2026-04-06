@@ -27,14 +27,14 @@ type Event struct {
 // Agent executa o loop de raciocínio do Devon.
 type Agent struct {
 	cfg      *config.Config
-	client   *llm.Client
+	client   llm.Streamer
 	registry *tools.Registry
 	checker  *permissions.Checker
 	history  []llm.Message
 }
 
 // New cria um novo Agent com todas as ferramentas nativas registradas.
-func New(cfg *config.Config, client *llm.Client, registry *tools.Registry) *Agent {
+func New(cfg *config.Config, client llm.Streamer, registry *tools.Registry) *Agent {
 	tools.RegisterBuiltin(registry, cfg.WorkDir, cfg.Timeout)
 
 	blocklist := permissions.DefaultBlocklist
