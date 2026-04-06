@@ -37,7 +37,7 @@ type Agent struct {
 func New(cfg *config.Config, client *llm.Client, registry *tools.Registry) *Agent {
 	tools.RegisterBuiltin(registry, cfg.WorkDir, cfg.Timeout)
 
-	blocklist, _ := permissions.DefaultBlocklist() // ignora erro — fallback para lista embutida
+	blocklist := permissions.DefaultBlocklist
 
 	a := &Agent{
 		cfg:      cfg,
