@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ElioNeto/devon/internal/agent/prompts"
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/permissions"
@@ -203,29 +204,14 @@ func (a *Agent) executeToolWithPermission(ctx context.Context, tc llm.ToolCall, 
 }
 
 func (a *Agent) buildSystemMessages() []llm.Message {
-	system := strings.Builder{}
-	system.WriteString("Você é Devon, um agente de engenharia de software. ")
-	system.WriteString("Você tem acesso a ferramentas para ler/escrever arquivos, executar comandos e navegar em código. ")
-	system.WriteString("Seu objetivo é completar a tarefa solicitada e entregar o artefato pedido. ")
-	system.WriteString("Trabalhe de forma incremental: leia antes de escrever, execute testes após mudanças, ")
-	system.WriteString("prefira edições cirúrgicas a rewrites completos. ")
-	system.WriteString("Testes passando é um passo intermediário, não o objetivo final. ")
-	system.WriteString("Ao finalizar, liste os arquivos criados ou modificados. ")
-	system.WriteString("Seja direto: aja, não apenas planeje. ")
-	system.WriteString("Se o usuário enviar uma mensagem conversacional ou pergunta geral, responda de forma direta e natural sem usar ferramentas. Use ferramentas apenas quando o usuário solicitar explicitamente uma ação no projeto.")
-
-	projectCtx := BuildProjectContext(a.cfg.WorkDir)
-	if projectCtx != "" {
-		system.WriteString("\n\n")
-		system.WriteString(projectCtx)
-	}
+	system := prompts.GetSystemPrompt()
 
 	if a.cfg.ContextDoc != "" {
-		system.WriteString("\n\n# Contexto do Projeto (DEVON.md)\n")
-		system.WriteString(a.cfg.ContextDoc)
+		system += "\n\n# Contexto do Projeto (DEVON.md)\n"
+		system += a.cfg.ContextDoc
 	}
 
 	return []llm.Message{
-		{Role: llm.RoleSystem, Content: llm.TextContent(system.String())},
+		{Role: llm.RoleSystem, Content: llm.TextContent(system)},
 	}
 }

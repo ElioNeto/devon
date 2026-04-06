@@ -72,13 +72,13 @@ func TestAgent_BuildSystemMessages_WithContextDoc(t *testing.T) {
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(msgs))
 	}
-	if msgs[0].Content == "" {
-		t.Error("system message is empty")
+	if msgs[0].Content == nil {
+		t.Error("system message is nil")
 	}
 	if msgs[0].Role != llm.RoleSystem {
 		t.Errorf("role = %q, want %q", msgs[0].Role, llm.RoleSystem)
 	}
-	if msgs[0].Content == "" || msgs[0].Content[0] == 0 {
+	if msgs[0].Content == nil || *msgs[0].Content == "" {
 		t.Error("system message content missing")
 	}
 }
@@ -446,7 +446,7 @@ func TestAgent_Run_UserMessageInHistory(t *testing.T) {
 	if a.history[len(a.history)-2].Role != llm.RoleUser {
 		t.Errorf("expected user role, got %q", a.history[len(a.history)-2].Role)
 	}
-	if a.history[len(a.history)-2].Content != "my question" {
+	if a.history[len(a.history)-2].Content == nil || *a.history[len(a.history)-2].Content != "my question" {
 		t.Errorf("history user content = %q, want %q", a.history[len(a.history)-2].Content, "my question")
 	}
 }

@@ -239,14 +239,18 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.execCmdMenuAction()
 			return m, nil
 		}
-		if strings.HasPrefix(m.input, "/") {
-			return m.handleSlashCommand(m.input)
-		}
-		if m.leftFocus {
+		if m.leftFocus && m.input == "" {
 			m.selectLeftItem()
 			return m, nil
 		}
+		if strings.HasPrefix(m.input, "/") && !strings.Contains(m.input, "\n") {
+			return m.handleSlashCommand(m.input)
+		}
 		return m.sendInput()
+
+	case "shift+enter":
+		m.newLine()
+		return m, nil
 
 	case KeyExpand: // Ctrl+E — toggle expanded
 		m.expandedView = !m.expandedView
