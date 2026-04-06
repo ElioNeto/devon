@@ -545,18 +545,18 @@ func renderViewConfig(m *appModel, width, height int) string {
 		lines = append(lines, s.configKey.Render(fmt.Sprintf("  %-18s", k))+s.configVal.Render(v))
 	}
 
-	kv("session", m.sessionID())
-	kv("model", m.cfg.Model)
-	kv("mode", m.cfg.Mode.String())
-	kv("work dir", truncate(m.cfg.WorkDir, width-22))
+	kv("sessão", m.sessionID())
+	kv("modelo", m.cfg.Model)
+	kv("modo", m.cfg.Mode.String())
+	kv("dir trabalho", truncate(m.cfg.WorkDir, width-22))
 	lines = append(lines, "")
 
 	if m.tracker != nil {
-		kv("input tokens", formatShort(m.tracker.TotalInputTokens))
-		kv("output tokens", formatShort(m.tracker.TotalOutputTokens))
+		kv("tokens entrada", formatShort(m.tracker.TotalInputTokens))
+		kv("tokens saída", formatShort(m.tracker.TotalOutputTokens))
 		kv("total tokens", formatShort(m.tracker.TotalInputTokens+m.tracker.TotalOutputTokens))
-		kv("cost USD", fmt.Sprintf("$%.4f", m.tracker.TotalCostUSD))
-		kv("requests", fmt.Sprintf("%d", m.tracker.TotalRequests))
+		kv("custo USD", fmt.Sprintf("$%.4f", m.tracker.TotalCostUSD))
+		kv("requisições", fmt.Sprintf("%d", m.tracker.TotalRequests))
 	}
 	lines = append(lines, "")
 
