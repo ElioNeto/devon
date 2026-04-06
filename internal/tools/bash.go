@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -58,6 +59,7 @@ func (t *BashTool) Execute(ctx context.Context, params json.RawMessage) (string,
 
 	cmd := exec.CommandContext(ctx, "bash", "-c", p.Command) //nolint:gosec
 	cmd.Dir = t.Dir
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -72,6 +74,10 @@ func (t *BashTool) Execute(ctx context.Context, params json.RawMessage) (string,
 
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
+			// Mata todo o process group (shell + subprocessos)
+			if cmd.Process != nil {
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			}
 			return fmt.Sprintf("Comando excedeu o tempo limite apos %v: %s", timeout, out), fmt.Errorf("bash: comando excedeu o tempo limite: %v", timeout)
 		}
 		return out, fmt.Errorf("bash: erro de execucao: %w", err)
