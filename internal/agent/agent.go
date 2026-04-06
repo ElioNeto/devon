@@ -23,12 +23,17 @@ func isRateLimited(err error) bool {
 
 // Event é emitido pelo agente para a TUI durante o processamento.
 type Event struct {
-	Type string // "text" | "tool_start" | "tool_done" | "tool_error" | "rate_limited" | "turn_done" | "error"
+	Type string // "text" | "tool_start" | "tool_done" | "tool_error" | "rate_limited" | "turn_done" | "error" | "confirm_request"
 	Text string // fragmento de texto (streaming)
 	Tool string // nome da ferramenta
 	Args string // argumentos JSON da ferramenta
 	Result string // resultado da ferramenta
 	Err  error
+}
+
+// ConfirmReply is sent back from TUI when user responds to confirm_request.
+type ConfirmReply struct {
+	Level int // 0=no, 1=yes, 2=always
 }
 
 // Agent executa o loop de raciocínio do Devon.
@@ -38,6 +43,7 @@ type Agent struct {
 	registry *tools.Registry
 	checker  *permissions.Checker
 	history  []llm.Message
+	ReplyCh  chan ConfirmReply // receives user response to confirm_request
 }
 
 // New cria um novo Agent com todas as ferramentas nativas registradas.
@@ -137,7 +143,7 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 		for _, tc := range pendingTools {
 			ch <- Event{Type: "tool_start", Tool: tc.Function.Name, Args: tc.Function.Arguments}
 
-			result, toolErr := a.executeTool(ctx, tc)
+			result, toolErr := a.executeToolWithPermission(ctx, tc, ch)
 			if toolErr != nil {
 				ch <- Event{Type: "tool_error", Tool: tc.Function.Name, Err: toolErr}
 				result = fmt.Sprintf("error: %v", toolErr)
@@ -156,11 +162,35 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 	ch <- Event{Type: "error", Err: fmt.Errorf("agent: limite de %d turnos atingido", a.cfg.MaxTurns)}
 }
 
-func (a *Agent) executeTool(ctx context.Context, tc llm.ToolCall) (string, error) {
+func (a *Agent) executeToolWithPermission(ctx context.Context, tc llm.ToolCall, ch chan<- Event) (string, error) {
 	t, ok := a.registry.Get(tc.Function.Name)
 	if !ok {
 		return "", fmt.Errorf("ferramenta desconhecida: %q", tc.Function.Name)
 	}
+
+	blocked, needsConfirm := a.checker.Requires(t)
+	if blocked {
+		return fmt.Sprintf("ferramenta %q bloqueada pela blocklist", tc.Function.Name), fmt.Errorf("ferramenta bloqueada")
+	}
+
+	if needsConfirm {
+		a.ReplyCh = make(chan ConfirmReply, 1)
+		ch <- Event{Type: "confirm_request", Tool: tc.Function.Name, Args: tc.Function.Arguments}
+
+		select {
+		case reply := <-a.ReplyCh:
+			a.ReplyCh = nil
+			switch reply.Level {
+			case 0: // no
+				return fmt.Sprintf("ferramenta %q recusada pelo usuário", tc.Function.Name), fmt.Errorf("recusado pelo usuário")
+			case 2: // always
+				a.checker.Approve(tc.Function.Name)
+			}
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	}
+
 	return t.Execute(ctx, json.RawMessage(tc.Function.Arguments))
 }
 

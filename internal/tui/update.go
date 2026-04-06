@@ -32,6 +32,9 @@ func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.confirm.visible {
+			return m.handleConfirmKey(msg)
+		}
 		if m.showCmdMenu {
 			switch msg.String() {
 			case "esc", "!":
@@ -289,6 +292,46 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // ── Menu update ───────────────────────────────────────────────────────────────
 
+func (m *appModel) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.confirm.close()
+		return m, nil
+	case "up":
+		if m.confirm.cursor > 0 {
+			m.confirm.cursor--
+		}
+		return m, nil
+	case "down":
+		if m.confirm.cursor < len(m.confirm.choices)-1 {
+			m.confirm.cursor++
+		}
+		return m, nil
+	case "y":
+		m.agent.ReplyCh <- ConfirmReply{Level: 1}
+		m.confirm.close()
+		return m, nil
+	case "n":
+		m.agent.ReplyCh <- ConfirmReply{Level: 0}
+		m.confirm.close()
+		return m, nil
+	case "a":
+		m.agent.ReplyCh <- ConfirmReply{Level: 2}
+		m.confirm.close()
+		return m, nil
+	case "enter":
+		// Map cursor position to reply level: 0=yes, 1=no, 2=always
+		level := m.confirm.cursor
+		if level > 2 {
+			level = 1
+		}
+		m.agent.ReplyCh <- ConfirmReply{Level: level}
+		m.confirm.close()
+		return m, nil
+	}
+	return m, nil
+}
+
 func (m *appModel) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	actions := contextMenuFor(m)
 	switch msg.String() {
@@ -372,6 +415,10 @@ func (m appModel) View() string {
 	if m.showCmdMenu {
 		cmdView := renderCmdMenuOverlay(&m, m.width)
 		view = overlayCenter(view, cmdView, m.width, m.height)
+	}
+	if m.confirm.visible {
+		confirmView := renderConfirmOverlay(&m, m.width)
+		view = overlayCenter(view, confirmView, m.width, m.height)
 	}
 
 	return view

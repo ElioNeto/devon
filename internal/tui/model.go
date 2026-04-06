@@ -92,6 +92,9 @@ type appModel struct {
 	cmdMenuCursor int
 	cmdMenuFilter string
 
+	// Confirmation prompt (inline permission check)
+	confirm confirmState
+
 	// Input
 	input     string
 	cursor    int

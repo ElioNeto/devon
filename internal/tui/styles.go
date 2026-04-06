@@ -109,6 +109,12 @@ type uiStyles struct {
 	helpStyle lipgloss.Style
 	keyStyle  lipgloss.Style
 	badge     lipgloss.Style
+
+	// Confirm badges
+	badgeTool    lipgloss.Style
+	badgeRead    lipgloss.Style
+	badgeWrite   lipgloss.Style
+	badgeExecute lipgloss.Style
 }
 
 func newUIStyles() uiStyles {
@@ -218,6 +224,19 @@ func newUIStyles() uiStyles {
 	s.keyStyle  = lipgloss.NewStyle().Foreground(colorPrimary).Bold(true)
 	s.badge = lipgloss.NewStyle().
 		Foreground(colorBg).Background(colorPrimary).
+		PaddingLeft(1).PaddingRight(1)
+
+	// ── Confirm badges
+	s.badgeTool = lipgloss.NewStyle().
+		Foreground(colorBg).Background(colorPrimary).
+		PaddingLeft(1).PaddingRight(1)
+	s.badgeRead = lipgloss.NewStyle().
+		Foreground(colorMuted)
+	s.badgeWrite = lipgloss.NewStyle().
+		Foreground(colorBg).Background(colorYellow).
+		PaddingLeft(1).PaddingRight(1)
+	s.badgeExecute = lipgloss.NewStyle().
+		Foreground(colorBg).Background(colorRed).
 		PaddingLeft(1).PaddingRight(1)
 
 	return s

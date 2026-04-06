@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ElioNeto/devon/internal/cost"
 	"github.com/ElioNeto/devon/internal/history"

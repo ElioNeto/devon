@@ -161,6 +161,14 @@ func (m *appModel) processAgentEvent(ev agent.Event) {
 	case "system":
 		m.messages = append(m.messages, chatMessage{Sender: "system", Content: ev.Text})
 		m.appendLog("agent", ev.Text, "")
+
+	case "confirm_request":
+		m.confirm.open(ConfirmRequest{
+			Tool:  ev.Tool,
+			Args:  ev.Args,
+			Level: ev.Tool, // placeholder; level is determined by agent
+		})
+		m.appendLog("warn", "Aguardando confirmação: "+ev.Tool, "")
 	}
 }
 
