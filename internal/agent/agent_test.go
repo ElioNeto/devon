@@ -447,7 +447,7 @@ func TestAgent_Run_UserMessageInHistory(t *testing.T) {
 		t.Errorf("expected user role, got %q", a.history[len(a.history)-2].Role)
 	}
 	if a.history[len(a.history)-2].Content == nil || *a.history[len(a.history)-2].Content != "my question" {
-		t.Errorf("history user content = %q, want %q", a.history[len(a.history)-2].Content, "my question")
+		t.Errorf("history user content = %q, want %q", *a.history[len(a.history)-2].Content, "my question")
 	}
 }
 

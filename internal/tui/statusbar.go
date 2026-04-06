@@ -26,6 +26,7 @@ func renderStatusBar(m *appModel, width int) string {
 		{"Tab", "focus"},
 		{"↑↓", "navigate"},
 		{"Enter", "select"},
+		{"Shift+Enter", "↵"},
 		{"!", "comandos"},
 	}
 	var parts []string
@@ -67,16 +68,72 @@ func renderModeBadge(m *appModel) string {
 // renderInputBar renderiza a barra de input.
 func renderInputBar(m *appModel, width int) string {
 	s := m.styles
-	var content string
 
 	if m.running {
-		content = m.spinner.View() + "  " + s.statusKey.Render("aguardando resposta...")
-	} else {
-		prompt := s.inputPrompt.Render("> ")
-		content = prompt + renderInputLine(m)
+		running := m.spinner.View() + "  " + s.statusKey.Render("aguardando resposta...")
+		return s.inputBar.Width(width - 2).Render(running)
 	}
 
-	return s.inputBar.Width(width - 2).Render(content)
+	if !strings.Contains(m.input, "\n") {
+		prompt := s.inputPrompt.Render("> ")
+		return s.inputBar.Width(width - 2).Render(prompt + renderInputLine(m))
+	}
+
+	// Multi-line input: stack rows vertically.
+	rows := strings.Split(m.input, "\n")
+	multilineRows := len(rows)
+	if multilineRows > 6 {
+		multilineRows = 6
+	}
+
+	var lines []string
+	for i := 0; i < multilineRows; i++ {
+		prefix := "> "
+		if i == 0 {
+			prefix = s.inputPrompt.Render(prefix)
+		} else {
+			prefix = s.inputPrompt.Render("  ")
+		}
+		lineContent := rows[i]
+		// Reconstruct cursor for this line if the cursor is on it.
+		lineStart := runeOffset(m.input, i)
+		lineEnd := lineStart + len([]rune(rows[i]))
+		isCursorLine := m.cursor >= lineStart && m.cursor <= lineEnd
+		if isCursorLine {
+			col := m.cursor - lineStart
+			lines = append(lines, prefix+renderInputLineWithCursor(lineContent, col, s))
+		} else {
+			lines = append(lines, prefix+lineContent)
+		}
+	}
+
+	m.multilineRows = multilineRows
+	return s.inputBar.Width(width - 2).Render(strings.Join(lines, "\n"))
+}
+
+// runeOffset returns the rune index where line `lineIdx` starts in `s`.
+func runeOffset(s string, lineIdx int) int {
+	ru := []rune(s)
+	lineStart := 0
+	for i := 0; i < len(ru) && lineIdx > 0; i++ {
+		if ru[i] == '\n' {
+			lineStart = i + 1
+			lineIdx--
+		}
+	}
+	return lineStart
+}
+
+// renderInputLineWithCursor renders a single line with the cursor highlighted.
+func renderInputLineWithCursor(line string, col int, s uiStyles) string {
+	ru := []rune(line)
+	if col >= len(ru) {
+		return line + s.cursorStyle.Render("▋")
+	}
+	before := string(ru[:col])
+	cur := s.cursorStyle.Render(string(ru[col]))
+	after := string(ru[col+1:])
+	return before + cur + after
 }
 
 func renderInputLine(m *appModel) string {

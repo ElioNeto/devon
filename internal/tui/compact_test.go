@@ -7,11 +7,13 @@ import (
 	"github.com/ElioNeto/devon/internal/llm"
 )
 
+func ptr(s string) *string { return &s }
+
 func TestCompactIfNeeded_NoCompactionNeeded(t *testing.T) {
 	msgs := make([]llm.Message, 11) // 1 system + 10 others
-	msgs[0] = llm.Message{Role: llm.RoleSystem, Content: "you are devon"}
+	msgs[0] = llm.Message{Role: llm.RoleSystem, Content: ptr("you are devon")}
 	for i := 1; i <= 10; i++ {
-		msgs[i] = llm.Message{Role: llm.RoleUser, Content: "msg"}
+		msgs[i] = llm.Message{Role: llm.RoleUser, Content: ptr("msg")}
 	}
 
 	result, compacted := compactIfNeeded(msgs, "qwen", 1000)
@@ -27,18 +29,18 @@ func TestCompactIfNeeded_NoCompactionNeeded(t *testing.T) {
 func TestCompactIfNeeded_CompactionActivates(t *testing.T) {
 	// Create enough content to exceed 80% of 32k limit (25600 tokens)
 	msgs := []llm.Message{
-		{Role: llm.RoleSystem, Content: "you are devon"},
+		{Role: llm.RoleSystem, Content: ptr("you are devon")},
 	}
 	// Each message of 800 chars = ~200 tokens. Need ~130+ messages for 25600 tokens
 	for i := 0; i < 150; i++ {
 		msgs = append(msgs, llm.Message{
 			Role:    llm.RoleUser,
-			Content: strings.Repeat("a", 800),
+			Content: ptr(strings.Repeat("a", 800)),
 		})
 	}
 	msgs = append(msgs, llm.Message{
 		Role:    llm.RoleAssistant,
-		Content: "last reply",
+		Content: ptr("last reply"),
 	})
 
 	used := estimateTokens(msgs)
@@ -51,7 +53,7 @@ func TestCompactIfNeeded_CompactionActivates(t *testing.T) {
 	if result[0].Role != llm.RoleSystem {
 		t.Error("system prompt not preserved as first message after compaction")
 	}
-	if result[0].Content != "you are devon" {
+	if *result[0].Content != "you are devon" {
 		t.Errorf("system prompt content changed after compaction")
 	}
 	// Should have fewer messages than before
@@ -62,7 +64,7 @@ func TestCompactIfNeeded_CompactionActivates(t *testing.T) {
 
 func TestEstimateTokens(t *testing.T) {
 	msgs := []llm.Message{
-		{Role: llm.RoleUser, Content: strings.Repeat("x", 400)},
+		{Role: llm.RoleUser, Content: ptr(strings.Repeat("x", 400))},
 	}
 
 	tokens := estimateTokens(msgs)

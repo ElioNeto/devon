@@ -308,15 +308,28 @@ func (m *appModel) deleteWord() {
 	}
 	ru := []rune(m.input)
 	pos := m.cursor
-	for pos > 0 && ru[pos-1] == ' ' {
+	for pos > 0 && (ru[pos-1] == ' ' || ru[pos-1] == '\n') {
 		pos--
 	}
-	for pos > 0 && ru[pos-1] != ' ' {
+	for pos > 0 && ru[pos-1] != ' ' && ru[pos-1] != '\n' {
 		pos--
 	}
 	ru = append(ru[:pos], ru[m.cursor:]...)
 	m.input = string(ru)
 	m.cursor = pos
+}
+
+// newLine inserts a newline at the current cursor position for multi-line input.
+func (m *appModel) newLine() {
+	ru := []rune(m.input)
+	if m.cursor >= len(ru) {
+		m.input += "\n"
+		m.cursor++
+	} else {
+		m.input = string(ru[:m.cursor]) + "\n" + string(ru[m.cursor:])
+		m.cursor++
+	}
+	m.multilineRows = strings.Count(m.input, "\n") + 1
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────

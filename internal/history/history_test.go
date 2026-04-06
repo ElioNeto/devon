@@ -140,7 +140,7 @@ func TestSaveAndLoadSession(t *testing.T) {
 		t.Errorf("expected 2 messages, got %d", len(loaded.Messages))
 	}
 	if loaded.Messages[0].Content == nil || *loaded.Messages[0].Content != "hello" {
-		t.Errorf("expected first message 'hello', got %q", loaded.Messages[0].Content)
+		t.Errorf("expected first message 'hello', got %q", *loaded.Messages[0].Content)
 	}
 	if loaded.Usage.TotalTokens != 100 {
 		t.Errorf("expected 100 tokens, got %d", loaded.Usage.TotalTokens)
@@ -233,7 +233,7 @@ func TestSaveMessagesJSONL(t *testing.T) {
 		t.Fatalf("expected 1 message, got %d", len(messages))
 	}
 	if messages[0].Content == nil || *messages[0].Content != "hello world" {
-		t.Errorf("expected 'hello world', got %q", messages[0].Content)
+		t.Errorf("expected 'hello world', got %q", *messages[0].Content)
 	}
 }
 
