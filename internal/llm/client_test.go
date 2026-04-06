@@ -2,9 +2,13 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -234,4 +238,320 @@ func TestStream_NoAuthHeader(t *testing.T) {
 	if !received {
 		t.Error("request was not sent")
 	}
+}
+
+// ------------------------------------------------------------------
+//  Retry & backoff tests
+// ------------------------------------------------------------------
+
+func TestRetryDelay_ExponentialBackoff(t *testing.T) {
+	delay0 := retryDelay(nil, 0, 20*time.Millisecond, 200*time.Millisecond)
+	delay1 := retryDelay(nil, 1, 20*time.Millisecond, 200*time.Millisecond)
+	delay3 := retryDelay(nil, 3, 20*time.Millisecond, 200*time.Millisecond)
+
+	if delay0 < 20*time.Millisecond {
+		t.Errorf("delay[0] = %v, want >= 20ms", delay0)
+	}
+	if delay1 < delay0 {
+		t.Errorf("delay[1] = %v, want >= delay[0] = %v", delay1, delay0)
+	}
+	if delay3 > 200*time.Millisecond {
+		t.Errorf("delay[3] = %v, want <= 200ms cap", delay3)
+	}
+}
+
+func TestRetryDelay_RetryAfterHeader(t *testing.T) {
+	resp := &http.Response{Header: make(http.Header)}
+	resp.Header.Set("Retry-After", "10")
+
+	delay := retryDelay(resp, 0, 5*time.Second, 60*time.Second)
+
+	if delay < 10*time.Second {
+		t.Errorf("delay = %v, want >= 10s", delay)
+	}
+}
+
+func TestClient_Stream_429ThenSuccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping retry test in short mode")
+	}
+	var callCount atomic.Int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := callCount.Add(1)
+		if n <= 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte(`{"error":{"message":"rate limited"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n"))
+		w.Write([]byte("data: [DONE]\n"))
+	}))
+	defer srv.Close()
+
+	client := New("test-key", srv.URL, "test-model", 10*time.Second)
+
+	ch, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: "hi"}}, nil)
+	if err != nil {
+		t.Fatalf("Stream returned error: %v", err)
+	}
+
+	var texts []string
+	for ev := range ch {
+		if ev.Type == "text" {
+			texts = append(texts, ev.Text)
+		}
+	}
+	if len(texts) != 1 || texts[0] != "hello" {
+		t.Errorf("texts = %v, want [hello]", texts)
+	}
+	if n := callCount.Load(); n != 2 {
+		t.Errorf("callCount = %d, want 2", n)
+	}
+}
+
+func TestClient_Stream_Persistent429(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	var callCount atomic.Int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.Add(1)
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":{"message":"rate limited"}}`))
+	}))
+	defer srv.Close()
+
+	client := New("test-key", srv.URL, "test-model", 5*time.Second)
+
+	_, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: "hi"}}, nil)
+	if err == nil {
+		t.Fatal("expected error after persistent 429")
+	}
+	t.Logf("error (expected): %v", err)
+}
+
+func TestClient_Stream_503ThenSuccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping retry test in short mode")
+	}
+	var callCount atomic.Int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := callCount.Add(1)
+		if n <= 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(`{"error":{"message":"upstream error"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n"))
+		w.Write([]byte("data: [DONE]\n"))
+	}))
+	defer srv.Close()
+
+	client := New("test-key", srv.URL, "test-model", 10*time.Second)
+
+	ch, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: "hi"}}, nil)
+	if err != nil {
+		t.Fatalf("Stream returned error: %v", err)
+	}
+
+	var texts []string
+	for ev := range ch {
+		if ev.Type == "text" {
+			texts = append(texts, ev.Text)
+		}
+	}
+	if len(texts) != 1 || texts[0] != "ok" {
+		t.Errorf("texts = %v, want [ok]", texts)
+	}
+	if n := callCount.Load(); n != 2 {
+		t.Errorf("callCount = %d, want 2", n)
+	}
+}
+
+func TestClient_Stream_401ImmediateFail(t *testing.T) {
+	var callCount atomic.Int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.Add(1)
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":{"message":"invalid api key"}}`))
+	}))
+	defer srv.Close()
+
+	client := New("test-key", srv.URL, "test-model", 5*time.Second)
+
+	_, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: "hi"}}, nil)
+	if err == nil {
+		t.Fatal("expected error on 401")
+	}
+	if callCount.Load() != 1 {
+		t.Errorf("callCount = %d, want 1 (no retry on 401)", callCount.Load())
+	}
+	if !strings.Contains(err.Error(), "401") && !strings.Contains(err.Error(), "invalid api key") {
+		t.Errorf("error = %q, want 401 or 'invalid api key'", err.Error())
+	}
+}
+
+func TestExtractErrorMessage(t *testing.T) {
+	t.Run("metadata raw takes precedence", func(t *testing.T) {
+		body := []byte(`{"error":{"message":"outer","metadata":{"raw":"inner raw"}}}`)
+		got := extractErrorMessage(body)
+		if got != "inner raw" {
+			t.Errorf("got %q, want 'inner raw'", got)
+		}
+	})
+
+	t.Run("falls back to error.message", func(t *testing.T) {
+		body := []byte(`{"error":{"message":"rate limited by upstream"}}`)
+		got := extractErrorMessage(body)
+		if got != "rate limited by upstream" {
+			t.Errorf("got %q, want 'rate limited by upstream'", got)
+		}
+	})
+
+	t.Run("falls back to raw body string", func(t *testing.T) {
+		body := []byte(`plain error text`)
+		got := extractErrorMessage(body)
+		if got != "plain error text" {
+			t.Errorf("got %q, want 'plain error text'", got)
+		}
+	})
+
+	t.Run("empty body returns empty", func(t *testing.T) {
+		got := extractErrorMessage(nil)
+		if got != "" {
+			t.Errorf("got %q, want empty", got)
+		}
+	})
+}
+
+func TestIsRetryableStatus(t *testing.T) {
+	tests := []struct {
+		code int
+		want bool
+	}{
+		{400, false},
+		{401, false},
+		{403, false},
+		{404, false},
+		{429, true},
+		{500, true},
+		{502, true},
+		{503, true},
+		{504, true},
+	}
+	for _, tc := range tests {
+		got := isRetryableStatus(tc.code)
+		if got != tc.want {
+			t.Errorf("isRetryableStatus(%d) = %v, want %v", tc.code, got, tc.want)
+		}
+	}
+}
+
+func TestHTTPStatusError(t *testing.T) {
+	resp := &http.Response{StatusCode: 429}
+	err := &httpStatusError{
+		StatusCode: 429,
+		Message:    "rate limited",
+		Response:   resp,
+	}
+	s := err.Error()
+	if !strings.Contains(s, "429") {
+		t.Errorf("error string = %q, want '429'", s)
+	}
+	if !strings.Contains(s, "rate limited") {
+		t.Errorf("error string = %q, want 'rate limited'", s)
+	}
+}
+
+func TestClient_Stream_ContextCancelledDuringRetry(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	var callCount atomic.Int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.Add(1)
+		w.Header().Set("Retry-After", "10")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":{"message":"rate limited"}}`))
+	}))
+	defer srv.Close()
+
+	client := New("test-key", srv.URL, "test-model", 10*time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, err := client.Stream(ctx, []Message{{Role: RoleUser, Content: "hi"}}, nil)
+	if err == nil {
+		t.Fatal("expected error from context cancellation")
+	}
+}
+
+func TestClient_doRequest_BodyAndHeaders(t *testing.T) {
+	var capturedCT string
+	var capturedBody []byte
+	var capturedAuth string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedCT = r.Header.Get("Content-Type")
+		capturedAuth = r.Header.Get("Authorization")
+		capturedBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Write([]byte("data: [DONE]\n"))
+	}))
+	defer srv.Close()
+
+	client := New("my-key", srv.URL, "test", 5*time.Second)
+	body, _ := json.Marshal(ChatRequest{
+		Model:    "test",
+		Messages: []Message{{Role: RoleUser, Content: "hi"}},
+		Stream:   true,
+	})
+
+	resp, err := client.doRequest(context.Background(), body)
+	if err != nil {
+		t.Fatalf("doRequest error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if capturedCT != "application/json" {
+		t.Errorf("Content-Type = %q, want 'application/json'", capturedCT)
+	}
+	if capturedAuth != "Bearer my-key" {
+		t.Errorf("Authorization = %q, want 'Bearer my-key'", capturedAuth)
+	}
+	if !strings.Contains(string(capturedBody), "test") {
+		t.Errorf("body = %q, want to contain 'test'", string(capturedBody))
+	}
+}
+
+func TestClient_Stream_5xxMaxRetries(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	var callCount atomic.Int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.Add(1)
+		w.WriteHeader(http.StatusBadGateway)
+		fmt.Fprintf(w, `{"error":{"message":"bad gateway"}}`)
+	}))
+	defer srv.Close()
+
+	client := New("test-key", srv.URL, "test-model", 5*time.Second)
+
+	_, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: "hi"}}, nil)
+	if err == nil {
+		t.Fatal("expected error after max 5xx retries")
+	}
+	t.Logf("error (expected): %v after %d calls", err, callCount.Load())
 }

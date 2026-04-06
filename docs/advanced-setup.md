@@ -146,6 +146,31 @@ OPENAI_MODEL=gpt-4o
 
 ---
 
+## Configuração para OpenRouter :free
+
+Os modelos gratuitos do OpenRouter (`:free`) têm limites rígidos de RPM e podem retornar **429** (rate limit) com frequência. O Devon já faz retry automático com backoff exponencial, mas duas variáveis ajudam a evitar os rate limits antes que aconteçam:
+
+```bash
+# Pausa entre turnos do agente (evita rajadas rápidas)
+DEVON_TURN_DELAY=2s
+
+# Máximo de turnos por conversa (padrão: 50)
+DEVON_MAX_TURNS=30
+```
+
+- `DEVON_TURN_DELAY` — tempo de espera entre cada turno do agente. Use `2s` a `5s` para modelos `:free`. Aceita sufixos `s`, `m` (ex: `30s`, `1m`).
+- `DEVON_MAX_TURNS` — limite de iterações LLM por conversa. Reduzir evita consumo excessivo em loops longos.
+
+Isso somado ao retry automático (até 5 tentativas com backoff exponecial para 429/5xx) permite usar modelos gratuitos sem intervenção manual.
+
+---
+
+## BYOK (Bring Your Own Key)
+
+O Devon não armazena ou envia sua chave para nenhum serviço além do provider configurado. Todo tráfego vai direto do seu terminal para o endpoint da API (definido em `DEVON_BASE_URL`). Não há telemetria, tracking, ou intermediários.
+
+---
+
 ## Variáveis de Ambiente
 
 | Variável | Obrigatória | Descrição |

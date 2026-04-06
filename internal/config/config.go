@@ -56,9 +56,10 @@ type Config struct {
 	Model   string
 
 	// Comportamento
-	Mode     Mode
-	MaxTurns int
-	Timeout  time.Duration
+	Mode      Mode
+	MaxTurns  int
+	Timeout   time.Duration
+	TurnDelay time.Duration
 
 	// Projeto
 	WorkDir    string
@@ -74,12 +75,13 @@ func Load(envFile string) (*Config, error) {
 	}
 
 	cfg := &Config{
-		APIKey:   os.Getenv("DEVON_API_KEY"),
-		BaseURL:  getEnvDefault("DEVON_BASE_URL", "https://api.openai.com/v1"),
-		Model:    os.Getenv("DEVON_MODEL"),
-		Mode:     ParseMode(getEnvDefault("DEVON_MODE", "auto")),
-		MaxTurns: getEnvInt("DEVON_MAX_TURNS", 50),
-		Timeout:  time.Duration(getEnvInt("DEVON_TIMEOUT", 30)) * time.Second,
+		APIKey:    os.Getenv("DEVON_API_KEY"),
+		BaseURL:   getEnvDefault("DEVON_BASE_URL", "https://api.openai.com/v1"),
+		Model:     os.Getenv("DEVON_MODEL"),
+		Mode:      ParseMode(getEnvDefault("DEVON_MODE", "auto")),
+		MaxTurns:  getEnvInt("DEVON_MAX_TURNS", 50),
+		Timeout:   time.Duration(getEnvInt("DEVON_TIMEOUT", 30)) * time.Second,
+		TurnDelay: parseDuration(getEnvDefault("DEVON_TURN_DELAY", "0")),
 	}
 
 	// Diretório de trabalho
@@ -171,6 +173,13 @@ func getEnvInt(key string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+func parseDuration(s string) time.Duration {
+	if v, err := time.ParseDuration(s); err == nil {
+		return v
+	}
+	return 0
 }
 
 func isLocalURL(u string) bool {

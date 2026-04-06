@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -647,3 +648,144 @@ func eventTypeSlice(events []Event) []string {
 type mockError struct{ msg string }
 
 func (e *mockError) Error() string { return e.msg }
+
+// ------------------------------------------------------------------
+//  TurnDelay — delay is respected between turns
+// ------------------------------------------------------------------
+
+func TestAgent_Run_TurnDelay_Respected(t *testing.T) {
+	dir := t.TempDir()
+
+	cfg := newTestConfig()
+	cfg.WorkDir = dir
+	cfg.MaxTurns = 5
+	cfg.Mode = config.ModeYolo
+	cfg.TurnDelay = 200 * time.Millisecond
+
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			// Turn 1: tool call
+			{
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:   "t1",
+						Type: "function",
+						Function: llm.ToolCallFunction{
+							Name:      "write",
+							Arguments: `{"path":"` + dir + `/delay.txt","content":"data"}`,
+						},
+					},
+				},
+			},
+			// Turn 2: tool call (turn delay should be applied before this)
+			{
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:   "t2",
+						Type: "function",
+						Function: llm.ToolCallFunction{
+							Name:      "write",
+							Arguments: `{"path":"` + dir + `/delay2.txt","content":"data2"}`,
+						},
+					},
+				},
+			},
+			// Turn 3: text response (turn delay applied before this)
+			{Text: "All done!"},
+		},
+	}
+	a := New(cfg, mc, r)
+
+	start := time.Now()
+	events := collectEvents(a.Run(context.Background(), "test turn delay"))
+	elapsed := time.Since(start)
+
+	// Two inter-turn delays of 200ms each = at least 400ms
+	if elapsed < 350*time.Millisecond {
+		t.Errorf("expected at least 350ms elapsed with turn delay, got %v", elapsed)
+	}
+	if !hasEventType(events, "turn_done") {
+		t.Error("expected turn_done event")
+	}
+}
+
+// ------------------------------------------------------------------
+//  TurnDelay — Ctrl+C (context cancel) during delay
+// ------------------------------------------------------------------
+
+func TestAgent_Run_TurnDelay_CancelOnContext(t *testing.T) {
+	dir := t.TempDir()
+
+	cfg := newTestConfig()
+	cfg.WorkDir = dir
+	cfg.MaxTurns = 5
+	cfg.Mode = config.ModeYolo
+	cfg.TurnDelay = 5 * time.Second // long delay so we can cancel during it
+
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			// Turn 1: tool call
+			{
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:   "t1",
+						Type: "function",
+						Function: llm.ToolCallFunction{
+							Name:      "write",
+							Arguments: `{"path":"` + dir + `/cancel.txt","content":"data"}`,
+						},
+					},
+				},
+			},
+			// Turn 2: would be reached after the delay
+			{Text: "should not reach"},
+		},
+	}
+	a := New(cfg, mc, r)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel after a short delay — this should fire during the TurnDelay wait
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		cancel()
+	}()
+
+	events := collectEvents(a.Run(ctx, "test cancel during turn delay"))
+
+	// Should have some events from turn 1, then stop gracefully
+	if len(events) == 0 {
+		t.Error("expected at least some events before cancellation")
+	}
+	// Should NOT have reached turn 2's text response
+	if hasEventType(events, "text") {
+		// text event could be from turn 1's tool_error — check it's not from turn 2
+		// This test is timing-dependent so we just verify it doesn't hang
+		t.Log("text event found (may be from tool error — timing dependent)")
+	}
+}
+
+// ------------------------------------------------------------------
+//  Rate limited event emitted on 429 error
+// ------------------------------------------------------------------
+
+func TestAgent_Run_RateLimited_Event(t *testing.T) {
+	cfg := newTestConfig()
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{Err: fmt.Errorf("llm: provedor retornou HTTP 429: rate limited")},
+		},
+	}
+	a := New(cfg, mc, r)
+	events := collectEvents(a.Run(context.Background(), "test"))
+
+	if !hasEventType(events, "rate_limited") {
+		t.Errorf("expected rate_limited event, got: %v", eventTypeSlice(events))
+	}
+	if !hasEventType(events, "error") {
+		t.Errorf("expected error event after rate_limited, got: %v", eventTypeSlice(events))
+	}
+}

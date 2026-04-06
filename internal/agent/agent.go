@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/llm"
@@ -14,9 +15,15 @@ import (
 	"github.com/ElioNeto/devon/internal/tools"
 )
 
+// isRateLimited detects rate-limit errors from the LLM provider.
+func isRateLimited(err error) bool {
+	s := err.Error()
+	return strings.Contains(s, "429") || strings.Contains(s, "rate")
+}
+
 // Event é emitido pelo agente para a TUI durante o processamento.
 type Event struct {
-	Type string // "text" | "tool_start" | "tool_done" | "tool_error" | "turn_done" | "error"
+	Type string // "text" | "tool_start" | "tool_done" | "tool_error" | "rate_limited" | "turn_done" | "error"
 	Text string // fragmento de texto (streaming)
 	Tool string // nome da ferramenta
 	Args string // argumentos JSON da ferramenta
@@ -74,8 +81,20 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 			return
 		}
 
+		// Throttle between turns (skip on first turn)
+		if turn > 0 && a.cfg.TurnDelay > 0 {
+			select {
+			case <-time.After(a.cfg.TurnDelay):
+			case <-ctx.Done():
+				return
+			}
+		}
+
 		stream, err := a.client.Stream(ctx, a.history, a.registry.Defs())
 		if err != nil {
+			if isRateLimited(err) {
+				ch <- Event{Type: "rate_limited", Err: err}
+			}
 			ch <- Event{Type: "error", Err: fmt.Errorf("agent: stream: %w", err)}
 			return
 		}

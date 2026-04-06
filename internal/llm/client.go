@@ -7,9 +7,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -108,8 +110,24 @@ func New(apiKey, baseURL, model string, timeout time.Duration) *Client {
 	}
 }
 
+// --- Retry configuration ---
+
+const (
+	// maxRetries é o número máximo de tentativas de requisição HTTP.
+	maxRetries = 5
+	// baseDelay é o delay inicial para backoff exponencial (Alibaba upstream é lento).
+	baseDelay = 5 * time.Second
+	// maxDelay é o cap do backoff exponencial.
+	maxDelay = 60 * time.Second
+	// maxRetries5xx é o número máximo de retries para erros 5xx.
+	maxRetries5xx = 2
+	// maxBodyBytes é o limite de leitura do body para extrair mensagens de erro.
+	maxBodyBytes = 4096
+)
+
 // Stream envia uma requisição de chat e retorna um canal de StreamEvent.
 // O canal é fechado quando o stream termina ou um erro ocorre.
+// Em caso de 429 (rate limit) o client faz retry com backoff exponencial.
 func (c *Client) Stream(
 	ctx context.Context,
 	messages []Message,
@@ -125,6 +143,47 @@ func (c *Client) Stream(
 		return nil, fmt.Errorf("llm: nao foi possivel marshal a requisição: %w", err)
 	}
 
+	maxAttempts := maxRetries
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		resp, err := c.doRequest(ctx, body)
+		if err != nil {
+			// Se o tipo de erro já indica 4xx não-retryable (exceto 429), para imediatamente
+			var httpErr *httpStatusError
+			if errors.As(err, &httpErr) {
+				if !isRetryableStatus(httpErr.StatusCode) {
+					return nil, fmt.Errorf("llm: %w", err)
+				}
+				// Limita retries de 5xx
+				if httpErr.StatusCode >= 500 && attempt+1 >= maxRetries5xx {
+					return nil, fmt.Errorf("llm: máximo de %d tentativas atingido", maxRetries)
+				}
+			} else {
+				// Network error — retry all
+			}
+			if attempt+1 >= maxAttempts {
+				return nil, fmt.Errorf("llm: máximo de %d tentativas atingido", maxRetries)
+			}
+			delay := retryDelay(resp, attempt, baseDelay, maxDelay)
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			continue
+		}
+
+		ch := make(chan StreamEvent, 32)
+		go parseSSE(ctx, resp.Body, ch)
+		return ch, nil
+	}
+
+	return nil, fmt.Errorf("llm: máximo de %d tentativas atingido", maxRetries)
+}
+
+// doRequest cria e envia uma requisição HTTP para o endpoint de chat.
+// Retorna *httpStatusError para status >= 400 com o body capturado.
+func (c *Client) doRequest(ctx context.Context, body []byte) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodPost,
 		c.baseURL+"/chat/completions",
@@ -143,13 +202,86 @@ func (c *Client) Stream(
 		return nil, fmt.Errorf("llm: falha na requisição: %w", err)
 	}
 	if resp.StatusCode >= 400 {
-		resp.Body.Close()
-		return nil, fmt.Errorf("llm: provedor retornou HTTP %d", resp.StatusCode)
+		// Lê o body para extrair a mensagem de erro
+		return resp, readAndReturnHTTPErr(resp)
 	}
 
-	ch := make(chan StreamEvent, 32)
-	go parseSSE(ctx, resp.Body, ch)
-	return ch, nil
+	return resp, nil
+}
+
+// readAndReturnHTTPErr lê o body de uma resposta de erro e retorna um erro estruturado.
+func readAndReturnHTTPErr(resp *http.Response) error {
+	defer resp.Body.Close()
+	limitedReader := io.LimitReader(resp.Body, maxBodyBytes)
+	bodyBytes, _ := io.ReadAll(limitedReader)
+	msg := extractErrorMessage(bodyBytes)
+	return &httpStatusError{
+		StatusCode: resp.StatusCode,
+		Message:    msg,
+		Response:   resp,
+	}
+}
+
+// httpStatusError carrega o código HTTP e a mensagem de erro extraída do body.
+type httpStatusError struct {
+	StatusCode int
+	Message    string
+	Response   *http.Response
+}
+
+func (e *httpStatusError) Error() string {
+	return fmt.Sprintf("provedor retornou HTTP %d: %s", e.StatusCode, e.Message)
+}
+
+// isRetryableStatus indica se um status code deve ser retentado.
+// 429 → retry (rate limit). 5xx → retry simples.
+// Outros 4xx (400, 401, 403, 404) → falha imediata.
+func isRetryableStatus(code int) bool {
+	return code == http.StatusTooManyRequests || code >= 500
+}
+
+// retryDelay calcula o tempo de espera antes da próxima tentativa.
+// Se o header Retry-After estiver presente (segundos inteiros), usa-o + 500ms.
+// Caso contrário, usa backoff exponencial com base em baseDelay.
+func retryDelay(resp *http.Response, attempt int, base, max time.Duration) time.Duration {
+	if resp != nil {
+		if ra := resp.Header.Get("Retry-After"); ra != "" {
+			if secs, err := strconv.Atoi(ra); err == nil && secs > 0 {
+				return time.Duration(secs)*time.Second + 500*time.Millisecond
+			}
+		}
+	}
+	// Backoff exponencial
+	delay := base * (1 << attempt)
+	if delay > max {
+		delay = max
+	}
+	return delay
+}
+
+// extractErrorMessage parseia o JSON de erro do OpenRouter.
+// Precedência: .error.metadata.raw > .error.message > body string.
+func extractErrorMessage(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	var errResp struct {
+		Error struct {
+			Message  string `json:"message"`
+			Metadata struct {
+				Raw string `json:"raw"`
+			} `json:"metadata"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &errResp); err == nil {
+		if errResp.Error.Metadata.Raw != "" {
+			return errResp.Error.Metadata.Raw
+		}
+		if errResp.Error.Message != "" {
+			return errResp.Error.Message
+		}
+	}
+	return string(body)
 }
 
 // parseSSE lê o stream SSE e emite eventos no canal.
