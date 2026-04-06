@@ -173,14 +173,14 @@ func buildLeftItems(m *appModel) []leftItem {
 			Section:    secTokens,
 		})
 		items = append(items, leftItem{
-			Label:      "cost estimate",
+			Label:      "estimativa de custo",
 			StatusKind: "system",
 			Section:    secTokens,
 			Meta:       fmt.Sprintf("$%.4f", m.tracker.TotalCostUSD),
 		})
 		if len(m.fileChanges) > 0 {
 			items = append(items, leftItem{
-				Label:      "files in context",
+				Label:      "arquivos no contexto",
 				StatusKind: "system",
 				Section:    secTokens,
 				Meta:       fmt.Sprintf("%d", len(m.fileChanges)),
@@ -561,7 +561,7 @@ func renderViewConfig(m *appModel, width, height int) string {
 	lines = append(lines, "")
 
 	if len(m.memoryFacts) > 0 {
-		lines = append(lines, s.itemSection.Render("──Memory──"))
+		lines = append(lines, s.itemSection.Render("──Memória──"))
 		for _, f := range m.memoryFacts {
 			lines = append(lines, s.configKey.Render(fmt.Sprintf("  [%s] %s: ", f.Category, f.Key))+
 				s.configVal.Render(truncate(f.Value, width-30)))
@@ -659,7 +659,7 @@ func renderHelp(m *appModel, width int) string {
 		left = append(left, s.keyStyle.Render(fmt.Sprintf("  %-18s", h.Keys))+s.helpStyle.Render(h.Action))
 	}
 	if len(hints) > half {
-		right = append(right, s.itemSection.Render("──More──"))
+		right = append(right, s.itemSection.Render("──Mais──"))
 		right = append(right, "")
 		for _, h := range hints[half:] {
 			right = append(right, s.keyStyle.Render(fmt.Sprintf("  %-18s", h.Keys))+s.helpStyle.Render(h.Action))

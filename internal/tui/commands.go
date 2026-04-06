@@ -35,7 +35,7 @@ func (m *appModel) sendInput() (tea.Model, tea.Cmd) {
 	m.running = true
 	m.currentTask = text
 	m.rightView = viewLogs
-	m.appendLog("agent", "Starting task: "+truncate(text, 50), "")
+	m.appendLog("agent", "Iniciando tarefa: "+truncate(text, 50), "")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
@@ -145,13 +145,13 @@ func (m *appModel) processAgentEvent(ev agent.Event) {
 			if tr.Name == ev.Tool && tr.Status == "running" {
 				m.toolRuns[i].Result = ev.Err.Error()
 				m.toolRuns[i].Status = "error"
-				m.appendLog("warn", ev.Tool+" failed", ev.Err.Error())
+				m.appendLog("warn", ev.Tool+" falhou", ev.Err.Error())
 				break
 			}
 		}
 
 	case "turn_done":
-		m.appendLog("ok", "tests passing", "")
+		m.appendLog("ok", "testes passando", "")
 		m.finalizeTurn()
 
 	case "error":
