@@ -1,3 +1,4 @@
+// Package tui renders and manages the confirmation overlay.
 package tui
 
 import (
@@ -13,15 +14,6 @@ type ConfirmRequest struct {
 	Args  string
 	Level string // "read" | "write" | "execute"
 }
-
-// ConfirmReply represents the user's response to a confirmation prompt.
-type ConfirmReply int
-
-const (
-	ConfirmNo ConfirmReply = iota
-	ConfirmYes
-	ConfirmAlways
-)
 
 // confirmState tracks the overlay state.
 type confirmState struct {

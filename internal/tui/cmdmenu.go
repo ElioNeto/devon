@@ -21,6 +21,18 @@ var cmdMenuActions = []cmdMenuAction{
 	{"Nova sessão [Ctrl+K]", newSessionAction},
 	{"Novo workspace", nextFreeWorkspaceAction},
 	{"Ver uso de tokens", viewTokensAction},
+	{"Histórico de sessões [/history]", func(m *appModel) {
+		m.handleSlashCommand("/history")
+		m.showCmdMenu = false
+	}},
+	{"Carregar sessão... [/load]", func(m *appModel) {
+		m.input = "/load "
+		m.cursor = len([]rune(m.input))
+		m.showCmdMenu = false
+	}},
+	{"Limpar chat [/clear]", func(m *appModel) {
+		m.handleSlashCommand("/clear")
+	}},
 }
 
 func (m *appModel) toggleCmdMenu() {

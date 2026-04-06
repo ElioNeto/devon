@@ -96,6 +96,14 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 			}
 		}
 
+		// Auto-compact context if approaching token limit
+		used := estimateTokens(a.history)
+		if compacted, ok := compactIfNeeded(a.history, a.cfg.Model, used); ok && len(compacted) < len(a.history) {
+			removed := len(a.history) - len(compacted)
+			a.history = compacted
+			ch <- Event{Type: "system", Text: fmt.Sprintf("Contexto compactado: removidas %d mensagens antigas", removed)}
+		}
+
 		stream, err := a.client.Stream(ctx, a.history, a.registry.Defs())
 		if err != nil {
 			if isRateLimited(err) {
@@ -204,6 +212,12 @@ func (a *Agent) buildSystemMessages() []llm.Message {
 	system.WriteString("Testes passando é um passo intermediário, não o objetivo final. ")
 	system.WriteString("Ao finalizar, liste os arquivos criados ou modificados. ")
 	system.WriteString("Seja direto: aja, não apenas planeje.")
+
+	projectCtx := BuildProjectContext(a.cfg.WorkDir)
+	if projectCtx != "" {
+		system.WriteString("\n\n")
+		system.WriteString(projectCtx)
+	}
 
 	if a.cfg.ContextDoc != "" {
 		system.WriteString("\n\n# Contexto do Projeto (DEVON.md)\n")

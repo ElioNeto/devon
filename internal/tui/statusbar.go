@@ -37,7 +37,7 @@ func renderStatusBar(m *appModel, width int) string {
 	}
 	leftStr := strings.Join(parts, "")
 
-	rightStr := s.statusVal.Render("devon ") + s.keyStyle.Render("v"+appVersion)
+	rightStr := buildStatusRight(m)
 
 	leftW := lipgloss.Width(leftStr)
 	rightW := lipgloss.Width(rightStr)
@@ -92,6 +92,45 @@ func renderInputLine(m *appModel) string {
 	cur := s.cursorStyle.Render(string(ru[m.cursor]))
 	after := string(ru[m.cursor+1:])
 	return before + cur + after
+}
+
+// buildStatusRight returns the right side of the status bar: model, tokens, cost, session.
+func buildStatusRight(m *appModel) string {
+	s := m.styles
+
+	model := s.keyStyle.Render("model: ") + s.statusVal.Render(m.cfg.Model)
+
+	if m.tracker == nil {
+		return model
+	}
+
+	totalTokens := m.tracker.TotalInputTokens + m.tracker.TotalOutputTokens
+	if totalTokens == 0 {
+		return model
+	}
+
+	tokensStr := s.keyStyle.Render("tokens: ") + s.statusVal.Render(fmt.Sprint(totalTokens))
+
+	var costStr string
+	if strings.HasSuffix(strings.ToLower(m.cfg.Model), ":free") || m.tracker.TotalCostUSD == 0 {
+		costStr = s.keyStyle.Render("custo: ") + s.statusVal.Render("grátis")
+	} else {
+		costStr = s.keyStyle.Render("custo: ") + s.statusVal.Render(cost.FormatCost(m.tracker.TotalCostUSD))
+	}
+
+	sep := s.statusSep.Render("  ")
+
+	right := model + sep + tokensStr + sep + costStr
+
+	if m.session != nil && m.session.ID != "" {
+		id := m.session.ID
+		if len(id) > 15 {
+			id = id[len(id)-15:]
+		}
+		right += sep + s.keyStyle.Render("session: ") + s.statusVal.Render(id)
+	}
+
+	return right
 }
 
 // renderCostBar renderiza a barra de custo/progresso (usada em renderStatusBar modo verboso).

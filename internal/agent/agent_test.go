@@ -470,7 +470,8 @@ func TestAgent_ExecuteTool_UnknownTool(t *testing.T) {
 		},
 	}
 
-	_, err := a.executeTool(context.Background(), tc)
+	ch := make(chan Event, 1)
+	_, err := a.executeToolWithPermission(context.Background(), tc, ch)
 	if err == nil {
 		t.Fatal("expected error for unknown tool")
 	}

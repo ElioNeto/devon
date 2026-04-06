@@ -2,9 +2,13 @@
 package tui
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/ElioNeto/devon/internal/agent"
 	"github.com/ElioNeto/devon/internal/cost"
 	"github.com/ElioNeto/devon/internal/history"
+	"github.com/ElioNeto/devon/internal/llm"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
@@ -221,6 +225,9 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.execCmdMenuAction()
 			return m, nil
 		}
+		if strings.HasPrefix(m.input, "/") {
+			return m.handleSlashCommand(m.input)
+		}
 		if m.leftFocus {
 			m.selectLeftItem()
 			return m, nil
@@ -290,6 +297,90 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// ── Slash commands ──────────────────────────────────────────────────────────
+
+func (m *appModel) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
+	m.input = ""
+	m.cursor = 0
+
+	switch {
+	case cmd == "/history":
+		sessions, err := history.ListSessions(m.cfg.WorkDir)
+		if err != nil {
+			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Erro: " + err.Error()})
+			return m, nil
+		}
+		if len(sessions) == 0 {
+			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Nenhuma sessão salva."})
+			return m, nil
+		}
+		var sb strings.Builder
+		n := len(sessions)
+		if n > 10 {
+			n = 10
+		}
+		sb.WriteString("Sessões anteriores (mais recentes primeiro):\n")
+		for i := 0; i < n; i++ {
+			id := sessions[len(sessions)-1-i]
+			mark := ""
+			if m.session != nil && m.session.ID == id {
+				mark = " (atual)"
+			}
+			sb.WriteString(fmt.Sprintf("  %d. %s%s\n", i+1, id, mark))
+		}
+		sb.WriteString("Use /load <id> para retomar.")
+		m.messages = append(m.messages, chatMessage{Sender: "system", Content: sb.String()})
+
+	case strings.HasPrefix(cmd, "/load "):
+		id := strings.TrimSpace(strings.TrimPrefix(cmd, "/load"))
+		if ses, err := history.LoadSession(m.cfg.WorkDir, id); err == nil {
+			m.session = ses
+			m.messages = nil
+			for _, msg := range ses.Messages {
+				var sender string
+				switch msg.Role {
+				case llm.RoleUser:
+					sender = "user"
+				case llm.RoleAssistant:
+					sender = "devon"
+				case llm.RoleTool:
+					sender = "system"
+				default:
+					sender = "system"
+				}
+				m.messages = append(m.messages, chatMessage{Sender: sender, Content: msg.Content})
+			}
+			m.messages = append(m.messages, chatMessage{
+				Sender:  "system",
+				Content: fmt.Sprintf("Sessão %s carregada — %d mensagens.", id, len(ses.Messages)),
+			})
+		} else {
+			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Erro ao carregar sessão: " + err.Error()})
+		}
+
+	case cmd == "/clear":
+		m.messages = nil
+		m.toolRuns = nil
+		m.logEvents = nil
+		m.scroll = 0
+		var err error
+		m.session, err = history.CreateSession(m.cfg.WorkDir)
+		if err != nil {
+			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Erro: " + err.Error()})
+		} else {
+			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Chat limpo. Nova sessão iniciada."})
+		}
+
+	default:
+		m.messages = append(m.messages, chatMessage{
+			Sender:  "system",
+			Content: "Comando desconhecido. Disponíveis: /history, /load <id>, /clear",
+		})
+	}
+
+	return m, nil
+}
+
 // ── Menu update ───────────────────────────────────────────────────────────────
 
 func (m *appModel) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -308,15 +399,15 @@ func (m *appModel) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "y":
-		m.agent.ReplyCh <- ConfirmReply{Level: 1}
+		m.agent.ReplyCh <- agent.ConfirmReply{Level: 1}
 		m.confirm.close()
 		return m, nil
 	case "n":
-		m.agent.ReplyCh <- ConfirmReply{Level: 0}
+		m.agent.ReplyCh <- agent.ConfirmReply{Level: 0}
 		m.confirm.close()
 		return m, nil
 	case "a":
-		m.agent.ReplyCh <- ConfirmReply{Level: 2}
+		m.agent.ReplyCh <- agent.ConfirmReply{Level: 2}
 		m.confirm.close()
 		return m, nil
 	case "enter":
@@ -325,7 +416,7 @@ func (m *appModel) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if level > 2 {
 			level = 1
 		}
-		m.agent.ReplyCh <- ConfirmReply{Level: level}
+		m.agent.ReplyCh <- agent.ConfirmReply{Level: level}
 		m.confirm.close()
 		return m, nil
 	}
