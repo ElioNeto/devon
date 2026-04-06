@@ -106,8 +106,8 @@ func buildLeftItems(m *appModel) []leftItem {
 		}
 	}
 
-	// ══ Tools ═════════════════════════════════════════════════
-	items = append(items, leftItem{Label: "Tools", StatusKind: "header", Section: secFerramentas})
+	// ══ Ferramentas ══════════════════════════════════════════
+	items = append(items, leftItem{Label: "Ferramentas", StatusKind: "header", Section: secFerramentas})
 
 	if len(m.toolRuns) == 0 {
 		items = append(items, leftItem{Label: "  —", StatusKind: "system", Section: secFerramentas})
@@ -151,8 +151,8 @@ func buildLeftItems(m *appModel) []leftItem {
 		}
 	}
 
-	// ══ Memory / Context ══════════════════════════════════════
-	items = append(items, leftItem{Label: "Memory / Context", StatusKind: "header", Section: secTokens})
+	// ══ Memória / Contexto ════════════════════════════════════
+	items = append(items, leftItem{Label: "Memória / Contexto", StatusKind: "header", Section: secTokens})
 
 	if m.tracker != nil {
 		totalTok := m.tracker.TotalInputTokens + m.tracker.TotalOutputTokens
@@ -161,7 +161,7 @@ func buildLeftItems(m *appModel) []leftItem {
 			maxCtx = 32000
 		}
 		items = append(items, leftItem{
-			Label:      "context window",
+			Label:      "janela de contexto",
 			StatusKind: "system",
 			Section:    secTokens,
 			Meta:       fmt.Sprintf("%s / %s", formatShort(totalTok), formatShort(maxCtx)),
