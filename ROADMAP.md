@@ -18,6 +18,7 @@ Este documento define a ordem de implementação das issues abertas, priorizando
 | [#37](https://github.com/ElioNeto/devon/issues/37) | `data: [DONE]` tratado corretamente no `parseSSE` |
 | [#38](https://github.com/ElioNeto/devon/issues/38) | `DEVON_MAX_TURNS` configurável via env (padrão 50) |
 | [#39](https://github.com/ElioNeto/devon/issues/39) | System prompt orientado à entrega do artefato (`buildSystemMessages`) |
+| [#36](https://github.com/ElioNeto/devon/issues/36) | Retry com backoff exponencial em HTTP 429/5xx (`DEVON_TURN_DELAY`) |
 
 ---
 
@@ -41,30 +42,21 @@ Issues com código base implementado mas acceptance criteria incompletos.
 
 ## 🔨 Em andamento / Próximas
 
-### 1. [#36 — Retry em HTTP 429 (Rate Limit)](https://github.com/ElioNeto/devon/issues/36)
-> **Por quê agora:** Crítico para uso com modelos `:free` do OpenRouter — qualquer 429 mata o agente hoje.
-- Backoff exponencial com leitura de `Retry-After` em `client.go`
-- Retry em 5xx transitório
-- `DEVON_TURN_DELAY` entre turnos do loop
-- Evento `rate_limited` exibido na TUI
-
----
-
-### 2. [#27 — Bug `?` + filtragem no Command Palette](https://github.com/ElioNeto/devon/issues/27)
-> **Por quê agora:** Único bug de UX restante após os fixes anteriores.
+### 1. [#27 — Bug `?` + filtragem no Command Palette](https://github.com/ElioNeto/devon/issues/27)
+> **Por quê agora:** Único bug de UX restante. Fix cirúrgico em `update.go` e `cmdmenu.go`.
 - Tecla `?` não deve abrir help quando há texto no input
 - Filtragem por texto dentro do command palette (`!`)
 
 ---
 
-### 3. [#40 — UX de permissões: confirm inline + sumário de sessão](https://github.com/ElioNeto/devon/issues/40)
+### 2. [#40 — UX de permissões: confirm inline + sumário de sessão](https://github.com/ElioNeto/devon/issues/40)
 > **Por quê agora:** Finaliza a #6. Depende apenas do `AuditLogger` e `Checker` já implementados.
 - Prompt `[y] [n] [a]` inline na TUI com preview de conteúdo
 - Sumário de ações ao encerrar sessão (lido do `AuditLogger`)
 
 ---
 
-### 4. [#5 — Histórico de conversa e contexto de projeto](https://github.com/ElioNeto/devon/issues/5)
+### 3. [#5 — Histórico de conversa e contexto de projeto](https://github.com/ElioNeto/devon/issues/5)
 > **Por quê agora:** Base para sessões persistentes e recuperação após crash.
 - Persistência JSONL em `~/.devon/sessions/`
 - Comandos `/history /load /clear`
@@ -73,7 +65,7 @@ Issues com código base implementado mas acceptance criteria incompletos.
 
 ---
 
-### 5. [#4 — TUI multi-painel completa](https://github.com/ElioNeto/devon/issues/4)
+### 4. [#4 — TUI multi-painel completa](https://github.com/ElioNeto/devon/issues/4)
 > **Por quê agora:** Depende de #5 (histórico) para painéis integrados.
 - `views/` com painéis dinâmicos por seleção
 - `input.go` multi-linha com histórico
@@ -82,14 +74,14 @@ Issues com código base implementado mas acceptance criteria incompletos.
 
 ---
 
-### 6. [#15 — Testes de integração do loop do agente](https://github.com/ElioNeto/devon/issues/15)
+### 5. [#15 — Testes de integração do loop do agente](https://github.com/ElioNeto/devon/issues/15)
 > **Por quê agora:** Com ferramentas e permissões prontas, mocks cobrem o fluxo completo.
 - `MockClient` e `MockTool` reutilizáveis
 - Cenários: tool call simples, múltiplas calls, erro, cancelamento, MaxTurns
 
 ---
 
-### 7. [#8 — Redução de Consumo de Tokens](https://github.com/ElioNeto/devon/issues/8)
+### 6. [#8 — Redução de Consumo de Tokens](https://github.com/ElioNeto/devon/issues/8)
 > **Por quê agora:** Otimizar consumo para sessões longas após histórico pronto (#5).
 - Sliding window no histórico
 - Truncamento de resultados de tool calls
@@ -97,7 +89,7 @@ Issues com código base implementado mas acceptance criteria incompletos.
 
 ---
 
-### 8. [#19 — Sandbox de Execução](https://github.com/ElioNeto/devon/issues/19)
+### 7. [#19 — Sandbox de Execução](https://github.com/ElioNeto/devon/issues/19)
 > **Por quê agora:** Complementa #6 com blocklist absoluta e limite de processos.
 - Blocklist/allowlist configurável via `devon.toml`
 - Timeout específico por padrão de comando
@@ -105,7 +97,7 @@ Issues com código base implementado mas acceptance criteria incompletos.
 
 ---
 
-### 9. [#9 — Multi-Provider e Multi-Model](https://github.com/ElioNeto/devon/issues/9)
+### 8. [#9 — Multi-Provider e Multi-Model](https://github.com/ElioNeto/devon/issues/9)
 > **Por quê agora:** Com retry (#36) e sandbox (#19) prontos, perfis e fallback entre providers.
 - Perfis nomeados em `devon.toml`
 - Fallback automático em erros 429/5xx
@@ -113,7 +105,7 @@ Issues com código base implementado mas acceptance criteria incompletos.
 
 ---
 
-### 10. [#7 — Build, Distribuição e Instalação](https://github.com/ElioNeto/devon/issues/7)
+### 9. [#7 — Build, Distribuição e Instalação](https://github.com/ElioNeto/devon/issues/7)
 > **Por quê agora:** Com o core estável, formalizar o pipeline de release.
 - `Makefile` completo com cross-compile
 - GitHub Actions CI + Release via GoReleaser
@@ -121,14 +113,14 @@ Issues com código base implementado mas acceptance criteria incompletos.
 
 ---
 
-### 11. [#21 — CONTRIBUTING.md](https://github.com/ElioNeto/devon/issues/21)
+### 10. [#21 — CONTRIBUTING.md](https://github.com/ElioNeto/devon/issues/21)
 > **Por quê agora:** Com CI pronto (#7), documentar o fluxo de contribuição.
 - Setup local, convenções de código e commit
 - Fluxo de PR e estrutura de pacotes
 
 ---
 
-### 12. [#10 — Padronizar textos do terminal em pt-BR](https://github.com/ElioNeto/devon/issues/10)
+### 11. [#10 — Padronizar textos do terminal em pt-BR](https://github.com/ElioNeto/devon/issues/10)
 > **Por quê agora:** Varredura de strings após as features principais estarem implementadas.
 - CLI, TUI, mensagens de erro e tool calls em pt-BR
 - System prompt permanece em inglês
