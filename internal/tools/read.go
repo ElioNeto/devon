@@ -15,22 +15,34 @@ type ReadTool struct {
 }
 
 type readParams struct {
-	Path string `json:"file"`
+	Path   string `json:"file"`
+	Offset int    `json:"offset"`
+	Limit  int    `json:"limit"`
 }
 
-func (t *ReadTool) Name() string        { return "read" }
-func (t *ReadTool) Description() string { return "Le o conteudo de um arquivo e retorna como uma string com numeros de linha." }
+func (t *ReadTool) Name() string { return "read" }
+func (t *ReadTool) Description() string {
+	return "Lee o conteudo de um arquivo e retorna como uma string com numeros de linha. Suporta offset e limit para ler parcialmente arquivos grandes."
+}
 func (t *ReadTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
-		"type": "object",
-		"properties": {
-			"file": {
-				"type": "string",
-				"description": "Caminho do arquivo para ler, relativo ou absoluto"
-			}
-		},
-		"required": ["file"]
-	}`)
+        "type": "object",
+        "properties": {
+            "file": {
+                "type": "string",
+                "description": "Caminho do arquivo para ler, relativo ou absoluto"
+            },
+            "offset": {
+                "type": "integer",
+                "description": "Numero da linha inicial (1-based). Padrao: 1"
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Numero maximo de linhas a ler. Padrao: sem limite"
+            }
+        },
+        "required": ["file"]
+    }`)
 }
 
 func (t *ReadTool) Execute(ctx context.Context, params json.RawMessage) (string, error) {
@@ -64,9 +76,29 @@ func (t *ReadTool) Execute(ctx context.Context, params json.RawMessage) (string,
 	}
 
 	lines := strings.Split(text, "\n")
+
+	// Apply offset (1-based)
+	offset := p.Offset
+	if offset < 1 {
+		offset = 1
+	}
+	start := offset - 1
+	if start >= len(lines) {
+		return "Offset fora do intervalo do arquivo.", nil
+	}
+
+	sliced := lines[start:]
+
+	// Apply limit
+	if p.Limit > 0 && p.Limit < len(sliced) {
+		sliced = sliced[:p.Limit]
+	}
+
 	var sb strings.Builder
-	for i, line := range lines {
-		sb.WriteString(fmt.Sprintf("%4d\t%s\n", i+1, line))
+	// Mostra numeros de linha absolutos
+	for i, line := range sliced {
+		absNum := start + i + 1
+		sb.WriteString(fmt.Sprintf("%4d\t%s\n", absNum, line))
 	}
 	result := strings.TrimSuffix(sb.String(), "\n")
 	return sanitizeOutput(result), nil

@@ -43,15 +43,15 @@ func TestRegisterBuiltin_Count(t *testing.T) {
 	RegisterBuiltin(r, ".", 0)
 
 	defs := r.Defs()
-	if len(defs) < 5 {
-		t.Errorf("expected at least 5 builtin tools, got %d", len(defs))
+	if len(defs) < 7 {
+		t.Errorf("expected at least 7 builtin tools, got %d", len(defs))
 	}
 
 	names := make(map[string]bool)
 	for _, d := range defs {
 		names[d.Function.Name] = true
 	}
-	for _, want := range []string{"bash", "read", "write", "glob", "grep"} {
+	for _, want := range []string{"bash", "read", "write", "edit", "glob", "grep", "list_dir"} {
 		if !names[want] {
 			t.Errorf("builtin tool %q not registered", want)
 		}

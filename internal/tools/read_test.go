@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -129,5 +130,77 @@ func TestReadTool_Execute_BinaryFile(t *testing.T) {
 	}
 	if result != "[arquivo binario: image.png, 8 bytes]" {
 		t.Errorf("binary result = %q, expected binary message", result)
+	}
+}
+
+func TestReadTool_Execute_Offset(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("one\ntwo\nthree\nfour\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tool := &ReadTool{Dir: dir}
+	result, err := tool.Execute(context.Background(), json.RawMessage(`{"file":"test.txt","offset":3}`))
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !strings.Contains(result, "three") {
+		t.Errorf("expected line 3 (three) in output with offset 3, got: %q", result)
+	}
+}
+
+func TestReadTool_Execute_Limit(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("one\ntwo\nthree\nfour\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tool := &ReadTool{Dir: dir}
+	result, err := tool.Execute(context.Background(), json.RawMessage(`{"file":"test.txt","limit":2}`))
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if strings.Contains(result, "three") {
+		t.Errorf("expected only 2 lines (limit=2), but three was found in: %q", result)
+	}
+	if !strings.Contains(result, "one") {
+		t.Errorf("expected line one in output")
+	}
+	if !strings.Contains(result, "two") {
+		t.Errorf("expected line two in output")
+	}
+}
+
+func TestReadTool_Execute_OffsetAndLimit(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("one\ntwo\nthree\nfour\nfive\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tool := &ReadTool{Dir: dir}
+	result, err := tool.Execute(context.Background(), json.RawMessage(`{"file":"test.txt","offset":2,"limit":2}`))
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !strings.Contains(result, "two") {
+		t.Errorf("expected line two in output, got: %q", result)
+	}
+	if !strings.Contains(result, "three") {
+		t.Errorf("expected line three in output, got: %q", result)
+	}
+	if strings.Contains(result, "four") {
+		t.Errorf("expected only 2 lines but found four in: %q", result)
+	}
+}
+
+func TestReadTool_Execute_OffsetOutOfRange(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tool := &ReadTool{Dir: dir}
+	result, err := tool.Execute(context.Background(), json.RawMessage(`{"file":"test.txt","offset":100}`))
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !strings.Contains(result, "fora do intervalo") {
+		t.Errorf("expected out of range message, got: %q", result)
 	}
 }
