@@ -27,10 +27,13 @@ const (
 	RoleTool      Role = "tool"
 )
 
+// TextContent returns a pointer to s for use in Message.Content.
+func TextContent(s string) *string { return &s }
+
 // Message representa uma mensagem no histórico da conversa.
 type Message struct {
 	Role       Role        `json:"role"`
-	Content    string      `json:"content,omitempty"`
+	Content    *string     `json:"content,omitempty"` // nil → omitido no JSON
 	ToolCallID string      `json:"tool_call_id,omitempty"`
 	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
 }

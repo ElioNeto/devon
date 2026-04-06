@@ -249,13 +249,13 @@ func (m *appModel) agentMessages() []llm.Message {
 	for _, cm := range m.messages {
 		switch cm.Sender {
 		case "user":
-			msgs = append(msgs, llm.Message{Role: llm.RoleUser, Content: cm.Content})
+			msgs = append(msgs, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(cm.Content)})
 		case "devon":
 			role := llm.RoleAssistant
 			if cm.IsError {
 				role = llm.RoleTool
 			}
-			msgs = append(msgs, llm.Message{Role: role, Content: cm.Content})
+			msgs = append(msgs, llm.Message{Role: role, Content: llm.TextContent(cm.Content)})
 		}
 	}
 	return msgs

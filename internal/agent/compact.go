@@ -21,7 +21,9 @@ var contextLimits = map[string]int{
 func estimateTokens(messages []llm.Message) int {
 	total := 0
 	for _, msg := range messages {
-		total += len(msg.Content) / 4
+		if msg.Content != nil {
+			total += len(*msg.Content) / 4
+		}
 	}
 	return total
 }

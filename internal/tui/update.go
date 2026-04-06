@@ -362,7 +362,11 @@ func (m *appModel) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 				default:
 					sender = "system"
 				}
-				m.messages = append(m.messages, chatMessage{Sender: sender, Content: msg.Content})
+				content := ""
+				if msg.Content != nil {
+					content = *msg.Content
+				}
+				m.messages = append(m.messages, chatMessage{Sender: sender, Content: content})
 			}
 			m.messages = append(m.messages, chatMessage{
 				Sender:  "system",

@@ -123,8 +123,8 @@ func TestSaveAndLoadSession(t *testing.T) {
 	}
 
 	s.Messages = []llm.Message{
-		{Role: llm.RoleUser, Content: "hello"},
-		{Role: llm.RoleAssistant, Content: "hi"},
+		{Role: llm.RoleUser, Content: llm.TextContent("hello")},
+		{Role: llm.RoleAssistant, Content: llm.TextContent("hi")},
 	}
 	s.Usage = UsageSummary{TotalTokens: 100, Requests: 2}
 
@@ -139,7 +139,7 @@ func TestSaveAndLoadSession(t *testing.T) {
 	if len(loaded.Messages) != 2 {
 		t.Errorf("expected 2 messages, got %d", len(loaded.Messages))
 	}
-	if loaded.Messages[0].Content != "hello" {
+	if loaded.Messages[0].Content == nil || *loaded.Messages[0].Content != "hello" {
 		t.Errorf("expected first message 'hello', got %q", loaded.Messages[0].Content)
 	}
 	if loaded.Usage.TotalTokens != 100 {
@@ -198,7 +198,7 @@ func TestAppendMessage(t *testing.T) {
 	dir := sessionDirMust(t, workDir)
 	s := createSessionMust(t, dir)
 
-	msg := llm.Message{Role: llm.RoleUser, Content: "test"}
+	msg := llm.Message{Role: llm.RoleUser, Content: llm.TextContent("test")}
 	if err := AppendMessage(workDir, s.ID, msg, nil); err != nil {
 		t.Fatalf("AppendMessage() error: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestSaveMessagesJSONL(t *testing.T) {
 	workDir := "/test/jsonl"
 	_ = sessionDirMust(t, workDir)
 
-	msg := llm.Message{Role: llm.RoleUser, Content: "hello world"}
+	msg := llm.Message{Role: llm.RoleUser, Content: llm.TextContent("hello world")}
 	id := "20250101T120000Z"
 
 	if err := SaveMessagesJSONL(workDir, id, msg); err != nil {
@@ -232,7 +232,7 @@ func TestSaveMessagesJSONL(t *testing.T) {
 	if len(messages) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(messages))
 	}
-	if messages[0].Content != "hello world" {
+	if messages[0].Content == nil || *messages[0].Content != "hello world" {
 		t.Errorf("expected 'hello world', got %q", messages[0].Content)
 	}
 }

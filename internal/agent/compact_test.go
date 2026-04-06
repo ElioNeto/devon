@@ -9,9 +9,9 @@ import (
 
 func TestCompactIfNeeded_NoCompactionNeeded(t *testing.T) {
 	msgs := make([]llm.Message, 11) // 1 system + 10 others
-	msgs[0] = llm.Message{Role: llm.RoleSystem, Content: "you are devon"}
+	msgs[0] = llm.Message{Role: llm.RoleSystem, Content: llm.TextContent("you are devon")}
 	for i := 1; i <= 10; i++ {
-		msgs[i] = llm.Message{Role: llm.RoleUser, Content: "msg"}
+		msgs[i] = llm.Message{Role: llm.RoleUser, Content: llm.TextContent("msg")}
 	}
 
 	result, compacted := compactIfNeeded(msgs, "qwen", 1000)
@@ -26,17 +26,17 @@ func TestCompactIfNeeded_NoCompactionNeeded(t *testing.T) {
 
 func TestCompactIfNeeded_CompactionActivates(t *testing.T) {
 	msgs := []llm.Message{
-		{Role: llm.RoleSystem, Content: "you are devon"},
+		{Role: llm.RoleSystem, Content: llm.TextContent("you are devon")},
 	}
 	for i := 0; i < 150; i++ {
 		msgs = append(msgs, llm.Message{
 			Role:    llm.RoleUser,
-			Content: strings.Repeat("a", 800),
+			Content: llm.TextContent(strings.Repeat("a", 800)),
 		})
 	}
 	msgs = append(msgs, llm.Message{
 		Role:    llm.RoleAssistant,
-		Content: "last reply",
+		Content: llm.TextContent("last reply"),
 	})
 
 	used := estimateTokens(msgs)
@@ -48,7 +48,7 @@ func TestCompactIfNeeded_CompactionActivates(t *testing.T) {
 	if result[0].Role != llm.RoleSystem {
 		t.Error("system prompt not preserved as first message after compaction")
 	}
-	if result[0].Content != "you are devon" {
+	if result[0].Content == nil || *result[0].Content != "you are devon" {
 		t.Errorf("system prompt content changed after compaction")
 	}
 	if len(result) >= len(msgs) {
@@ -58,7 +58,7 @@ func TestCompactIfNeeded_CompactionActivates(t *testing.T) {
 
 func TestEstimateTokens(t *testing.T) {
 	msgs := []llm.Message{
-		{Role: llm.RoleUser, Content: strings.Repeat("x", 400)},
+		{Role: llm.RoleUser, Content: llm.TextContent(strings.Repeat("x", 400))},
 	}
 	tokens := estimateTokens(msgs)
 	if tokens != 100 {

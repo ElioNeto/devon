@@ -79,7 +79,7 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 
 	a.history = append(a.history, llm.Message{
 		Role:    llm.RoleUser,
-		Content: userInput,
+		Content: llm.TextContent(userInput),
 	})
 
 	for turn := 0; turn < a.cfg.MaxTurns; turn++ {
@@ -134,7 +134,7 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 		// Adiciona resposta do assistente ao histórico
 		assistantMsg := llm.Message{Role: llm.RoleAssistant}
 		if textBuf.Len() > 0 {
-			assistantMsg.Content = textBuf.String()
+			assistantMsg.Content = llm.TextContent(textBuf.String())
 		}
 		if len(pendingTools) > 0 {
 			assistantMsg.ToolCalls = pendingTools
@@ -162,7 +162,7 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 			a.history = append(a.history, llm.Message{
 				Role:       llm.RoleTool,
 				ToolCallID: tc.ID,
-				Content:    result,
+				Content:    llm.TextContent(result),
 			})
 		}
 	}
@@ -225,6 +225,6 @@ func (a *Agent) buildSystemMessages() []llm.Message {
 	}
 
 	return []llm.Message{
-		{Role: llm.RoleSystem, Content: system.String()},
+		{Role: llm.RoleSystem, Content: llm.TextContent(system.String())},
 	}
 }

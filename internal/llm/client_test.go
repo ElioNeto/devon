@@ -53,7 +53,7 @@ func TestStream_HTTP4xx(t *testing.T) {
 
 	c := New("key", srv.URL, "model", 5*time.Second)
 	_, err := c.Stream(context.Background(), []Message{
-		{Role: RoleUser, Content: "hi"},
+		{Role: RoleUser, Content: TextContent("hi")},
 	}, nil)
 	if err == nil {
 		t.Fatal("expected HTTP 4xx error")
@@ -78,7 +78,7 @@ func TestStream_ResponseOK(t *testing.T) {
 
 	c := New("key", srv.URL, "model", 5*time.Second)
 	ch, err := c.Stream(context.Background(), []Message{
-		{Role: RoleUser, Content: "hi"},
+		{Role: RoleUser, Content: TextContent("hi")},
 	}, nil)
 	if err != nil {
 		t.Fatalf("Stream() error: %v", err)
@@ -293,7 +293,7 @@ func TestClient_Stream_429ThenSuccess(t *testing.T) {
 
 	client := New("test-key", srv.URL, "test-model", 10*time.Second)
 
-	ch, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: "hi"}}, nil)
+	ch, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: TextContent("hi")}}, nil)
 	if err != nil {
 		t.Fatalf("Stream returned error: %v", err)
 	}
@@ -328,7 +328,7 @@ func TestClient_Stream_Persistent429(t *testing.T) {
 
 	client := New("test-key", srv.URL, "test-model", 5*time.Second)
 
-	_, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: "hi"}}, nil)
+	_, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: TextContent("hi")}}, nil)
 	if err == nil {
 		t.Fatal("expected error after persistent 429")
 	}
@@ -356,7 +356,7 @@ func TestClient_Stream_503ThenSuccess(t *testing.T) {
 
 	client := New("test-key", srv.URL, "test-model", 10*time.Second)
 
-	ch, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: "hi"}}, nil)
+	ch, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: TextContent("hi")}}, nil)
 	if err != nil {
 		t.Fatalf("Stream returned error: %v", err)
 	}
@@ -387,7 +387,7 @@ func TestClient_Stream_401ImmediateFail(t *testing.T) {
 
 	client := New("test-key", srv.URL, "test-model", 5*time.Second)
 
-	_, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: "hi"}}, nil)
+	_, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: TextContent("hi")}}, nil)
 	if err == nil {
 		t.Fatal("expected error on 401")
 	}
@@ -490,7 +490,7 @@ func TestClient_Stream_ContextCancelledDuringRetry(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	_, err := client.Stream(ctx, []Message{{Role: RoleUser, Content: "hi"}}, nil)
+	_, err := client.Stream(ctx, []Message{{Role: RoleUser, Content: TextContent("hi")}}, nil)
 	if err == nil {
 		t.Fatal("expected error from context cancellation")
 	}
@@ -513,7 +513,7 @@ func TestClient_doRequest_BodyAndHeaders(t *testing.T) {
 	client := New("my-key", srv.URL, "test", 5*time.Second)
 	body, _ := json.Marshal(ChatRequest{
 		Model:    "test",
-		Messages: []Message{{Role: RoleUser, Content: "hi"}},
+		Messages: []Message{{Role: RoleUser, Content: TextContent("hi")}},
 		Stream:   true,
 	})
 
@@ -549,7 +549,7 @@ func TestClient_Stream_5xxMaxRetries(t *testing.T) {
 
 	client := New("test-key", srv.URL, "test-model", 5*time.Second)
 
-	_, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: "hi"}}, nil)
+	_, err := client.Stream(context.Background(), []Message{{Role: RoleUser, Content: TextContent("hi")}}, nil)
 	if err == nil {
 		t.Fatal("expected error after max 5xx retries")
 	}
