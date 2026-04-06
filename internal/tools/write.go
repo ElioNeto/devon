@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/ElioNeto/devon/internal/permissions"
 )
 
 // WriteTool escreve conteudo em um arquivo, criando diretorios intermediarios.
@@ -19,6 +21,7 @@ type writeParams struct {
 }
 
 func (t *WriteTool) Name() string        { return "write" }
+func (t *WriteTool) Permission() permissions.PermissionLevel { return permissions.PermWrite }
 func (t *WriteTool) Description() string { return "Escreve conteudo em um arquivo. Cria diretorios intermediarios se necessario. Arquivos existentes serao sobrescritos." }
 func (t *WriteTool) Schema() json.RawMessage {
 	return json.RawMessage(`{

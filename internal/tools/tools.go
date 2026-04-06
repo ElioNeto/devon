@@ -9,6 +9,8 @@ import (
 	"github.com/ElioNeto/devon/internal/llm"
 )
 
+import "github.com/ElioNeto/devon/internal/permissions"
+
 // Tool é a interface que toda ferramenta do Devon deve implementar.
 type Tool interface {
 	// Name retorna o nome da ferramenta (usado pelo LLM).
@@ -20,6 +22,8 @@ type Tool interface {
 	// Execute executa a ferramenta com os parâmetros fornecidos.
 	// Retorna o resultado como string (enviado de volta ao LLM).
 	Execute(ctx context.Context, params json.RawMessage) (string, error)
+	// Permission retorna o nivel de permissao da ferramenta.
+	Permission() permissions.PermissionLevel
 }
 
 // Registry mantém o conjunto de ferramentas disponíveis.

@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+
+	"github.com/ElioNeto/devon/internal/permissions"
 )
 
 // GlobTool busca arquivos por padrao glob (inclui ** para recursivo).
@@ -21,6 +23,7 @@ type globParams struct {
 }
 
 func (t *GlobTool) Name() string        { return "glob" }
+func (t *GlobTool) Permission() permissions.PermissionLevel { return permissions.PermRead }
 func (t *GlobTool) Description() string { return "Busca arquivos por padrao glob. Suporta ** para busca recursiva em diretorios." }
 func (t *GlobTool) Schema() json.RawMessage {
 	return json.RawMessage(`{

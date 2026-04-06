@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ElioNeto/devon/internal/permissions"
 )
 
 // ReadTool lê o conteúdo de um arquivo do disco.
@@ -21,6 +23,7 @@ type readParams struct {
 }
 
 func (t *ReadTool) Name() string { return "read" }
+func (t *ReadTool) Permission() permissions.PermissionLevel { return permissions.PermRead }
 func (t *ReadTool) Description() string {
 	return "Lee o conteudo de um arquivo e retorna como uma string com numeros de linha. Suporta offset e limit para ler parcialmente arquivos grandes."
 }

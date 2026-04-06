@@ -10,6 +10,7 @@ import (
 
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/llm"
+	"github.com/ElioNeto/devon/internal/permissions"
 	"github.com/ElioNeto/devon/internal/tools"
 )
 
@@ -28,6 +29,7 @@ type Agent struct {
 	cfg      *config.Config
 	client   *llm.Client
 	registry *tools.Registry
+	checker  *permissions.Checker
 	history  []llm.Message
 }
 
@@ -35,10 +37,17 @@ type Agent struct {
 func New(cfg *config.Config, client *llm.Client, registry *tools.Registry) *Agent {
 	tools.RegisterBuiltin(registry, cfg.WorkDir, cfg.Timeout)
 
+	blocklist, _ := permissions.DefaultBlocklist() // ignora erro — fallback para lista embutida
+
 	a := &Agent{
 		cfg:      cfg,
 		client:   client,
 		registry: registry,
+		checker: &permissions.Checker{
+			Mode:      cfg.Mode,
+			Session:   make(map[string]bool),
+			Blocklist: blocklist,
+		},
 	}
 	a.history = a.buildSystemMessages()
 	return a

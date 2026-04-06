@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/ElioNeto/devon/internal/permissions"
 )
 
 // GrepTool busca conteudo por regex em arquivos.
@@ -26,6 +28,7 @@ type grepParams struct {
 }
 
 func (t *GrepTool) Name() string        { return "grep" }
+func (t *GrepTool) Permission() permissions.PermissionLevel { return permissions.PermRead }
 func (t *GrepTool) Description() string { return "Busca um padrao regex em arquivos. Retorna linhas com matches, arquivos e numeros de linha." }
 func (t *GrepTool) Schema() json.RawMessage {
 	return json.RawMessage(`{

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ElioNeto/devon/internal/permissions"
 )
 
 // BashTool executa comandos shell.
@@ -22,6 +24,7 @@ type bashParams struct {
 }
 
 func (t *BashTool) Name() string        { return "bash" }
+func (t *BashTool) Permission() permissions.PermissionLevel { return permissions.PermExecute }
 func (t *BashTool) Description() string { return "Executa um comando shell e retorna sua saida. Use para construir, testar, operacoes git ou qualquer outra tarefa de linha de comando." }
 func (t *BashTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
