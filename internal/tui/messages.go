@@ -186,6 +186,46 @@ func buildLeftItems(m *appModel) []leftItem {
 				Meta:       fmt.Sprintf("%d", len(m.fileChanges)),
 			})
 		}
+
+		// Token usage chart — sparkline
+		if len(m.tokenPerTurn) > 1 {
+			chartW := m.width/3 - 4
+			if chartW < 8 {
+				chartW = 8
+			}
+			sparkline := Sparkline(m.tokenPerTurn, chartW)
+			maxTok := 0
+			for _, v := range m.tokenPerTurn {
+				if v > maxTok {
+					maxTok = v
+				}
+			}
+			items = append(items, leftItem{
+				Label:      "tokens/turno " + sparkline,
+				StatusKind: "system",
+				Section:    secTokens,
+				Meta:       fmtShort(maxTok),
+			})
+			// Horizontal bars for last 5 turns
+			n := len(m.tokenPerTurn)
+			if n > 5 {
+				n = 5
+			}
+			start := len(m.tokenPerTurn) - n
+			for i := start; i < len(m.tokenPerTurn); i++ {
+				turnLabel := fmt.Sprintf("T%d", i+1)
+				barW := chartW - 8
+				if barW < 5 {
+					barW = 5
+				}
+				bar := HorzBar(turnLabel, m.tokenPerTurn[i], maxTok, barW, 4)
+				items = append(items, leftItem{
+					Label:      " " + bar,
+					StatusKind: "system",
+					Section:    secTokens,
+				})
+			}
+		}
 	}
 
 	return items

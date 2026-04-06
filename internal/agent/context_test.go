@@ -13,11 +13,11 @@ func TestBuildProjectContext_NoGit(t *testing.T) {
 
 	ctx := BuildProjectContext(tmpDir)
 
-	if strings.Contains(ctx, "Git branch") {
-		t.Error("should not contain 'Git branch' in non-git directory")
+	if strings.Contains(ctx, "Branch do Git") {
+		t.Error("should not contain 'Branch do Git' in non-git directory")
 	}
-	if !strings.Contains(ctx, "Working directory") {
-		t.Error("should contain 'Working directory'")
+	if !strings.Contains(ctx, "Diretório de trabalho") {
+		t.Error("should contain 'Diretório de trabalho'")
 	}
 }
 
@@ -35,16 +35,30 @@ func TestBuildProjectContext_DetectsLanguages(t *testing.T) {
 	}
 }
 
+func findRepoRoot(t *testing.T, start string) string {
+	t.Helper()
+	dir := start
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("could not find repo root")
+		}
+		dir = parent
+	}
+}
+
 func TestBuildProjectContext_GitBranch(t *testing.T) {
 	// Use the actual repo directory
 	cwd, _ := os.Getwd()
-	// Go up to repo root
-	repoRoot := filepath.Join(filepath.Dir(cwd), filepath.Dir(filepath.Dir(cwd)))
+	repoRoot := findRepoRoot(t, cwd)
 
 	ctx := BuildProjectContext(repoRoot)
 
-	// Should contain "Git branch" since this is a git repo
-	if !strings.Contains(ctx, "Git branch") {
-		t.Errorf("expected 'Git branch' in repo context, got:\n%s", ctx)
+	// Should contain "Branch do Git" since this is a git repo
+	if !strings.Contains(ctx, "Branch do Git") {
+		t.Errorf("expected 'Branch do Git' in repo context, got:\n%s", ctx)
 	}
 }

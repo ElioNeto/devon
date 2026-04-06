@@ -227,7 +227,11 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "?":
-		m.showHelp = true
+		if m.input == "" {
+			m.showHelp = true
+			return m, nil
+		}
+		m.insertRune('?')
 		return m, nil
 
 	case "!":
