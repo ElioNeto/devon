@@ -676,12 +676,14 @@ func renderHelp(m *appModel, width int) string {
 
 // renderMarkdown renders a string as Markdown using Glamour.
 func renderMarkdown(text string, width int) string {
-	style := glamour.WithStandardStyle("dark")
-	styleOpts := []glamour.TermRendererOption{
-		style,
-		glamour.WithWordWrap(width - 2),
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(width-2),
+	)
+	if err != nil {
+		return text
 	}
-	if out, err := glamour.Render(text, styleOpts...); err == nil {
+	if out, err := r.Render(text); err == nil {
 		return strings.TrimRight(out, "\n ")
 	}
 	return text

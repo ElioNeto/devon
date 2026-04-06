@@ -211,7 +211,8 @@ func (a *Agent) buildSystemMessages() []llm.Message {
 	system.WriteString("prefira edições cirúrgicas a rewrites completos. ")
 	system.WriteString("Testes passando é um passo intermediário, não o objetivo final. ")
 	system.WriteString("Ao finalizar, liste os arquivos criados ou modificados. ")
-	system.WriteString("Seja direto: aja, não apenas planeje.")
+	system.WriteString("Seja direto: aja, não apenas planeje. ")
+	system.WriteString("Se o usuário enviar uma mensagem conversacional ou pergunta geral, responda de forma direta e natural sem usar ferramentas. Use ferramentas apenas quando o usuário solicitar explicitamente uma ação no projeto.")
 
 	projectCtx := BuildProjectContext(a.cfg.WorkDir)
 	if projectCtx != "" {
