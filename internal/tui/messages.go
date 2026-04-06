@@ -283,7 +283,7 @@ func renderLeftPanel(m *appModel, width, height int, focused bool) string {
 	sessionLine := s.configKey.Render(" devon ") +
 		s.configVal.Render("v"+appVersion) +
 		"  " +
-		s.statusVal.Render("session "+ truncate(m.sessionID(), 8)) +
+		s.statusVal.Render("sessão "+ truncate(m.sessionID(), 8)) +
 		"  " +
 		s.statusVal.Render("model "+ truncate(m.cfg.Model, 12)) +
 		"  tokens " +

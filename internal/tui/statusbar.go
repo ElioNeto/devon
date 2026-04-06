@@ -98,7 +98,7 @@ func renderInputLine(m *appModel) string {
 func buildStatusRight(m *appModel) string {
 	s := m.styles
 
-	model := s.keyStyle.Render("model: ") + s.statusVal.Render(m.cfg.Model)
+	model := s.keyStyle.Render("modelo: ") + s.statusVal.Render(m.cfg.Model)
 
 	if m.tracker == nil {
 		return model
@@ -127,7 +127,7 @@ func buildStatusRight(m *appModel) string {
 		if len(id) > 15 {
 			id = id[len(id)-15:]
 		}
-		right += sep + s.keyStyle.Render("session: ") + s.statusVal.Render(id)
+		right += sep + s.keyStyle.Render("sessão: ") + s.statusVal.Render(id)
 	}
 
 	return right
