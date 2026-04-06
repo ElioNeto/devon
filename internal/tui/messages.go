@@ -60,7 +60,7 @@ func buildLeftItems(m *appModel) []leftItem {
 	var items []leftItem
 
 	// ══ Tasks ════════════════════════════════════════════════
-	items = append(items, leftItem{Label: "Tasks", StatusKind: "header", Section: secTurno})
+	items = append(items, leftItem{Label: "Tarefas", StatusKind: "header", Section: secTurno})
 
 	if m.running {
 		task := truncate(m.currentTask, 22)
@@ -347,17 +347,17 @@ func renderLeftPanel(m *appModel, width, height int, focused bool) string {
 func badgeAndStyle(s uiStyles, item leftItem) (string, lipgloss.Style) {
 	switch item.StatusKind {
 	case "running":
-		return s.statusRunning.Render("● running"), s.itemNormal
+		return s.statusRunning.Render("● execut. "), s.itemNormal
 	case "waiting":
-		return s.statusWaiting.Render("● waiting"), s.itemNormal
+		return s.statusWaiting.Render("● aguard. "), s.itemNormal
 	case "pending":
-		return s.statusPending.Render("● pending"), s.itemNormal
+		return s.statusPending.Render("● pendente"), s.itemNormal
 	case "done":
-		return s.statusDone.Render("● done  "), s.itemNormal
+		return s.statusDone.Render("● concl.  "), s.itemNormal
 	case "error", "failed":
 		return s.statusError.Render("● " + item.StatusKind + " "), s.itemNormal
 	case "active":
-		return s.statusRunning.Render("● active "), s.itemNormal
+		return s.statusRunning.Render("● ativo "), s.itemNormal
 	case "file:M":
 		return s.fileModified.Render("M"), s.itemNormal
 	case "file:A":
@@ -480,15 +480,15 @@ func renderLogLine(s uiStyles, ev logEvent, _ int) string {
 	var actor string
 	switch ev.Actor {
 	case "agent":
-		actor = s.actorAgent.Render("[agent]")
+		actor = s.actorAgent.Render("[agente]")
 	case "tool":
-		actor = s.actorTool.Render("[tool] ")
+		actor = s.actorTool.Render("[tool]  ")
 	case "warn":
-		actor = s.actorWarn.Render("[warn] ")
+		actor = s.actorWarn.Render("[aviso] ")
 	case "ok":
 		actor = s.actorOk.Render("[ok]   ")
 	default:
-		actor = s.sysMsg.Render("[sys]  ")
+		actor = s.sysMsg.Render("[sist.] ")
 	}
 
 	msg := ev.Msg

@@ -33,21 +33,21 @@ func BuildProjectContext(workDir string) string {
 	}
 
 	var b strings.Builder
-	b.WriteString("Project context:\n")
-	b.WriteString("- Working directory: ")
+	b.WriteString("Contexto do projeto:\n")
+	b.WriteString("- Diretório de trabalho: ")
 	b.WriteString(abs)
 	b.WriteString("\n")
 
 	// Git branch (2s timeout)
 	if branch := gitBranch(workDir); branch != "" {
-		b.WriteString("- Git branch: ")
+		b.WriteString("- Branch do Git: ")
 		b.WriteString(branch)
 		b.WriteString("\n")
 	}
 
 	// Detected languages
 	if langs := detectLanguages(workDir); len(langs) > 0 {
-		b.WriteString("- Detected languages: ")
+		b.WriteString("- Linguagens detectadas: ")
 		b.WriteString(strings.Join(langs, ", "))
 		b.WriteString("\n")
 	}
