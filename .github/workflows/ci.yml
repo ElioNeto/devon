@@ -2,16 +2,18 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, go-migration]
   pull_request:
-    branches: [main]
+    branches: [main, go-migration]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         go-version: ["1.24.x"]
+      fail-fast: false
     steps:
       - uses: actions/checkout@v4
 
