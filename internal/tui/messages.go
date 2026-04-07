@@ -131,7 +131,7 @@ func buildLeftItems(m *appModel) []leftItem {
 	}
 
 	// ══ Files Modified ════════════════════════════════════════
-	items = append(items, leftItem{Label: "Files Modified", StatusKind: "header", Section: secMemoria})
+	items = append(items, leftItem{Label: "Arquivos Modificados", StatusKind: "header", Section: secMemoria})
 
 	if len(m.fileChanges) == 0 {
 		items = append(items, leftItem{Label: "  —", StatusKind: "system", Section: secMemoria})
@@ -444,7 +444,7 @@ func renderRightPanel(m *appModel, width, height int, focused bool) string {
 		{"Logs", viewLogs},
 		{"Diff", viewDiff},
 		{"Config", viewConfig},
-		{"Steps", viewSteps},
+		{"Etapas", viewSteps},
 	}
 	var tabParts []string
 	for _, t := range tabs {

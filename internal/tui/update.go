@@ -114,6 +114,9 @@ func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
+
+	case tea.MouseMsg:
+		return m.handleMouse(msg)
 	}
 
 	return m, nil
@@ -543,4 +546,47 @@ func (m appModel) View() string {
 
 func overlayCenter(base, overlay string, _, _ int) string {
 	return base + "\n\n" + overlay
+}
+
+// ── Mouse handling ────────────────────────────────────────────────────────────
+
+func (m *appModel) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	switch msg.Action {
+	case tea.MouseActionPress:
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			if m.leftFocus {
+				m.navigateLeft(-1)
+			} else {
+				if m.rightScroll > 2 {
+					m.rightScroll -= 2
+				} else {
+					m.rightScroll = 0
+				}
+			}
+		case tea.MouseButtonWheelDown:
+			if m.leftFocus {
+				m.navigateLeft(1)
+			} else {
+				m.rightScroll++
+			}
+		default:
+			// Click on left third of screen → focus left panel
+			if msg.X < m.width/3 {
+				if !m.leftFocus {
+					m.leftFocus = true
+				}
+			} else {
+				// Click on right two-thirds → focus right panel, scroll to position
+				if m.leftFocus {
+					m.leftFocus = false
+				}
+				// Map Y to scroll position (approximate: 1 char per line)
+				if msg.Y > 0 {
+					m.rightScroll = msg.Y - 1
+				}
+			}
+		}
+	}
+	return m, nil
 }

@@ -1,5 +1,7 @@
 # Devon
 
+[![CI](https://github.com/ElioNeto/devon/actions/workflows/ci.yml/badge.svg)](https://github.com/ElioNeto/devon/actions/workflows/ci.yml)
+
 Agente de código com TUI, escrito em Go. Use qualquer LLM com API compatível com OpenAI — OpenRouter, Gemini, Groq, Ollama ou qualquer provider local.
 
 > **Status:** Em reescrita ativa. A versão atual ainda usa a base TypeScript do OpenClaude. A versão Go com TUI está sendo desenvolvida nas [issues planejadas](https://github.com/ElioNeto/devon/issues).
