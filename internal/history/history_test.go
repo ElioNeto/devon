@@ -318,3 +318,286 @@ func createSessionMust(t *testing.T, dir string) *Session {
 	}
 	return s
 }
+
+func TestCreateSession_Public(t *testing.T) {
+	home := os.Getenv("HOME")
+	tmpHome := tempDir(t)
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", home)
+
+	s, err := CreateSession("/test/public-create")
+	if err != nil {
+		t.Fatalf("CreateSession() error: %v", err)
+	}
+	if s.ID == "" {
+		t.Error("session ID should not be empty")
+	}
+	if s.CreatedAt.IsZero() {
+		t.Error("CreatedAt should not be zero")
+	}
+}
+
+func TestSaveMessages(t *testing.T) {
+	home := os.Getenv("HOME")
+	tmpHome := tempDir(t)
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", home)
+
+	workDir := "/test/save-messages"
+	dir := sessionDirMust(t, workDir)
+	s := createSessionMust(t, dir)
+
+	msgs := []llm.Message{
+		{Role: llm.RoleUser, Content: llm.TextContent("hello")},
+		{Role: llm.RoleAssistant, Content: llm.TextContent("hi there")},
+	}
+	usage := &UsageSummary{PromptTokens: 50, CompletionTokens: 25, TotalTokens: 75, Requests: 1}
+
+	if err := SaveMessages(workDir, s.ID, msgs, usage); err != nil {
+		t.Fatalf("SaveMessages() error: %v", err)
+	}
+
+	loaded, err := LoadSession(workDir, s.ID)
+	if err != nil {
+		t.Fatalf("LoadSession() error: %v", err)
+	}
+	if len(loaded.Messages) != 2 {
+		t.Errorf("expected 2 messages, got %d", len(loaded.Messages))
+	}
+	if loaded.Usage.PromptTokens != 50 {
+		t.Errorf("expected 50 prompt tokens, got %d", loaded.Usage.PromptTokens)
+	}
+}
+
+func TestSaveMessages_NilUsage(t *testing.T) {
+	home := os.Getenv("HOME")
+	tmpHome := tempDir(t)
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", home)
+
+	workDir := "/test/save-nil-usage"
+	dir := sessionDirMust(t, workDir)
+	s := createSessionMust(t, dir)
+
+	msgs := []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("test")}}
+
+	if err := SaveMessages(workDir, s.ID, msgs, nil); err != nil {
+		t.Fatalf("SaveMessages() error: %v", err)
+	}
+
+	loaded, err := LoadSession(workDir, s.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Messages) != 1 {
+		t.Errorf("expected 1 message, got %d", len(loaded.Messages))
+	}
+}
+
+func TestLoadMessages(t *testing.T) {
+	home := os.Getenv("HOME")
+	tmpHome := tempDir(t)
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", home)
+
+	workDir := "/test/load-messages"
+	dir := sessionDirMust(t, workDir)
+	s := createSessionMust(t, dir)
+
+	msgs := []llm.Message{
+		{Role: llm.RoleUser, Content: llm.TextContent("hello")},
+	}
+	if err := SaveMessages(workDir, s.ID, msgs, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := LoadMessages(workDir, s.ID)
+	if err != nil {
+		t.Fatalf("LoadMessages() error: %v", err)
+	}
+	if len(loaded) != 1 {
+		t.Errorf("expected 1 message, got %d", len(loaded))
+	}
+	if loaded[0].Content == nil || *loaded[0].Content != "hello" {
+		t.Errorf("expected 'hello', got %q", *loaded[0].Content)
+	}
+}
+
+func TestLoadMessages_NonExistent(t *testing.T) {
+	home := os.Getenv("HOME")
+	tmpHome := tempDir(t)
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", home)
+
+	_, err := LoadMessages("/test/load-nonexistent", "nosuchid")
+	if err == nil {
+		t.Error("expected error for nonexistent session")
+	}
+}
+
+func TestGetSessionInfo(t *testing.T) {
+	home := os.Getenv("HOME")
+	tmpHome := tempDir(t)
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", home)
+
+	workDir := "/test/get-session-info"
+	dir := sessionDirMust(t, workDir)
+	s := createSessionMust(t, dir)
+
+	info, err := GetSessionInfo(workDir)
+	if err != nil {
+		t.Fatalf("GetSessionInfo() error: %v", err)
+	}
+	if info == nil {
+		t.Fatal("GetSessionInfo returned nil")
+	}
+	if info.ID != s.ID {
+		t.Errorf("expected session ID %q, got %q", s.ID, info.ID)
+	}
+}
+
+func TestGetSessionInfo_NewProject(t *testing.T) {
+	home := os.Getenv("HOME")
+	tmpHome := tempDir(t)
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", home)
+
+	info, err := GetSessionInfo("/test/get-new-project")
+	if err != nil {
+		t.Fatalf("GetSessionInfo() error: %v", err)
+	}
+	if info == nil {
+		t.Fatal("GetSessionInfo returned nil")
+	}
+	if info.ID == "" {
+		t.Error("expected session ID for new project")
+	}
+}
+
+func TestAppendMessage_WithUsage(t *testing.T) {
+	home := os.Getenv("HOME")
+	tmpHome := tempDir(t)
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", home)
+
+	workDir := "/test/append-usage"
+	dir := sessionDirMust(t, workDir)
+	s := createSessionMust(t, dir)
+
+	usage := &UsageSummary{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15, Requests: 1}
+	msg := llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent("response")}
+
+	if err := AppendMessage(workDir, s.ID, msg, usage); err != nil {
+		t.Fatalf("AppendMessage() error: %v", err)
+	}
+
+	// Append another to test accumulation
+	msg2 := llm.Message{Role: llm.RoleUser, Content: llm.TextContent("follow up")}
+	usage2 := &UsageSummary{PromptTokens: 20, CompletionTokens: 10, TotalTokens: 30, Requests: 1}
+	if err := AppendMessage(workDir, s.ID, msg2, usage2); err != nil {
+		t.Fatalf("AppendMessage() second call error: %v", err)
+	}
+
+	loaded, err := LoadSession(workDir, s.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Messages) != 2 {
+		t.Errorf("expected 2 messages, got %d", len(loaded.Messages))
+	}
+}
+
+func TestAppendMessage_MalformedJSON(t *testing.T) {
+	home := os.Getenv("HOME")
+	tmpHome := tempDir(t)
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", home)
+
+	workDir := "/test/append-malformed"
+	dir := sessionDirMust(t, workDir)
+
+	// Write a malformed JSON session file
+	id := "malformed-session"
+	data := []byte(`not valid json`)
+	sessionPath := filepath.Join(dir, id+".json")
+	if err := os.WriteFile(sessionPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	msg := llm.Message{Role: llm.RoleUser, Content: llm.TextContent("test")}
+	err := AppendMessage(workDir, id, msg, nil)
+	if err == nil {
+		t.Error("expected error for malformed session file")
+	}
+}
+
+func TestSaveMessagesJSONL_MultipleMessages(t *testing.T) {
+	home := os.Getenv("HOME")
+	tmpHome := tempDir(t)
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", home)
+
+	workDir := "/test/jsonl-multi"
+	_ = sessionDirMust(t, workDir)
+	id := "jsonl-multi-session"
+
+	msgs := []llm.Message{
+		{Role: llm.RoleUser, Content: llm.TextContent("first")},
+		{Role: llm.RoleAssistant, Content: llm.TextContent("second")},
+		{Role: llm.RoleUser, Content: llm.TextContent("third")},
+	}
+
+	for _, msg := range msgs {
+		if err := SaveMessagesJSONL(workDir, id, msg); err != nil {
+			t.Fatalf("SaveMessagesJSONL() error: %v", err)
+		}
+	}
+
+	loaded, err := LoadMessagesJSONL(workDir, id)
+	if err != nil {
+		t.Fatalf("LoadMessagesJSONL() error: %v", err)
+	}
+	if len(loaded) != 3 {
+		t.Errorf("expected 3 messages, got %d", len(loaded))
+	}
+}
+
+func TestLoadMessagesJSONL_MalformedLines(t *testing.T) {
+	home := os.Getenv("HOME")
+	tmpHome := tempDir(t)
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", home)
+
+	workDir := "/test/jsonl-malformed"
+	dir := sessionDirMust(t, workDir)
+	id := "malformed-jsonl"
+
+	// Write a JSONL with a bad line
+	jsonlPath := filepath.Join(dir, id+".jsonl")
+	data := []byte("not json\n{\"role\":\"user\",\"content\":\"ok\"}\n")
+	if err := os.WriteFile(jsonlPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := LoadMessagesJSONL(workDir, id)
+	if err != nil {
+		t.Fatalf("LoadMessagesJSONL() error: %v", err)
+	}
+	// Should skip malformed line and load the valid one
+	if len(loaded) != 1 {
+		t.Errorf("expected 1 message (malformed skipped), got %d", len(loaded))
+	}
+}
+
+func TestClearSession_NonExistent(t *testing.T) {
+	home := os.Getenv("HOME")
+	tmpHome := tempDir(t)
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", home)
+
+	err := ClearSession("/test/clear-nonexistent", "nosuchid")
+	if err != nil {
+		t.Errorf("ClearSession on nonexistent should not error, got: %v", err)
+	}
+}
