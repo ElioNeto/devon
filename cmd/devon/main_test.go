@@ -169,19 +169,19 @@ func TestMain_Function(t *testing.T) {
 		root.SetErr(&bytes.Buffer{})
 		t.Setenv("DEVON_MODEL", "test")
 		t.Setenv("DEVON_BASE_URL", "http://localhost:11434/v1")
-		
+
 		_ = root.Execute()
 	})
-	
+
 	t.Run("runAgent_EmptyEnvFile", func(t *testing.T) {
 		root := buildRootCommand()
 		root.SetArgs([]string{"--env", ".", "--mode", "safe", "--model", "mymodel"})
 		root.SetOut(&bytes.Buffer{})
 		root.SetErr(&bytes.Buffer{})
-		
+
 		_ = root.Execute()
 	})
-	
+
 	t.Run("runAgent_YoloMode", func(t *testing.T) {
 		root := buildRootCommand()
 		root.SetArgs([]string{"--mode", "yolo"})
@@ -189,7 +189,7 @@ func TestMain_Function(t *testing.T) {
 		root.SetErr(&bytes.Buffer{})
 		t.Setenv("DEVON_MODEL", "test")
 		t.Setenv("DEVON_BASE_URL", "http://localhost:11434/v1")
-		
+
 		_ = root.Execute()
 	})
 
@@ -198,7 +198,7 @@ func TestMain_Function(t *testing.T) {
 		root.SetArgs([]string{"doctor"})
 		root.SetOut(&bytes.Buffer{})
 		root.SetErr(&bytes.Buffer{})
-		
+
 		_ = root.Execute()
 	})
 }

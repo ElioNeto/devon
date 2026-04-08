@@ -7,8 +7,8 @@ import (
 
 func TestEstimateCost_Gpt4o(t *testing.T) {
 	// gpt-4o: $2.50/1M input, $10/1M output
-	input := 10_000  // 10k input = $0.025
-	output := 5_000  // 5k output = $0.05
+	input := 10_000 // 10k input = $0.025
+	output := 5_000 // 5k output = $0.05
 	cost := EstimateCost("gpt-4o", input, output)
 	expected := 0.025 + 0.05 // $0.075
 	if cost != expected {

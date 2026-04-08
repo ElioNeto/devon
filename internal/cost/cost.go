@@ -16,17 +16,17 @@ type ModelCost struct {
 
 // Pricing for common models (USD per 1M tokens).
 var pricing = map[string]ModelCost{
-	"gpt-4o":                      {InputCost: 2.50, OutputCost: 10.00},
-	"gpt-4o-mini":                 {InputCost: 0.15, OutputCost: 0.60},
-	"gpt-4":                       {InputCost: 30.00, OutputCost: 60.00},
-	"gpt-4-turbo":                 {InputCost: 10.00, OutputCost: 30.00},
-	"claude-sonnet-4-6":           {InputCost: 3.00, OutputCost: 15.00},
-	"claude-opus-4-6":             {InputCost: 15.00, OutputCost: 75.00},
-	"claude-haiku-4-5-20251001":   {InputCost: 0.80, OutputCost: 4.00},
-	"gemini-2.5-flash":            {InputCost: 0.10, OutputCost: 0.40},
-	"gemini-2.5-pro":              {InputCost: 1.25, OutputCost: 10.00},
+	"gpt-4o":                       {InputCost: 2.50, OutputCost: 10.00},
+	"gpt-4o-mini":                  {InputCost: 0.15, OutputCost: 0.60},
+	"gpt-4":                        {InputCost: 30.00, OutputCost: 60.00},
+	"gpt-4-turbo":                  {InputCost: 10.00, OutputCost: 30.00},
+	"claude-sonnet-4-6":            {InputCost: 3.00, OutputCost: 15.00},
+	"claude-opus-4-6":              {InputCost: 15.00, OutputCost: 75.00},
+	"claude-haiku-4-5-20251001":    {InputCost: 0.80, OutputCost: 4.00},
+	"gemini-2.5-flash":             {InputCost: 0.10, OutputCost: 0.40},
+	"gemini-2.5-pro":               {InputCost: 1.25, OutputCost: 10.00},
 	"mistralai/devstral-2512:free": {InputCost: 0, OutputCost: 0},
-	"mistral-large":               {InputCost: 2.00, OutputCost: 6.00},
+	"mistral-large":                {InputCost: 2.00, OutputCost: 6.00},
 }
 
 // Session tracks cumulative costs for a session.
@@ -62,8 +62,8 @@ func EstimateCost(model string, inputTokens, outputTokens int) float64 {
 	}
 
 	million := 1_000_000.0
-	cost := (float64(inputTokens)/million*pc.InputCost) +
-		(float64(outputTokens)/million*pc.OutputCost)
+	cost := (float64(inputTokens) / million * pc.InputCost) +
+		(float64(outputTokens) / million * pc.OutputCost)
 
 	return roundTo6(cost)
 }
