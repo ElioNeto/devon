@@ -124,16 +124,9 @@ func (s *Scheduler) topologicalSort(tasks []Task) ([]Task, error) {
 
 // findRootTasks retorna tasks sem dependências.
 func (s *Scheduler) findRootTasks(tasks []Task) []Task {
-	hasDep := make(map[string]bool)
-	for _, t := range tasks {
-		for _, dep := range t.DependsOn {
-			hasDep[dep] = true
-		}
-	}
-
 	var roots []Task
 	for _, t := range tasks {
-		if !hasDep[t.ID] {
+		if len(t.DependsOn) == 0 {
 			roots = append(roots, t)
 		}
 	}

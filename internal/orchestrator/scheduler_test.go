@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"sort"
+	"sync"
 	"testing"
 )
 
@@ -26,20 +27,30 @@ func TestExecuteSequential(t *testing.T) {
 func TestExecuteParallel(t *testing.T) {
 	s := NewScheduler(Parallel)
 	executed := []string{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 
 	tasks := []Task{
 		{ID: "1", Description: "task 1"},
 		{ID: "2", Description: "task 2"},
 	}
 
+	wg.Add(len(tasks))
+
 	s.Execute(tasks, func(task Task) {
+		mu.Lock()
 		executed = append(executed, task.ID)
+		mu.Unlock()
+		wg.Done()
 	})
 
-	// Parallel executa de forma assíncrona, então verificamos que tasks foram dispatchadas
-	if len(executed) == 0 {
-		t.Log("parallel uses goroutines, results collected asynchronously")
+	wg.Wait()
+
+	mu.Lock()
+	if len(executed) != 2 {
+		t.Errorf("expected 2 executed tasks asynchronously, got %d", len(executed))
 	}
+	mu.Unlock()
 }
 
 func TestExecutePipeline(t *testing.T) {
