@@ -1,6 +1,3 @@
-node_modules/
-dist/
-*.tsbuildinfo
 .env
 .env.*
 !.env.example
@@ -9,7 +6,6 @@ reports/
 
 # Go binaries
 bin/
-devon
 *.exe
 *.exe~
 *.dll
@@ -22,3 +18,16 @@ devon
 
 # Build output
 build/
+*.tsbuildinfo
+
+# Devon binário
+/devon
+/devon-*
+
+# Ambiente
+.env.local
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
