@@ -16,23 +16,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// applyProfileFromFlag resolves and applies a profile if the flag is set.
-func applyProfileFromFlag(cmd *cobra.Command, cfg *config.Config) error {
+// applyProfileFlags resolves and applies a profile and optional model override.
+func applyProfileFlags(cmd *cobra.Command, cfg *config.Config) error {
 	profileName, _ := cmd.Flags().GetString("profile")
-	if profileName == "" {
-		return nil
+	modelOverride, _ := cmd.Flags().GetString("model")
+
+	if profileName != "" {
+		tc, err := config.LoadToml()
+		if err != nil {
+			return fmt.Errorf("falha ao carregar devon.toml: %w", err)
+		}
+		p, err := config.ResolveProfile(tc, profileName)
+		if err != nil {
+			return err
+		}
+		if err := config.ApplyProfile(cfg, p); err != nil {
+			return err
+		}
 	}
-	tc, err := config.LoadToml()
-	if err != nil {
-		return fmt.Errorf("falha ao carregar devon.toml: %w", err)
+
+	if modelOverride != "" {
+		cfg.Model = modelOverride
 	}
-	p, err := config.ResolveProfile(tc, profileName)
-	if err != nil {
-		return err
-	}
-	if err := config.ApplyProfile(cfg, p); err != nil {
-		return err
-	}
+
 	return nil
 }
 
@@ -61,9 +67,9 @@ func newRootCommand() *cobra.Command {
 	}
 
 	root.PersistentFlags().String("mode", "auto", "Modo de permissão: auto | safe | yolo")
-	root.PersistentFlags().String("model", "", "Modelo a usar (sobrescreve DEVON_MODEL)")
+	root.PersistentFlags().String("model", "", "Sobrescreve o modelo do perfil ativo")
 	root.PersistentFlags().String("env", ".env", "Caminho para o arquivo .env")
-	root.PersistentFlags().String("profile", "", "Perfil de provider (definido em devon.toml)")
+	root.PersistentFlags().StringP("profile", "p", "", "Perfil de provider definido em devon.toml")
 
 	// Subcomando doctor
 	doctor := &cobra.Command{
@@ -105,12 +111,12 @@ func runAgent(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("falha ao carregar configuração: %w", err)
 	}
 
+	if err := applyProfileFlags(cmd, cfg); err != nil {
+		return err
+	}
+
 	mode, _ := cmd.Flags().GetString("mode")
 	cfg.Mode = config.ParseMode(mode)
-
-	if override, _ := cmd.Flags().GetString("model"); override != "" {
-		cfg.Model = override
-	}
 
 	return tui.Run(cfg)
 }
@@ -135,12 +141,12 @@ func runTask(cmd *cobra.Command, args []string) error {
 		return configError(fmt.Errorf("falha ao carregar configuração: %w", err))
 	}
 
+	if err := applyProfileFlags(cmd, cfg); err != nil {
+		return configError(err)
+	}
+
 	mode, _ := cmd.Flags().GetString("mode")
 	cfg.Mode = config.ParseMode(mode)
-
-	if override, _ := cmd.Flags().GetString("model"); override != "" {
-		cfg.Model = override
-	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
