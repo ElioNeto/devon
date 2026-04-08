@@ -1,322 +1,157 @@
-# Playbook do Agente Local OpenClaude
+# Playbook do Devon
 
-Este playbook é um guia prático para executar o OpenClaude com um modelo local (Ollama), trabalhar com segurança e obter bons resultados no dia a dia.
+Guia prático para executar, configurar e obter bons resultados com o Devon Go.
+
+---
 
 ## 1. O Que Você Tem
 
-- Um loop de agente CLI que pode ler/escrever arquivos, executar comandos no terminal e ajudar com fluxos de trabalho de programação.
-- Um sistema de perfis de provider local (`profile:init` e `dev:profile`).
-- Verificações de runtime (`doctor:runtime`) e relatórios (`doctor:report`).
-- Um perfil de modelo local atualmente configurado para `llama3.1:8b`.
+- Binário único estático (`devon`) sem dependências externas
+- Loop de agente com TUI (Bubble Tea) — lê/escreve arquivos, executa comandos, conecta a qualquer LLM
+- Suporte a qualquer provider compatível com OpenAI: OpenRouter, Gemini, Groq, Ollama, DeepSeek
+- Modos de permissão `auto`, `safe` e `yolo`
 
-## 2. Inicialização Diária (Caminho Rápido)
+---
 
-Execute isso na raiz do seu projeto:
+## 2. Instalação
 
-```powershell
-bun run dev:profile
+```bash
+# via install.sh
+curl -fsSL https://raw.githubusercontent.com/ElioNeto/devon/main/install.sh | bash
+
+# ou compile do fonte
+git clone https://github.com/ElioNeto/devon.git
+cd devon
+make build
 ```
 
-Para trocas rápidas:
+---
 
-```powershell
-# preset de baixa latência
-bun run dev:fast
+## 3. Inicialização Diária
 
-# preset de melhor qualidade de código
-bun run dev:code
+```bash
+# inicia o Devon no diretório atual
+devon
+
+# com modo de permissão explícito
+devon --mode safe    # toda ferramenta pede confirmação
+devon --mode yolo    # executa tudo sem perguntar
 ```
 
-Se tudo estiver saudável, o OpenClaude inicia diretamente.
+---
 
-## 3. Configuração Única (Se Necessário)
+## 4. Configuração de Provider
 
-### 3.1 Inicializar um perfil local
+Crie um arquivo `.env` na raiz do projeto:
 
-```powershell
-bun run profile:init -- --provider ollama --model llama3.1:8b
+```bash
+DEVON_API_KEY=sk-or-sua-chave-aqui
+DEVON_BASE_URL=https://openrouter.ai/api/v1
+DEVON_MODEL=mistralai/devstral-2512:free
 ```
 
-Ou deixe o OpenClaude recomendar o melhor modelo local para seu objetivo:
+### Providers suportados
 
-```powershell
-bun run profile:init -- --provider ollama --goal coding
+| Provider | DEVON_BASE_URL | Modelos recomendados |
+|---|---|---|
+| OpenRouter | `https://openrouter.ai/api/v1` | `mistralai/devstral-2512:free`, `qwen/qwen3-coder:free` |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` |
+| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| Ollama (local) | `http://localhost:11434/v1` | `qwen2.5-coder:32b`, `llama3.3:70b` |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o` |
+| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
+
+---
+
+## 5. Contexto de Projeto (DEVON.md)
+
+Crie um `DEVON.md` na raiz do projeto para injetar contexto ao agente:
+
+```markdown
+# meu-projeto
+
+API REST em Go para gestão de pedidos.
+
+## Comandos
+- Build: `make build`
+- Testes: `go test ./...`
+- Lint: `golangci-lint run ./...`
+
+## Convenções
+- Erros com `fmt.Errorf("...: %w", err)`
+- Não usar `panic` em código de produção
 ```
 
-Visualize as recomendações antes de salvar:
+O Devon lê este arquivo automaticamente ao iniciar.
 
-```powershell
-bun run profile:recommend -- --goal coding --benchmark
+---
+
+## 6. Diagnósticos
+
+```bash
+# verifica configuração e conectividade
+devon doctor
+
+# build limpo
+make build
+
+# rodar testes
+go test ./...
 ```
 
-### 3.2 Confirmar arquivo de perfil
+---
 
-```powershell
-Get-Content .\.openclaude-profile.json
-```
+## 7. Ferramentas do Agente
 
-### 3.3 Validar ambiente
+O Devon executa um loop `prompt → LLM → tool call → resultado → LLM` com:
 
-```powershell
-bun run doctor:runtime
-```
+- **Filesystem:** `read_file`, `write_file`, `edit_file`, `list_dir`, `glob`, `grep`
+- **Shell:** `bash` com timeout, captura de stdout/stderr e controle de permissão
+- **Contexto:** `DEVON.md` injetado como system prompt adicional
 
-## 4. Saúde e Diagnósticos
+---
 
-### 4.1 Verificações legíveis por humanos
+## 8. Playbook Prático de Prompts
 
-```powershell
-bun run doctor:runtime
-```
-
-### 4.2 Diagnósticos em JSON (automação/logging)
-
-```powershell
-bun run doctor:runtime:json
-```
-
-### 4.3 Persistir relatório de runtime
-
-```powershell
-bun run doctor:report
-```
-
-Saída do relatório:
-
-- `reports/doctor-runtime.json`
-
-### 4.4 Verificações de hardening
-
-```powershell
-# verificações práticas (smoke + runtime doctor)
-bun run hardening:check
-
-# verificações estritas (inclui typecheck)
-bun run hardening:strict
-```
-
-## 5. Modos de Provider
-
-## 5.1 Modo local (Ollama)
-
-```powershell
-bun run profile:init -- --provider ollama --model llama3.1:8b
-bun run dev:profile
-```
-
-Comportamento esperado:
-
-- Nenhuma chave de API necessária.
-- `OPENAI_BASE_URL` deve ser `http://localhost:11434/v1`.
-
-## 5.2 Modo OpenAI
-
-```powershell
-bun run profile:init -- --provider openai --api-key sk-... --model gpt-4o
-bun run dev:profile
-```
-
-Comportamento esperado:
-
-- Chave de API real necessária.
-- Valores de placeholder falham rapidamente.
-
-## 6. Matriz de Solução de Problemas
-
-## 6.1 `Script not found "dev"`
-
-Causa:
-
-- Você executou o comando na pasta errada.
-
-Solução:
-
-```powershell
-cd C:\Users\SeuUsuario\Documents\openclaude\openclaude
-bun run dev:profile
-```
-
-## 6.2 `ollama: term not recognized`
-
-Causa:
-
-- Ollama não está instalado ou o PATH não foi carregado neste terminal.
-
-Solução:
-
-- Instale o Ollama em https://ollama.com/download/windows ou `winget install Ollama.Ollama`.
-- Abra um novo terminal e execute:
-
-```powershell
-ollama --version
-```
-
-## 6.3 `Provider reachability failed` para localhost
-
-Causa:
-
-- Serviço Ollama não está em execução.
-
-Solução:
-
-```powershell
-ollama serve
-```
-
-Em seguida, em outro terminal:
-
-```powershell
-bun run doctor:runtime
-```
-
-## 6.4 `Missing key for non-local provider URL`
-
-Causa:
-
-- `OPENAI_BASE_URL` aponta para endpoint remoto sem chave.
-
-Solução:
-
-- Reinicialize o perfil para ollama:
-
-```powershell
-bun run profile:init -- --provider ollama --model llama3.1:8b
-```
-
-Ou escolha um perfil Ollama local automaticamente por objetivo:
-
-```powershell
-bun run profile:init -- --provider ollama --goal balanced
-```
-
-## 6.5 Erro de chave placeholder (`SUA_CHAVE`)
-
-Causa:
-
-- Um placeholder foi usado em vez de uma chave real.
-
-Solução:
-
-- Para OpenAI: use uma chave real.
-- Para Ollama: nenhuma chave necessária; mantenha a URL base do localhost.
-
-## 7. Modelos Locais Recomendados
-
-- Rápido/geral: `llama3.1:8b`
-- Melhor qualidade de código (se o hardware suportar): `qwen2.5-coder:14b`
-- Fallback para hardware limitado: modelo instruct menor
-
-Troque de modelo rapidamente:
-
-```powershell
-bun run profile:init -- --provider ollama --model qwen2.5-coder:14b
-bun run dev:profile
-```
-
-Atalhos de preset já configurados:
-
-```powershell
-bun run profile:fast   # llama3.2:3b
-bun run profile:code   # qwen2.5-coder:7b
-```
-
-Seleção automática local baseada em objetivo:
-
-```powershell
-bun run profile:init -- --provider ollama --goal latency
-bun run profile:init -- --provider ollama --goal balanced
-bun run profile:init -- --provider ollama --goal coding
-```
-
-`profile:auto` é um seletor do melhor provider disponível, não um comando apenas local. Use `--provider ollama` quando quiser ficar em um modelo local.
-
-## 8. Playbook Prático de Prompts (Copiar/Colar)
-
-## 8.1 Entendimento de código
-
-- "Mapeie a arquitetura deste repositório e explique o fluxo de execução do ponto de entrada até a invocação de ferramentas."
+### Entendimento de código
+- "Mapeie a arquitetura deste repositório e explique o fluxo de execução."
 - "Encontre os 5 módulos mais arriscados e explique o porquê."
 
-## 8.2 Refatoração
+### Refatoração
+- "Refatore este módulo para maior clareza sem alterar o comportamento, depois execute os testes e resuma o diff."
+- "Extraia lógica duplicada e adicione testes mínimos."
 
-- "Refatore este módulo para maior clareza sem alterar o comportamento, depois execute as verificações e resuma o impacto do diff."
-- "Extraia a lógica compartilhada de funções duplicadas e adicione testes mínimos."
-
-## 8.3 Depuração
-
-- "Reproduza a falha, identifique a causa raiz, implemente a correção e valide com comandos."
+### Depuração
+- "Reproduza a falha, identifique a causa raiz, implemente a correção e valide com `go test`."
 - "Trace este caminho de erro e liste os pontos de falha prováveis com níveis de confiança."
 
-## 8.4 Confiabilidade
+### Revisão de código
+- "Faça uma revisão das alterações não preparadas, priorize bugs/regressões e sugira patches concretos."
 
-- "Adicione guardrails de runtime e mensagens de falha rápida para variáveis de ambiente de provider inválidas."
-- "Crie um comando de diagnóstico que produza um relatório JSON para artefatos de CI."
-
-## 8.5 Modo de revisão
-
-- "Faça uma revisão de código das alterações não preparadas, priorize bugs/regressões e sugira patches concretos."
+---
 
 ## 9. Regras de Trabalho Seguro
 
-- Execute `doctor:runtime` antes de depurar problemas de provider.
-- Prefira `dev:profile` a edições manuais de variáveis de ambiente.
-- Mantenha `.openclaude-profile.json` local (já está no gitignore).
-- Use `doctor:report` antes de pedir ajuda para ter um snapshot reproduzível.
+- Prefira `--mode safe` em projetos com código crítico
+- Use `DEVON.md` para fixar convenções — o agente vai respeitá-las
+- Revise tool calls destrutivas antes de confirmar no modo `auto`
+- Mantenha `.env` local (já está no `.gitignore`)
 
-## 10. Checklist de Recuperação Rápida
+---
 
-Quando algo quebrar, execute na ordem:
+## 10. Referência de Comandos
 
-```powershell
-bun run doctor:runtime
-bun run doctor:report
-bun run smoke
-```
-
-Se as respostas estiverem muito lentas, verifique o modo do processador:
-
-```powershell
-ollama ps
-```
-
-Se `PROCESSOR` mostrar `CPU`, sua configuração está válida, mas a latência será maior para modelos grandes.
-
-Se o modo de modelo local estiver falhando:
-
-```powershell
-ollama --version
-ollama serve
-bun run doctor:runtime
-bun run dev:profile
-```
-
-## 11. Referência de Comandos
-
-```powershell
-# perfil
-bun run profile:init -- --provider ollama --model llama3.1:8b
-bun run profile:init -- --provider openai --api-key sk-... --model gpt-4o
-
+```bash
 # iniciar
-bun run dev:profile
-bun run dev:ollama
-bun run dev:openai
+devon
+devon --mode safe
+devon --mode yolo
 
 # diagnósticos
-bun run doctor:runtime
-bun run doctor:runtime:json
-bun run doctor:report
+devon doctor
 
-# qualidade
-bun run smoke
-bun run hardening:check
-bun run hardening:strict
+# build e testes
+make build
+go test ./...
+golangci-lint run ./...
 ```
-
-## 12. Critérios de Sucesso
-
-Sua configuração está saudável quando:
-
-- `bun run doctor:runtime` passa nas verificações de provider e acessibilidade.
-- `bun run dev:profile` abre o CLI normalmente.
-- O modelo mostrado na interface corresponde ao modelo do perfil selecionado.

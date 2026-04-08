@@ -1,8 +1,8 @@
+# Ambiente
 .env
 .env.*
 !.env.example
-.openclaude-profile.json
-reports/
+.env.local
 
 # Go binaries
 bin/
@@ -15,24 +15,17 @@ bin/
 # Go test
 *.test
 *.out
+coverage.out
+coverage.html
 
 # Build output
 build/
-*.tsbuildinfo
 
 # Devon binário
 /devon
 /devon-*
 
-# Ambiente
-.env.local
-
 # SQLite
 *.db
 *.db-wal
 *.db-shm
-# Cobertura de testes
-coverage.out
-coverage.html
-
-node_modules
