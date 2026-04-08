@@ -10,6 +10,7 @@ import (
 
 	agentpkg "github.com/ElioNeto/devon/internal/agent"
 	"github.com/ElioNeto/devon/internal/config"
+	"github.com/ElioNeto/devon/internal/db"
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/tools"
 	"github.com/ElioNeto/devon/internal/tui"
