@@ -2,6 +2,8 @@ package llm
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -42,37 +44,36 @@ func TestOpenAIProvider_Info(t *testing.T) {
 	}
 }
 
-func TestOpenAIProvider_Stream_ConnRefused(t *testing.T) {
-	p := NewOpenAIProvider("http://localhost:19999/v1", "model", ProviderConfig{
-		Name:    "test",
-		APIKey:  "k",
-		Timeout: 500 * time.Millisecond,
-	})
+func TestOpenAIProvider_Stream_BadRequest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	p := NewOpenAIProvider(server.URL, "model", ProviderConfig{Name: "test", APIKey: "k", Timeout: time.Second})
 	_, err := p.Stream(context.Background(), []Message{{Role: RoleUser, Content: strPtr("hi")}}, nil)
 	if err == nil {
-		t.Error("expected error for unreachable endpoint")
+		t.Error("expected error for server error")
 	}
 }
 
 func TestOpenAIProvider_Stream_InvalidURL(t *testing.T) {
-	p := NewOpenAIProvider("://invalid", "model", ProviderConfig{
-		Name:    "test",
-		APIKey:  "k",
-		Timeout: time.Second,
-	})
+	p := NewOpenAIProvider("://invalid", "model", ProviderConfig{Name: "test", APIKey: "k", Timeout: time.Second})
 	_, err := p.Stream(context.Background(), nil, nil)
 	if err == nil {
 		t.Error("expected error for invalid URL")
 	}
 }
 
-func TestOpenAIProvider_Stream_EmptyAPIKey(t *testing.T) {
-	p := NewOpenAIProvider("http://localhost:19999/v1", "model", ProviderConfig{
-		Name:    "test",
-		Timeout: 500 * time.Millisecond,
-	})
+func TestOpenAIProvider_Stream_Unauthorized(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	p := NewOpenAIProvider(server.URL, "model", ProviderConfig{Name: "test", Timeout: time.Second})
 	_, err := p.Stream(context.Background(), nil, nil)
 	if err == nil {
-		t.Error("expected error")
+		t.Error("expected error for 401")
 	}
 }

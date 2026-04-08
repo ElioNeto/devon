@@ -2,6 +2,8 @@ package llm
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -45,36 +47,23 @@ func TestOllamaProvider_Info(t *testing.T) {
 	}
 }
 
-func TestOllamaProvider_Stream_ConnRefused(t *testing.T) {
-	p := NewOllamaProvider("http://localhost:19999/v1", "model", ProviderConfig{
-		Name:    "test",
-		Timeout: 500 * time.Millisecond,
-	})
+func TestOllamaProvider_Stream_Unauthorized(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	p := NewOllamaProvider(server.URL, "model", ProviderConfig{Name: "test", Timeout: time.Second})
 	_, err := p.Stream(context.Background(), []Message{{Role: RoleUser, Content: strPtr("hi")}}, nil)
 	if err == nil {
-		t.Error("expected error for unreachable ollama")
+		t.Error("expected error for server error")
 	}
 }
 
 func TestOllamaProvider_Stream_InvalidURL(t *testing.T) {
-	p := NewOllamaProvider("://invalid", "model", ProviderConfig{
-		Name:    "test",
-		Timeout: time.Second,
-	})
+	p := NewOllamaProvider("://invalid", "model", ProviderConfig{Name: "test", Timeout: time.Second})
 	_, err := p.Stream(context.Background(), nil, nil)
 	if err == nil {
 		t.Error("expected error for invalid URL")
-	}
-}
-
-func TestOllamaProvider_Stream_NonEmptyAPIKey(t *testing.T) {
-	p := NewOllamaProvider("http://localhost:19999/v1", "model", ProviderConfig{
-		Name:    "test",
-		APIKey:  "some-key",
-		Timeout: 500 * time.Millisecond,
-	})
-	_, err := p.Stream(context.Background(), nil, nil)
-	if err == nil {
-		t.Error("expected error")
 	}
 }
