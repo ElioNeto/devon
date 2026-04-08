@@ -3,7 +3,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/ElioNeto/devon/internal/agent"

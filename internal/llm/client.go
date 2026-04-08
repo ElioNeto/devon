@@ -161,8 +161,8 @@ func (c *Client) Stream(
 				if httpErr.StatusCode >= 500 && attempt+1 >= maxRetries5xx {
 					return nil, fmt.Errorf("llm: máximo de %d tentativas atingido", maxRetries)
 				}
-				}
 			}
+			if attempt+1 >= maxAttempts {
 				return nil, fmt.Errorf("llm: máximo de %d tentativas atingido", maxRetries)
 			}
 			delay := retryDelay(resp, attempt, baseDelay, maxDelay)
@@ -178,7 +178,6 @@ func (c *Client) Stream(
 		go parseSSE(ctx, resp.Body, ch)
 		return ch, nil
 	}
-
 	return nil, fmt.Errorf("llm: máximo de %d tentativas atingido", maxRetries)
 }
 
