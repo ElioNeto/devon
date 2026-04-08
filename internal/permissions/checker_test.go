@@ -146,3 +146,66 @@ func TestChecker_Approve_ExistingSession(t *testing.T) {
 		t.Error("write_file should be approved")
 	}
 }
+
+func TestChecker_Requires_Allowlist_Empty(t *testing.T) {
+	// Allowlist vazia = tudo liberado (exceto blocklist)
+	c := &Checker{
+		Mode:      config.ModeAuto,
+		Blocklist: nil,
+		Allowlist: []string{},
+	}
+	tool := &mockTool{name: "any_command", perm: PermExecute}
+
+	blocked, confirm := c.Requires(tool)
+	if blocked {
+		t.Error("expected not blocked when allowlist is empty")
+	}
+	if !confirm {
+		t.Error("expected confirmation for execute in auto mode")
+	}
+}
+
+func TestChecker_Requires_Allowlist_Match(t *testing.T) {
+	c := &Checker{
+		Mode:      config.ModeAuto,
+		Blocklist: nil,
+		Allowlist: []string{"go", "git", "make"},
+	}
+	tool := &mockTool{name: "go", perm: PermExecute}
+
+	blocked, confirm := c.Requires(tool)
+	if blocked {
+		t.Error("expected not blocked: tool is in allowlist")
+	}
+	if !confirm {
+		t.Error("expected confirmation for execute in auto mode")
+	}
+}
+
+func TestChecker_Requires_Allowlist_NoMatch(t *testing.T) {
+	c := &Checker{
+		Mode:      config.ModeYolo, // yolo mode to isolate allowlist check
+		Blocklist: nil,
+		Allowlist: []string{"go", "git"},
+	}
+	tool := &mockTool{name: "npm", perm: PermExecute}
+
+	blocked, _ := c.Requires(tool)
+	if !blocked {
+		t.Error("expected blocked: tool not in allowlist")
+	}
+}
+
+func TestChecker_Requires_Allowlist_BlocklistTakesPriority(t *testing.T) {
+	c := &Checker{
+		Mode:      config.ModeYolo,
+		Blocklist: []string{"rm -rf /"},
+		Allowlist: []string{"rm -rf /", "go"},
+	}
+	tool := &mockTool{name: "rm -rf /", perm: PermExecute}
+
+	blocked, _ := c.Requires(tool)
+	if !blocked {
+		t.Error("expected blocked: blocklist takes priority over allowlist")
+	}
+}
