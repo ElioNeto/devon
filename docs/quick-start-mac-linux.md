@@ -1,74 +1,59 @@
 # Início Rápido — macOS / Linux
 
-## 1. Instalar dependências
-
-Você precisa de **Bun** e **Node.js**.
+## 1. Instalar o Devon
 
 ```bash
-# instalar Bun
-curl -fsSL https://bun.sh/install | bash
-
-# verificar
-bun --version   # 1.3.11 ou mais recente
-node --version  # 18 ou mais recente
+curl -fsSL https://raw.githubusercontent.com/ElioNeto/devon/main/install.sh | bash
 ```
 
-## 2. Clonar e compilar
+O script detecta automaticamente o sistema operacional e a arquitetura (amd64 / arm64) e instala o binário em `~/.local/bin`.
+
+Confirme a instalação:
 
 ```bash
-git clone https://github.com/ElioNeto/devon.git
-cd devon
-bun install
-bun run build
-npm link
+devon --version
 ```
 
-Verifique que o comando está disponível:
+## 2. Configurar o Provider
+
+Crie um arquivo `.env` na raiz do projeto que você quer usar:
 
 ```bash
-which devon   # deve retornar o caminho do binário
+DEVON_API_KEY=sk-or-sua-chave-aqui
+DEVON_BASE_URL=https://openrouter.ai/api/v1
+DEVON_MODEL=mistralai/devstral-2512:free
 ```
 
-## 3. Configurar provider
+> **Dica:** Crie uma conta gratuita em [openrouter.ai](https://openrouter.ai) para obter uma chave e usar modelos gratuitos como `mistralai/devstral-2512:free`.
 
-Veja [Configuração Avançada](advanced-setup.md) para todos os providers. O mais rápido para começar é o OpenRouter (gratuito, sem cartão):
-
-1. Crie sua chave em [openrouter.ai/keys](https://openrouter.ai/keys)
-2. Crie um `.env` no projeto que quiser usar:
+## 3. Iniciar
 
 ```bash
-cat > .env << 'EOF'
-CLAUDE_CODE_USE_OPENAI=1
-OPENAI_API_KEY=sk-or-sua-chave-aqui
-OPENAI_BASE_URL=https://openrouter.ai/api/v1
-OPENAI_MODEL=mistralai/devstral-2512:free
-EOF
-
-echo ".env" >> .gitignore
-```
-
-## 4. Iniciar
-
-```bash
-set -a && source .env && set +a
+cd /caminho/do/seu/projeto
 devon
 ```
 
-Ou crie um atalho `start.sh` na raiz do projeto:
+A TUI abrirá no terminal. Digite seu prompt e pressione `Enter`.
+
+## Usando com Ollama (local, sem chave)
 
 ```bash
-cat > start.sh << 'EOF'
-#!/bin/bash
-set -a
-source .env
-set +a
-devon
-EOF
-chmod +x start.sh
-./start.sh
+# Instalar Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Baixar um modelo
+ollama pull qwen2.5-coder:7b
+
+# Configurar o Devon para usar Ollama
+DEVON_BASE_URL=http://localhost:11434/v1
+DEVON_MODEL=qwen2.5-coder:7b
 ```
 
-## Próximos passos
+## Atalhos de Teclado
 
-- [Configuração Avançada](advanced-setup.md) — outros providers, perfis, diagnósticos
-- Crie um `DEVON.md` na raiz do projeto para dar contexto permanente ao agente
+| Tecla | Ação |
+|---|---|
+| `Enter` | Enviar prompt |
+| `Ctrl+C` | Interromper turno atual |
+| `Ctrl+C` (duas vezes) | Sair do Devon |
+| `!` | Abrir Command Palette |

@@ -1,66 +1,76 @@
 # Início Rápido — Windows
 
-## 1. Instalar dependências
+## 1. Instalar o Devon
 
-Você precisa de **Node.js** e **Bun**.
+Baixe o binário mais recente para Windows na [página de releases](https://github.com/ElioNeto/devon/releases) (`devon_windows_amd64.exe`) e adicione ao seu `PATH`.
 
-- Baixe o Node.js em [nodejs.org](https://nodejs.org) (versão LTS)
-- Instale o Bun no PowerShell:
+Ou use o Windows Package Manager:
 
 ```powershell
-powershell -c "irm bun.sh/install.ps1 | iex"
+# Via Scoop (se disponível)
+scoop install devon
 ```
 
-Reinicie o terminal e verifique:
+Confirme a instalação:
 
 ```powershell
-bun --version   # 1.3.11 ou mais recente
-node --version  # 18 ou mais recente
+devon --version
 ```
 
-## 2. Clonar e compilar
+## 2. Configurar o Provider
+
+Crie um arquivo `.env` na raiz do projeto que você quer usar:
 
 ```powershell
-git clone https://github.com/ElioNeto/devon.git
-cd devon
-bun install
-bun run build
-npm link
+# Crie o arquivo .env com seu editor preferido ou via PowerShell:
+@"
+DEVON_API_KEY=sk-or-sua-chave-aqui
+DEVON_BASE_URL=https://openrouter.ai/api/v1
+DEVON_MODEL=mistralai/devstral-2512:free
+"@ | Out-File -Encoding utf8 .env
 ```
 
-## 3. Configurar provider
+> **Dica:** Crie uma conta gratuita em [openrouter.ai](https://openrouter.ai) para obter uma chave e usar modelos gratuitos.
 
-Veja [Configuração Avançada](advanced-setup.md) para todos os providers. O mais rápido para começar é o OpenRouter (gratuito, sem cartão):
-
-1. Crie sua chave em [openrouter.ai/keys](https://openrouter.ai/keys)
-2. Configure no PowerShell:
+## 3. Iniciar
 
 ```powershell
-$env:CLAUDE_CODE_USE_OPENAI = "1"
-$env:OPENAI_API_KEY         = "sk-or-sua-chave-aqui"
-$env:OPENAI_BASE_URL        = "https://openrouter.ai/api/v1"
-$env:OPENAI_MODEL           = "mistralai/devstral-2512:free"
-```
-
-Ou crie um `.env` e carregue com um script `start.ps1`:
-
-```powershell
-# start.ps1
-Get-Content .env | ForEach-Object {
-  if ($_ -match '^\s*([^#][^=]*)=(.*)$') {
-    [System.Environment]::SetEnvironmentVariable($Matches[1].Trim(), $Matches[2].Trim(), 'Process')
-  }
-}
+cd C:\caminho\do\seu\projeto
 devon
 ```
 
-## 4. Iniciar
+## Usando com Ollama (local, sem chave)
 
 ```powershell
-devon
+# Instalar Ollama
+winget install Ollama.Ollama
+
+# Abrir novo terminal e baixar um modelo
+ollama pull qwen2.5-coder:7b
 ```
 
-## Próximos passos
+Configure o `.env`:
 
-- [Configuração Avançada](advanced-setup.md) — outros providers, perfis, diagnósticos
-- Crie um `DEVON.md` na raiz do projeto para dar contexto permanente ao agente
+```
+DEVON_BASE_URL=http://localhost:11434/v1
+DEVON_MODEL=qwen2.5-coder:7b
+```
+
+## Atalhos de Teclado
+
+| Tecla | Ação |
+|---|---|
+| `Enter` | Enviar prompt |
+| `Ctrl+C` | Interromper turno atual |
+| `Ctrl+C` (duas vezes) | Sair do Devon |
+| `!` | Abrir Command Palette |
+
+## Problemas Comuns
+
+**`devon` não reconhecido como comando**
+- Confirme que o binário está em um diretório listado no `PATH`
+- Feche e reabra o terminal após adicionar ao `PATH`
+
+**Ollama não conecta**
+- Abra um terminal e execute `ollama serve`
+- Confirme que o serviço está rodando com `ollama list`

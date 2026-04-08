@@ -1,14 +1,12 @@
-# Configuração Avançada do Devon
+# Configuração Avançada
 
-Este guia cobre configuração de providers, perfis multi-provider, diagnósticos e opções de runtime.
+Este guia cobre configuração de providers, perfis multi-provider, fallback automático, diagnósticos e modo não-interativo.
 
 ---
 
-## 1. Configuração básica (variáveis de ambiente)
+## Configuração Básica (Variáveis de Ambiente)
 
-O modo mais simples de configurar o Devon continua sendo via variáveis de ambiente. **Zero breaking change** — `DEVON_API_KEY`, `DEVON_BASE_URL` e `DEVON_MODEL` continuam funcionando exatamente como antes.
-
-Crie um `.env` na raiz do projeto:
+O modo mais simples de configurar o Devon é via variáveis de ambiente. Crie um `.env` na raiz do projeto:
 
 ```bash
 DEVON_API_KEY=sk-or-sua-chave-aqui
@@ -16,81 +14,82 @@ DEVON_BASE_URL=https://openrouter.ai/api/v1
 DEVON_MODEL=mistralai/devstral-2512:free
 ```
 
-Inicie o Devon:
-
-```bash
-devon
-```
-
-O Devon carrega automaticamente o `.env` do diretório atual.
-
 | Variável | Obrigatória | Descrição |
 |---|---|---|
 | `DEVON_API_KEY` | Sim* | Chave de API (`*` não necessária para modelos locais) |
-| `DEVON_BASE_URL` | Sim | Endpoint da API (ex: `https://openrouter.ai/api/v1`) |
-| `DEVON_MODEL` | Sim | Nome do modelo (ex: `mistralai/devstral-2512:free`) |
+| `DEVON_BASE_URL` | Sim | Endpoint da API |
+| `DEVON_MODEL` | Sim | Nome do modelo |
+
+O Devon carrega automaticamente o `.env` do diretório atual ao iniciar.
 
 ---
 
-## 2. devon.toml
+## Arquivo `devon.toml`
 
 Para cenários com múltiplos providers ou ambientes, o Devon suporta um arquivo `devon.toml` com perfis nomeados.
 
-### Onde colocar o arquivo
+### Localização
 
 O Devon procura o `devon.toml` na seguinte ordem:
 
-1. **Diretório atual** — `./devon.toml`
-2. **Home do usuário** — `~/.devon.toml`
+1. Diretório atual — `./devon.toml`
+2. Home do usuário — `~/.devon.toml`
 
-Se nenhum for encontrado, o Devon usa as variáveis de ambiente normalmente.
+Se nenhum for encontrado, o Devon usa as variáveis de ambiente.
 
-### Campos disponíveis
+### Estrutura
 
 ```toml
 [defaults]
-profile = "fast"   # string — perfil usado quando --profile não é especificado
-mode    = "auto"   # string — auto | safe | yolo
+profile = "fast"   # perfil padrão quando --profile não é especificado
+mode    = "auto"   # auto | safe | yolo
 
 [[profiles]]
-name        = "fast"                              # string — nome único do perfil
-provider    = "openai"                            # string — identificador do provider
-api_key_env = "OPENROUTER_KEY"                    # string — nome da env var com a API key
-base_url    = "https://openrouter.ai/api/v1"      # string — endpoint da API
-model       = "mistralai/devstral-2512:free"      # string — modelo a usar
-fallback    = ["local"]                           # []string — perfis de fallback (opcional)
+name        = "fast"
+provider    = "openai"
+api_key_env = "OPENROUTER_KEY"               # nome da env var — nunca o valor
+base_url    = "https://openrouter.ai/api/v1"
+model       = "mistralai/devstral-2512:free"
+fallback    = ["local"]                      # perfis de fallback (opcional)
+
+[[profiles]]
+name     = "local"
+provider = "ollama"
+base_url = "http://localhost:11434/v1"
+model    = "qwen2.5-coder:32b"
+
+[[profiles]]
+name        = "power"
+provider    = "anthropic"
+api_key_env = "ANTHROPIC_KEY"
+base_url    = "https://api.anthropic.com/v1"
+model       = "claude-sonnet-4-5"
 ```
 
-### Como o Devon decide qual perfil usar
+### Resolução de Perfil
 
 A resolução segue esta prioridade (maior para menor):
 
-1. **Flag `--profile`** — `devon --profile power`
-2. **`defaults.profile`** no `devon.toml`
-3. **Variáveis de ambiente** — `DEVON_API_KEY` / `DEVON_BASE_URL` / `DEVON_MODEL`
-
-Se `--profile` for passado, o perfil correspondente é carregado do `devon.toml`. Se não houver `--profile` nem `devon.toml`, as variáveis de ambiente são usadas diretamente.
+1. Flag `--profile` na linha de comando
+2. Campo `defaults.profile` no `devon.toml`
+3. Variáveis de ambiente (`DEVON_API_KEY` / `DEVON_BASE_URL` / `DEVON_MODEL`)
 
 ---
 
-## 3. Gerenciando perfis
+## Gerenciando Perfis
 
 ```bash
-# Usar perfil "power"
+# Usar um perfil específico
 devon --profile power
-
-# Usar Ollama local
-devon --profile local
-# Alias curto com -p
 devon -p local
 
 # Sobrescrever o modelo do perfil ativo
-devon --model qwen3:latest
+devon --model gpt-4o
 
 # Combinar perfil + override de modelo
 devon --profile fast --model gpt-4o
 
-# Listar perfis e status das keys
+# Listar perfis e status das API keys
 devon profiles list
 
 # Testar conectividade de cada perfil
@@ -98,8 +97,6 @@ devon profiles test
 ```
 
 ### `devon profiles list`
-
-Exibe todos os perfis configurados no `devon.toml` com o status de cada API key:
 
 ```
 Perfis configurados (devon.toml):
@@ -111,12 +108,7 @@ Perfis configurados (devon.toml):
 Padrão: fast
 ```
 
-- `key: ✔` — a variável de ambiente referenciada em `api_key_env` está definida
-- `key: —` — `api_key_env` vazio (provider local) ou variável não definida
-
 ### `devon profiles test`
-
-Testa a conectividade com cada provider configurado:
 
 ```
 Testando perfis...
@@ -130,48 +122,34 @@ Resultado: 2/3 perfis acessíveis.
 
 ---
 
-## 4. Fallback automático
+## Fallback Automático
 
-Quando um perfil define o campo `fallback`, o Devon tenta automaticamente o próximo perfil da lista em caso de:
-
-- **HTTP 429** — rate limit atingido
-- **HTTP 5xx** — erro do servidor
-
-Exemplo de configuração:
+Quando um perfil define o campo `fallback`, o Devon tenta automaticamente o próximo perfil em caso de erro HTTP 429 (rate limit) ou 5xx (erro do servidor):
 
 ```toml
 [[profiles]]
 name     = "fast"
-# ...
-fallback = ["local"]   # se "fast" der 429 ou 5xx, tenta "local"
-
-[[profiles]]
-name     = "power"
-# ...
-fallback = ["fast"]    # se "power" falhar, tenta "fast"
+fallback = ["local"]  # se "fast" der 429 ou 5xx, tenta "local"
 ```
 
-O fallback é tentado uma vez por perfil da lista. Se todos falharem, o erro original é retornado ao usuário.
+O fallback é tentado uma vez por perfil da lista. Se todos falharem, o erro original é retornado.
 
 ---
 
-## 5. Exemplos práticos
+## Exemplos por Provider
 
-### OpenRouter (modelos gratuitos + pagos)
-
-Crie sua chave em [openrouter.ai/keys](https://openrouter.ai/keys).
+### OpenRouter
 
 ```toml
 [[profiles]]
 name        = "openrouter"
-provider    = "openai"
 api_key_env = "OPENROUTER_KEY"
 base_url    = "https://openrouter.ai/api/v1"
 model       = "mistralai/devstral-2512:free"
 ```
 
 ```bash
-export OPENROUTER_KEY=sk-or-sua-chave-aqui
+export OPENROUTER_KEY=sk-or-sua-chave
 devon --profile openrouter
 ```
 
@@ -193,41 +171,45 @@ model    = "qwen2.5-coder:32b"
 devon --profile local
 ```
 
-### Anthropic (direto)
+### Anthropic
 
 ```toml
 [[profiles]]
 name        = "anthropic"
-provider    = "anthropic"
 api_key_env = "ANTHROPIC_KEY"
 base_url    = "https://api.anthropic.com/v1"
 model       = "claude-sonnet-4-5"
 ```
 
 ```bash
-export ANTHROPIC_KEY=sk-ant-sua-chave-aqui
+export ANTHROPIC_KEY=sk-ant-sua-chave
 devon --profile anthropic
 ```
 
 ---
 
-## 6. Segurança
+## Segurança
 
-- **Nunca coloque chaves de API diretamente no `devon.toml`**. Use sempre o campo `api_key_env` apontando para o nome de uma variável de ambiente.
-- O `devon.toml` **pode ser commitado no repositório** com segurança, pois contém apenas nomes de variáveis de ambiente — nunca valores.
-- Chaves devem ser exportadas via shell (`export OPENROUTER_KEY=...`) ou definidas em um `.env` local (que está no `.gitignore`).
-- O Devon não armazena, envia ou faz proxy de suas chaves para nenhum serviço além do provider configurado. Todo tráfego vai direto do seu terminal para o endpoint da API.
+> ⚠️ **Nunca coloque chaves de API diretamente no `devon.toml`.** Use sempre `api_key_env` apontando para o nome de uma variável de ambiente.
+
+- O `devon.toml` **pode ser commitado com segurança** — contém apenas nomes de variáveis, nunca valores.
+- Defina as chaves via shell (`export KEY=...`) ou em um `.env` local (já no `.gitignore`).
+- O Devon não armazena nem faz proxy das suas chaves — todo tráfego vai direto do seu terminal para o endpoint configurado.
 
 ---
 
 ## Modos de Permissão
 
-Controle o que o Devon pode executar sem pedir confirmação:
+| Modo | Comportamento |
+|---|---|
+| `auto` *(padrão)* | Leitura livre; escrita e shell pedem confirmação |
+| `safe` | Toda ferramenta pede confirmação |
+| `yolo` | Execução autônoma sem interrupções |
 
 ```bash
-devon --mode auto    # padrão: leitura livre, escrita/shell pedem confirmação
-devon --mode safe    # toda ferramenta pede confirmação
-devon --mode yolo    # executa tudo sem perguntar
+devon --mode auto
+devon --mode safe
+devon --mode yolo
 ```
 
 ---
@@ -235,32 +217,26 @@ devon --mode yolo    # executa tudo sem perguntar
 ## Diagnósticos
 
 ```bash
-# verificar configuração e conexão com provider
 devon doctor
 ```
 
-O `doctor` valida a configuração e testa a conexão com o provider antes de iniciar o agente.
+Valida a configuração e testa a conexão com o provider antes de iniciar o agente.
 
 ---
 
-## Modo Non-Interactive (`devon run`)
+## Modo Não-Interativo (`devon run`)
 
-O subcomando `run` executa uma tarefa de forma não-interativa, sem abrir a TUI. Ideal para scripts, CI/CD e automações.
-
-### Uso
+O subcomando `run` executa uma tarefa sem abrir a TUI. Ideal para scripts, hooks de git e CI/CD.
 
 ```bash
-# argumento direto
+# Argumento direto
 devon run "crie a função main.go"
 
-# via stdin pipe
+# Via stdin
 echo "refatore auth.go" | devon run
 
-# combinando argumento + stdin
-echo "adicione testes" | devon run "no arquivo read.go"
-
-# com modo de permissão e perfil
-devon run "adicione testes ao read.go" --mode yolo --profile fast
+# Com perfil e modo
+devon run "adicione testes" --mode yolo --profile fast
 ```
 
 ### Exit Codes
@@ -269,14 +245,14 @@ devon run "adicione testes ao read.go" --mode yolo --profile fast
 |---|---|
 | `0` | Sucesso |
 | `1` | Erro na execução (falha do agente ou LLM) |
-| `2` | Erro de configuração (`.env` ausente, variáveis faltando) |
+| `2` | Erro de configuração (variáveis ausentes, `.env` inválido) |
 | `130` | Cancelado pelo usuário (SIGINT / Ctrl+C) |
 
-### Flags
+### Flags do `devon run`
 
 | Flag | Descrição |
 |---|---|
-| `--profile`, `-p` | Perfil de provider definido em `devon.toml` |
+| `--profile`, `-p` | Perfil definido em `devon.toml` |
 | `--model` | Sobrescreve o modelo do perfil ativo |
 | `--mode` | Modo de permissão: `auto` (padrão), `safe`, `yolo` |
 | `--env` | Caminho para o arquivo `.env` (padrão: `.env` no diretório atual) |
