@@ -2,11 +2,13 @@ package tools
 
 import (
 	"time"
+
+	"github.com/ElioNeto/devon/internal/config"
 )
 
 // RegisterBuiltin registra todas as ferramentas nativas no registry.
-func RegisterBuiltin(r *Registry, dir string, timeout time.Duration) {
-	r.Register(&BashTool{Dir: dir, Timeout: timeout})
+func RegisterBuiltin(r *Registry, dir string, timeout time.Duration, sandbox config.SandboxConfig) {
+	r.Register(&BashTool{Dir: dir, Timeout: timeout, Sandbox: sandbox})
 	r.Register(&ReadTool{Dir: dir})
 	r.Register(&WriteTool{Dir: dir})
 	r.Register(&EditTool{Dir: dir})
@@ -16,8 +18,8 @@ func RegisterBuiltin(r *Registry, dir string, timeout time.Duration) {
 }
 
 // RegisterBuiltinWithConfig oferece controle granular sobre cada tool.
-func RegisterBuiltinWithConfig(r *Registry, dir string, timeout time.Duration, maxLines, maxFiles, maxMatchSize int) {
-	r.Register(&BashTool{Dir: dir, Timeout: timeout})
+func RegisterBuiltinWithConfig(r *Registry, dir string, timeout time.Duration, sandbox config.SandboxConfig, maxLines, maxFiles, maxMatchSize int) {
+	r.Register(&BashTool{Dir: dir, Timeout: timeout, Sandbox: sandbox})
 	r.Register(&ReadTool{Dir: dir})
 	r.Register(&WriteTool{Dir: dir})
 	r.Register(&EditTool{Dir: dir})

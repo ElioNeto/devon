@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/permissions"
 )
 
@@ -16,6 +17,10 @@ import (
 type BashTool struct {
 	Dir     string
 	Timeout time.Duration
+	// Sandbox fornece timeouts por padrão de comando e limite de processos.
+	Sandbox    config.SandboxConfig
+	// semaphore limita processos paralelos quando MaxProcesses > 0.
+	semaphore  chan struct{}
 }
 
 type bashParams struct {
@@ -40,6 +45,27 @@ func (t *BashTool) Schema() json.RawMessage {
 	}`)
 }
 
+// initSemaphore inicializa o semáforo na primeira execução se MaxProcesses > 0.
+func (t *BashTool) initSemaphore() {
+	if t.Sandbox.MaxProcesses > 0 && t.semaphore == nil {
+		t.semaphore = make(chan struct{}, t.Sandbox.MaxProcesses)
+	}
+}
+
+// resolveTimeout retorna o timeout para o comando dado.
+// Verifica [[sandbox.timeouts]] primeiro; usa t.Timeout como fallback.
+func (t *BashTool) resolveTimeout(command string) time.Duration {
+	for _, ct := range t.Sandbox.Timeouts {
+		if ct.Pattern != "" && strings.Contains(command, ct.Pattern) {
+			return ct.Timeout
+		}
+	}
+	if t.Timeout > 0 {
+		return t.Timeout
+	}
+	return 30 * time.Second
+}
+
 func (t *BashTool) Execute(ctx context.Context, params json.RawMessage) (string, error) {
 	var p bashParams
 	if err := json.Unmarshal(params, &p); err != nil {
@@ -49,11 +75,19 @@ func (t *BashTool) Execute(ctx context.Context, params json.RawMessage) (string,
 		return "", fmt.Errorf("bash: comando nao pode estar vazio")
 	}
 
-	timeout := t.Timeout
-	if timeout == 0 {
-		timeout = 30 * time.Second
+	t.initSemaphore()
+
+	// Adquire slot no semáforo se max_processes estiver configurado.
+	if t.semaphore != nil {
+		select {
+		case t.semaphore <- struct{}{}:
+			defer func() { <-t.semaphore }()
+		case <-ctx.Done():
+			return "", fmt.Errorf("bash: contexto cancelado aguardando slot de processo: %w", ctx.Err())
+		}
 	}
 
+	timeout := t.resolveTimeout(p.Command)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -78,7 +112,6 @@ func (t *BashTool) Execute(ctx context.Context, params json.RawMessage) (string,
 
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			// Mata todo o process group (shell + subprocessos) se possivel
 			_ = killProcessGroup(cmd)
 			return fmt.Sprintf("Comando excedeu o tempo limite apos %v: %s", timeout, out), fmt.Errorf("bash: comando excedeu o tempo limite: %v", timeout)
 		}
