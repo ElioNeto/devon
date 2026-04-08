@@ -1,5 +1,3 @@
-// Package config carrega e valida a configuração do Devon a partir de
-// variáveis de ambiente e arquivo .env opcional.
 package config
 
 import (
@@ -14,11 +12,47 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// ExecutionMode define como os AgentWorkers serão executados.
+type ExecutionMode string
+
+const (
+	Sequential ExecutionMode = "sequential"
+	Parallel   ExecutionMode = "parallel"
+	Async      ExecutionMode = "async"
+	Pipeline   ExecutionMode = "pipeline"
+)
+
+func ParseExecutionMode(s string) ExecutionMode {
+	switch strings.ToLower(s) {
+	case "parallel":
+		return Parallel
+	case "async":
+		return Async
+	case "pipeline":
+		return Pipeline
+	default:
+		return Sequential
+	}
+}
+
+func (e ExecutionMode) String() string {
+	switch e {
+	case Parallel:
+		return "parallel"
+	case Async:
+		return "async"
+	case Pipeline:
+		return "pipeline"
+	default:
+		return "sequential"
+	}
+}
+
 // Mode controla o nível de autonomia do agente.
 type Mode int
 
 const (
-	// ModeAuto pede confirmação apenas para operações destrutivas (padrão).
+	// ModeAuto pede confirmação apenas para operações destrutivas.
 	ModeAuto Mode = iota
 	// ModeSafe pede confirmação para qualquer tool call.
 	ModeSafe
@@ -48,6 +82,16 @@ func (m Mode) String() string {
 	}
 }
 
+// AgentConfig configura um agente especializado.
+type AgentConfig struct {
+	ID           string   `toml:"id"`
+	Model        string   `toml:"model"`
+	Role         string   `toml:"role"`
+	Tools        []string `toml:"tools"`
+	DependsOn    []string `toml:"depends_on"`
+	EnabledTools []string `toml:"-"`
+}
+
 // Config contém toda a configuração de runtime do Devon.
 type Config struct {
 	// Provider
@@ -61,39 +105,54 @@ type Config struct {
 	Timeout   time.Duration
 	TurnDelay time.Duration
 
+	// Multi-Agent
+	ExecutionMode    ExecutionMode
+	MaxAgents        int
+	DBPath           string
+	ContextWindowSize int
+
+	// Agents configuration
+	Agents []AgentConfig
+	// Single agent (legacy mode)
+	SingleAgentMode bool
+
 	// Projeto
 	WorkDir    string
-	ContextDoc string // conteúdo de DEVON.md, se existir
+	ContextDoc string
 }
 
-// Load carrega a configuração a partir do arquivo .env (se existir) e
-// variáveis de ambiente do shell. Variáveis de ambiente têm precedência.
+// Load carrega a configuração.
 func Load(envFile string) (*Config, error) {
-	// Carrega .env se existir, sem sobrescrever variáveis já definidas no shell.
 	if envFile != "" {
-		_ = godotenv.Load(envFile) // ignora erro se arquivo não existir
+		_ = godotenv.Load(envFile)
 	}
 
-	cfg := &Config{
-		APIKey:    os.Getenv("DEVON_API_KEY"),
-		BaseURL:   getEnvDefault("DEVON_BASE_URL", "https://api.openai.com/v1"),
-		Model:     os.Getenv("DEVON_MODEL"),
-		Mode:      ParseMode(getEnvDefault("DEVON_MODE", "auto")),
-		MaxTurns:  getEnvInt("DEVON_MAX_TURNS", 50),
-		Timeout:   time.Duration(getEnvInt("DEVON_TIMEOUT", 30)) * time.Second,
-		TurnDelay: parseDuration(getEnvDefault("DEVON_TURN_DELAY", "0")),
-	}
-
-	// Diretório de trabalho
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("não foi possível obter diretório de trabalho: %w", err)
 	}
-	cfg.WorkDir = wd
 
 	// Lê DEVON.md se existir
+	var contextDoc string
 	if content, err := os.ReadFile("DEVON.md"); err == nil {
-		cfg.ContextDoc = string(content)
+		contextDoc = string(content)
+	}
+
+	cfg := &Config{
+		APIKey:            os.Getenv("DEVON_API_KEY"),
+		BaseURL:           getEnvDefault("DEVON_BASE_URL", "https://api.openai.com/v1"),
+		Model:             os.Getenv("DEVON_MODEL"),
+		Mode:              ParseMode(getEnvDefault("DEVON_MODE", "auto")),
+		MaxTurns:          getEnvInt("DEVON_MAX_TURNS", 50),
+		Timeout:           time.Duration(getEnvInt("DEVON_TIMEOUT", 30)) * time.Second,
+		TurnDelay:         parseDuration(getEnvDefault("DEVON_TURN_DELAY", "0")),
+		WorkDir:           wd,
+		ContextDoc:        contextDoc,
+		ExecutionMode:     ParseExecutionMode(getEnvDefault("DEVON_EXECUTION_MODE", "sequential")),
+		MaxAgents:         getEnvInt("DEVON_MAX_AGENTS", 4),
+		DBPath:            getEnvDefault("DEVON_DB_PATH", ".devon/state.db"),
+		ContextWindowSize: getEnvInt("DEVON_CONTEXT_WINDOW_SIZE", 20),
+		Agents:            []AgentConfig{},
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -108,28 +167,27 @@ func (c *Config) validate() error {
 	if c.Model == "" {
 		return errors.New("DEVON_MODEL não definido. Exemplo: DEVON_MODEL=mistralai/devstral-2512:free")
 	}
-	// Providers locais não precisam de chave
 	if c.APIKey == "" && !isLocalURL(c.BaseURL) {
 		return errors.New("DEVON_API_KEY não definido")
 	}
 	return nil
 }
 
-// Doctor valida a configuração e testa a conectividade com o provider.
+// Doctor valida a configuração.
 func (c *Config) Doctor(ctx context.Context) error {
 	fmt.Printf("[devon doctor]\n")
-	fmt.Printf("  Model:   %s\n", c.Model)
-	fmt.Printf("  BaseURL: %s\n", c.BaseURL)
-	fmt.Printf("  Mode:    %s\n", c.Mode)
-	fmt.Printf("  WorkDir: %s\n", c.WorkDir)
+	fmt.Printf("  Model:           %s\n", c.Model)
+	fmt.Printf("  BaseURL:         %s\n", c.BaseURL)
+	fmt.Printf("  Mode:            %s\n", c.Mode)
+	fmt.Printf("  ExecutionMode:   %s\n", c.ExecutionMode)
+	fmt.Printf("  MaxAgents:       %d\n", c.MaxAgents)
+	fmt.Printf("  DBPath:          %s\n", c.DBPath)
+	fmt.Printf("  WorkDir:         %s\n", c.WorkDir)
 
 	if c.ContextDoc != "" {
-		fmt.Printf("  DEVON.md: encontrado (%d bytes)\n", len(c.ContextDoc))
-	} else {
-		fmt.Printf("  DEVON.md: não encontrado (opcional)\n")
+		fmt.Printf("  DEVON.md:        encontrado (%d bytes)\n", len(c.ContextDoc))
 	}
 
-	// Testa conectividade com endpoint /models
 	modelsURL := strings.TrimRight(c.BaseURL, "/") + "/models"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
 	if err != nil {
@@ -155,8 +213,6 @@ func (c *Config) Doctor(ctx context.Context) error {
 	fmt.Printf("  [PASS] Provider acessível (HTTP %d)\n", resp.StatusCode)
 	return nil
 }
-
-// --- helpers ---
 
 func getEnvDefault(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
