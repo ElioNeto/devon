@@ -82,7 +82,7 @@ func TestReadTool_Execute_PathOutsideDir(t *testing.T) {
 	dir := t.TempDir()
 	outsideDir := t.TempDir()
 	outsideFile := filepath.Join(outsideDir, "secret.txt")
-	os.WriteFile(outsideFile, []byte("secret"), 0o644)
+	_ = os.WriteFile(outsideFile, []byte("secret"), 0o644)
 	tool := &ReadTool{Dir: dir}
 	_, err := tool.Execute(context.Background(), json.RawMessage(`{"file":"`+outsideFile+`"}`))
 	if err == nil {
@@ -134,7 +134,7 @@ func TestReadTool_Execute_LargeFile(t *testing.T) {
 func TestReadTool_Execute_BinaryFile(t *testing.T) {
 	dir := t.TempDir()
 	pngHeader := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
-	os.WriteFile(filepath.Join(dir, "image.png"), pngHeader, 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "image.png"), pngHeader, 0o644)
 	tool := &ReadTool{Dir: dir}
 	result, err := tool.Execute(context.Background(), json.RawMessage(`{"file":"image.png"}`))
 	if err != nil {

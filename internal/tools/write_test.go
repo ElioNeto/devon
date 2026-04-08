@@ -163,7 +163,7 @@ func TestWriteTool_Execute_MkdirAllError(t *testing.T) {
 	dir := t.TempDir()
 	// Create a regular file where we'd try to create a subdirectory
 	blocker := filepath.Join(dir, "file")
-	os.WriteFile(blocker, []byte("blocking"), 0o644)
+	_ = os.WriteFile(blocker, []byte("blocking"), 0o644)
 	tool := &WriteTool{Dir: dir}
 
 	_, err := tool.Execute(context.Background(), json.RawMessage(`{"path":"file/sub/file.txt","content":"test"}`))

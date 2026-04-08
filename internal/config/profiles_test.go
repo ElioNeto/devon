@@ -49,7 +49,7 @@ func TestLoadToml_FindsInCwd(t *testing.T) {
 
 	origWd, _ := os.Getwd()
 	_ = os.Chdir(dir)
-	defer os.Chdir(origWd)
+	defer func() { _ = os.Chdir(origWd) }()
 
 	tomlData := []byte(`
 [[profiles]]
@@ -78,7 +78,7 @@ func TestLoadToml_NotFound(t *testing.T) {
 	dir := t.TempDir()
 	origWd, _ := os.Getwd()
 	_ = os.Chdir(dir)
-	defer os.Chdir(origWd)
+	defer func() { _ = os.Chdir(origWd) }()
 
 	// Also ensure no ~/.devon.toml exists (can't remove user home, so skip)
 	// Just test that with no file, result is nil - but our temp dir might pick up home.

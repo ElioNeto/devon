@@ -103,8 +103,8 @@ func TestRunAgent_WithModel(t *testing.T) {
 
 	// Save and restore cwd
 	oldWd, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldWd)
+	_ = os.Chdir(dir)
+	defer func() { _ = os.Chdir(oldWd) }()
 
 	root := buildRootCommand()
 	root.SetArgs([]string{"--env", ".nonexistent"})
