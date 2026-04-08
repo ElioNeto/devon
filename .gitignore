@@ -1,8 +1,31 @@
-node_modules/
-dist/
-*.tsbuildinfo
+# Ambiente
 .env
 .env.*
 !.env.example
-.openclaude-profile.json
-reports/
+.env.local
+
+# Go binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Build output
+build/
+
+# Devon binário
+/devon
+/devon-*
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm

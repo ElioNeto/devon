@@ -1,8 +1,8 @@
 # Devon
 
-Agente de código para o terminal. Conecta a qualquer LLM com API compatível com OpenAI e executa tarefas de engenharia de software com visibilidade total de cada ação.
+[![CI](https://github.com/ElioNeto/devon/actions/workflows/ci.yml/badge.svg)](https://github.com/ElioNeto/devon/actions/workflows/ci.yml)
 
-> **Status:** Versão atual funcional em TypeScript (Node.js). Reescrita em Go com TUI nativa em andamento na branch [`go-migration`](https://github.com/ElioNeto/devon/tree/go-migration).
+Agente de código com TUI, escrito em Go. Use qualquer LLM com API compatível com OpenAI — OpenRouter, Gemini, Groq, Ollama ou qualquer provider local.
 
 ---
 
@@ -111,49 +111,41 @@ flowchart LR
 
 ---
 
-## Início Rápido (versão atual — TypeScript)
+## Instalação
 
-### Pré-requisitos
+```bash
+curl -fsSL https://raw.githubusercontent.com/ElioNeto/devon/main/install.sh | bash
+```
 
-- [Bun](https://bun.sh) 1.3+
-- Node.js 18+
-
-### Instalação
+Ou compile do fonte:
 
 ```bash
 git clone https://github.com/ElioNeto/devon.git
 cd devon
-bun install
-bun run build
-npm link
+make build
 ```
 
-### Configuração
+---
+
+## Início Rápido
+
+### 1. Configure o provider
 
 Crie um `.env` na raiz do projeto que quiser usar:
 
 ```bash
-CLAUDE_CODE_USE_OPENAI=1
-OPENAI_API_KEY=sk-or-sua-chave-aqui
-OPENAI_BASE_URL=https://openrouter.ai/api/v1
-OPENAI_MODEL=mistralai/devstral-2512:free
+DEVON_API_KEY=sk-or-sua-chave-aqui
+DEVON_BASE_URL=https://openrouter.ai/api/v1
+DEVON_MODEL=mistralai/devstral-2512:free
 ```
+
+### 2. Inicie
 
 ```bash
-echo ".env" >> .gitignore
+devon
 ```
 
-### Iniciar
-
-```bash
-# carregar .env e iniciar
-set -a && source .env && set +a && devon
-
-# se receber erro de heap (sessões longas)
-NODE_OPTIONS="--max-old-space-size=8192" devon
-```
-
-> **Nota:** O erro `JavaScript heap out of memory` ocorre em sessões longas por limitação do runtime Node/V8. A versão Go elimina esse problema — veja [#1](https://github.com/ElioNeto/devon/issues/1).
+Veja o [Playbook](docs/PLAYBOOK.md) e o [Guia de Configuração](docs/advanced-setup.md) para mais detalhes.
 
 ---
 
@@ -168,7 +160,15 @@ NODE_OPTIONS="--max-old-space-size=8192" devon
 | OpenAI | `https://api.openai.com/v1` | `gpt-4o` |
 | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
 
-Veja o [Guia de Configuração](docs/advanced-setup.md) para configuração detalhada de cada provider.
+---
+
+## Ferramentas do Agente
+
+O Devon executa um loop `prompt → LLM → tool call → resultado → LLM` com as seguintes ferramentas:
+
+- **Filesystem:** `read_file`, `write_file`, `edit_file`, `list_dir`, `glob`, `grep`
+- **Shell:** `bash` com timeout, captura de stdout/stderr e controle de permissão
+- **Contexto:** leitura de `DEVON.md` na raiz do projeto como system prompt adicional
 
 ---
 
@@ -203,28 +203,14 @@ gantt
     Build estático + goreleaser        :2026-05-10, 5d
 ```
 
-| Issue | Título | Status |
-|---|---|---|
-| [#1](https://github.com/ElioNeto/devon/issues/1) | Estrutura base Go | ✅ Implementada |
-| [#4](https://github.com/ElioNeto/devon/issues/4) | TUI com Bubble Tea | 🔲 Planejada |
-| [#5](https://github.com/ElioNeto/devon/issues/5) | Histórico de sessões | 🔲 Planejada |
-| [#6](https://github.com/ElioNeto/devon/issues/6) | Sistema de permissões | 🔲 Planejada |
-| [#7](https://github.com/ElioNeto/devon/issues/7) | Build e distribuição | 🔲 Planejada |
-| [#8](https://github.com/ElioNeto/devon/issues/8) | Redução de tokens | 🔲 Planejada |
-| [#9](https://github.com/ElioNeto/devon/issues/9) | Multi-provider e perfis | 🔲 Planejada |
-| [#16](https://github.com/ElioNeto/devon/issues/16) | Ferramentas filesystem e shell | 🔲 Planejada |
-| [#17](https://github.com/ElioNeto/devon/issues/17) | Modo one-shot `devon run` | 🔲 Planejada |
-| [#18](https://github.com/ElioNeto/devon/issues/18) | Interrupção segura Ctrl+C | 🔲 Planejada |
-| [#19](https://github.com/ElioNeto/devon/issues/19) | Sandbox de execução | 🔲 Planejada |
-| [#20](https://github.com/ElioNeto/devon/issues/20) | `devon init` wizard | 🔲 Planejada |
-| [#22](https://github.com/ElioNeto/devon/issues/22) | Memória com SQLite | 🔲 Planejada |
-| [#23](https://github.com/ElioNeto/devon/issues/23) | Indexação semântica | 🔲 Planejada |
-| [#24](https://github.com/ElioNeto/devon/issues/24) | Cache de respostas | 🔲 Planejada |
+---
+
+## Roadmap
+
+Veja as [issues abertas](https://github.com/ElioNeto/devon/issues) para o roadmap completo de funcionalidades planejadas.
 
 ---
 
 ## Licença
 
-Código Go (Devon): MIT.
-
-A base TypeScript atual é derivada do [openclaude](https://github.com/ElioNeto/openclaude), fork educacional de um snapshot do Claude Code. O código original da Anthropic está sujeito aos termos da Anthropic. Este repositório não é afiliado nem endossado pela Anthropic.
+MIT.
