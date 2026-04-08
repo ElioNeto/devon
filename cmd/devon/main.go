@@ -173,7 +173,10 @@ func hasStdinPipe() bool {
 func runOneShot(ctx context.Context, cfg *config.Config, task string) (string, error) {
 	client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
 	registry := tools.NewRegistry()
-	agent := agentpkg.New(cfg, client, registry)
+
+	// Create a simple in-memory store for run-only mode
+	fakeDB := &fakeDB{}
+	agent := agentpkg.New(cfg, client, registry, fakeDB, "default-agent")
 
 	events := agent.Run(ctx, task)
 
@@ -203,3 +206,26 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	}
 	return cfg.Doctor(cmd.Context())
 }
+
+// fakeDB is a simple in-memory store for one-shot mode
+type fakeDB struct{}
+
+func (f *fakeDB) CreateSession(ctx context.Context, id string) error { return nil }
+func (f *fakeDB) GetSession(ctx context.Context, id string) (bool, error) { return false, nil }
+func (f *fakeDB) ListSessions(ctx context.Context, limit int) ([]db.Message, error) { return nil, nil }
+func (f *fakeDB) PutMessage(ctx context.Context, agentID, sessionID, role, content string) error { return nil }
+func (f *fakeDB) GetMessages(ctx context.Context, agentID, sessionID string, limit int) ([]db.Message, error) { return nil, nil }
+func (f *fakeDB) SlidingWindow(ctx context.Context, agentID, sessionID string, windowSize int) error { return nil }
+func (f *fakeDB) PutAgentState(ctx context.Context, agentID, sessionID, snapshot string) error { return nil }
+func (f *fakeDB) GetAgentState(ctx context.Context, agentID string) (*db.AgentState, error) { return nil, nil }
+func (f *fakeDB) PutToolCall(ctx context.Context, agentID, sessionID, toolName, arguments, status, result, err string) (int64, error) { return 0, nil }
+func (f *fakeDB) GetToolCalls(ctx context.Context, sessionID string) ([]db.ToolCall, error) { return nil, nil }
+func (f *fakeDB) ArchiveMessages(ctx context.Context, agentID, sessionID string) error { return nil }
+func (f *fakeDB) GetSessionHistory(ctx context.Context, sessionID string, limit int) ([]db.Message, error) { return nil, nil }
+func (f *fakeDB) PutArtifact(ctx context.Context, key, sessionID string, data []byte) error { return nil }
+func (f *fakeDB) GetArtifact(ctx context.Context, key string) ([]byte, error) { return nil, nil }
+func (f *fakeDB) GetCostSummary(ctx context.Context, sessionID string) (*db.CostSummary, error) { return nil, nil }
+func (f *fakeDB) UpdateCostSummary(ctx context.Context, sessionID string, cost float64, tokens map[string]int) error { return nil }
+func (f *fakeDB) Subscribe(ctx context.Context, topic string) (<-chan db.Event, error) { return nil, nil }
+func (f *fakeDB) Publish(ctx context.Context, topic string, payload interface{}) error { return nil }
+func (f *fakeDB) Close() error { return nil }

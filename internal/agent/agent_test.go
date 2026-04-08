@@ -8,7 +8,6 @@ import (
 
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/db"
-	_ "modernc.org/sqlite"
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/tools"
 )
@@ -423,6 +422,8 @@ func TestAgent_Run_UserMessageInHistory(t *testing.T) {
 	a := New(cfg, mc, r, fakeDB, "agent-1")
 	events := collectEvents(a.Run(context.Background(), "my question"))
 
+	_ = events
+
 	if len(a.history) < 2 {
 		t.Errorf("expected at least 2 history entries (system+user), got %d", len(a.history))
 	}
@@ -743,22 +744,26 @@ func (f *fakeDBStore) CreateSession(ctx context.Context, id string) error       
 func (f *fakeDBStore) GetSession(ctx context.Context, id string) (bool, error)                                 { return false, nil }
 func (f *fakeDBStore) ListSessions(ctx context.Context, limit int) ([]string, error)                          { return nil, nil }
 func (f *fakeDBStore) PutMessage(ctx context.Context, agentID, sessionID, role, content string) error          { return nil }
-func (f *fakeDBStore) GetMessages(ctx context.Context, agentID, sessionID string, limit int) ([]Message, error) { return nil, nil }
-func (f *fakeDBStore) SlidingWindow(ctx context.Context, agentID, sessionID string, windowSize int) error       { return nil }
-func (f *fakeDBStore) PutAgentState(ctx context.Context, agentID, sessionID, snapshot string) error             { return nil }
-func (f *fakeDBStore) GetAgentState(ctx context.Context, agentID string) (*AgentState, error)                  { return nil, nil }
+func (f *fakeDBStore) GetMessages(ctx context.Context, agentID, sessionID string, limit int) ([]db.Message, error) {
+	return nil, nil
+}
+func (f *fakeDBStore) SlidingWindow(ctx context.Context, agentID, sessionID string, windowSize int) error     { return nil }
+func (f *fakeDBStore) PutAgentState(ctx context.Context, agentID, sessionID, snapshot string) error           { return nil }
+func (f *fakeDBStore) GetAgentState(ctx context.Context, agentID string) (*db.AgentState, error)             { return nil, nil }
 func (f *fakeDBStore) PutToolCall(ctx context.Context, agentID, sessionID, toolName, arguments, status, result, err string) (int64, error) {
 	return 0, nil
 }
-func (f *fakeDBStore) GetToolCalls(ctx context.Context, sessionID string) ([]ToolCall, error)               { return nil, nil }
-func (f *fakeDBStore) ArchiveMessages(ctx context.Context, agentID, sessionID string) error                  { return nil }
-func (f *fakeDBStore) GetSessionHistory(ctx context.Context, sessionID string, limit int) ([]Message, error) { return nil, nil }
-func (f *fakeDBStore) PutArtifact(ctx context.Context, key, sessionID string, data []byte) error             { return nil }
-func (f *fakeDBStore) GetArtifact(ctx context.Context, key string) ([]byte, error)                           { return nil, nil }
-func (f *fakeDBStore) GetCostSummary(ctx context.Context, sessionID string) (*CostSummary, error)            { return nil, nil }
+func (f *fakeDBStore) GetToolCalls(ctx context.Context, sessionID string) ([]db.ToolCall, error)             { return nil, nil }
+func (f *fakeDBStore) ArchiveMessages(ctx context.Context, agentID, sessionID string) error                   { return nil }
+func (f *fakeDBStore) GetSessionHistory(ctx context.Context, sessionID string, limit int) ([]db.Message, error) {
+	return nil, nil
+}
+func (f *fakeDBStore) PutArtifact(ctx context.Context, key, sessionID string, data []byte) error              { return nil }
+func (f *fakeDBStore) GetArtifact(ctx context.Context, key string) ([]byte, error)                            { return nil, nil }
+func (f *fakeDBStore) GetCostSummary(ctx context.Context, sessionID string) (*db.CostSummary, error)          { return nil, nil }
 func (f *fakeDBStore) UpdateCostSummary(ctx context.Context, sessionID string, cost float64, tokens map[string]int) error {
 	return nil
 }
-func (f *fakeDBStore) Subscribe(ctx context.Context, topic string) (<-chan Event, error)                      { return nil, nil }
-func (f *fakeDBStore) Publish(ctx context.Context, topic string, payload interface{}) error                    { return nil }
-func (f *fakeDBStore) Close() error                                                                          { return nil }
+func (f *fakeDBStore) Subscribe(ctx context.Context, topic string) (<-chan db.Event, error)                   { return nil, nil }
+func (f *fakeDBStore) Publish(ctx context.Context, topic string, payload interface{}) error                     { return nil }
+func (f *fakeDBStore) Close() error                                                                           { return nil }
