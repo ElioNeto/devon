@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/ElioNeto/devon/internal/permissions"
@@ -23,9 +22,11 @@ type bashParams struct {
 	Command string `json:"command"`
 }
 
-func (t *BashTool) Name() string        { return "bash" }
+func (t *BashTool) Name() string                            { return "bash" }
 func (t *BashTool) Permission() permissions.PermissionLevel { return permissions.PermExecute }
-func (t *BashTool) Description() string { return "Executa um comando shell e retorna sua saida. Use para construir, testar, operacoes git ou qualquer outra tarefa de linha de comando." }
+func (t *BashTool) Description() string {
+	return "Executa um comando shell e retorna sua saida. Use para construir, testar, operacoes git ou qualquer outra tarefa de linha de comando."
+}
 func (t *BashTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
@@ -62,7 +63,7 @@ func (t *BashTool) Execute(ctx context.Context, params json.RawMessage) (string,
 
 	cmd := exec.CommandContext(ctx, "bash", "-c", p.Command) //nolint:gosec
 	cmd.Dir = t.Dir
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setProcessGroup(cmd)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -77,10 +78,8 @@ func (t *BashTool) Execute(ctx context.Context, params json.RawMessage) (string,
 
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			// Mata todo o process group (shell + subprocessos)
-			if cmd.Process != nil {
-				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-			}
+			// Mata todo o process group (shell + subprocessos) se possivel
+			_ = killProcessGroup(cmd)
 			return fmt.Sprintf("Comando excedeu o tempo limite apos %v: %s", timeout, out), fmt.Errorf("bash: comando excedeu o tempo limite: %v", timeout)
 		}
 		return out, fmt.Errorf("bash: erro de execucao: %w", err)

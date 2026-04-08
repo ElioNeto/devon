@@ -22,7 +22,7 @@ const (
 	// Scroll
 	KeyPageUp    = "pgup"
 	KeyPageDown  = "pgdown"
-	KeyBackspace   = "backspace"
+	KeyBackspace = "backspace"
 	KeyDelete    = "delete"
 	KeyLeft      = "left"
 	KeyRight     = "right"

@@ -21,10 +21,9 @@ func tempDir(t *testing.T) string {
 
 func TestSessionDir_CreatesDirectory(t *testing.T) {
 	// Use temp dir to avoid polluting real ~/.devon
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/some/project/path"
 	dir, err := SessionDir(workDir)
@@ -44,10 +43,9 @@ func TestSessionDir_CreatesDirectory(t *testing.T) {
 }
 
 func TestSessionDir_SameInputSameOutput(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	dir1, _ := SessionDir("/same/input")
 	dir2, _ := SessionDir("/same/input")
@@ -57,10 +55,9 @@ func TestSessionDir_SameInputSameOutput(t *testing.T) {
 }
 
 func TestSessionDir_DifferentInputDifferentOutput(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	dir1, _ := SessionDir("/project/a")
 	dir2, _ := SessionDir("/project/b")
@@ -70,10 +67,9 @@ func TestSessionDir_DifferentInputDifferentOutput(t *testing.T) {
 }
 
 func TestCreateSession(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	dir, _ := sessionDir("/test/project")
 	s, err := createSession(dir)
@@ -94,10 +90,9 @@ func TestCreateSession(t *testing.T) {
 }
 
 func TestLoadLastSession_NoSession(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	s, err := LoadLastSession("/test/new-session")
 	if err != nil {
@@ -112,10 +107,9 @@ func TestLoadLastSession_NoSession(t *testing.T) {
 }
 
 func TestSaveAndLoadSession(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	s, err := createSession(sessionDirMust(t, "/test/session"))
 	if err != nil {
@@ -148,10 +142,9 @@ func TestSaveAndLoadSession(t *testing.T) {
 }
 
 func TestListSessions(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/test/list"
 	dir := sessionDirMust(t, workDir)
@@ -169,10 +162,9 @@ func TestListSessions(t *testing.T) {
 }
 
 func TestClearSession(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/test/clear"
 	dir := sessionDirMust(t, workDir)
@@ -189,10 +181,9 @@ func TestClearSession(t *testing.T) {
 }
 
 func TestAppendMessage(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/test/append"
 	dir := sessionDirMust(t, workDir)
@@ -210,10 +201,9 @@ func TestAppendMessage(t *testing.T) {
 }
 
 func TestSaveMessagesJSONL(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/test/jsonl"
 	_ = sessionDirMust(t, workDir)
@@ -238,10 +228,9 @@ func TestSaveMessagesJSONL(t *testing.T) {
 }
 
 func TestLoadSession_NonExistent(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	_, err := LoadSession("/test/none", "nonexistent")
 	if err == nil {
@@ -250,10 +239,9 @@ func TestLoadSession_NonExistent(t *testing.T) {
 }
 
 func TestLoadLastSession_LoadsMostRecent(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/test/recent"
 	dir := sessionDirMust(t, workDir)
@@ -320,10 +308,9 @@ func createSessionMust(t *testing.T, dir string) *Session {
 }
 
 func TestCreateSession_Public(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	s, err := CreateSession("/test/public-create")
 	if err != nil {
@@ -338,10 +325,9 @@ func TestCreateSession_Public(t *testing.T) {
 }
 
 func TestSaveMessages(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/test/save-messages"
 	dir := sessionDirMust(t, workDir)
@@ -370,10 +356,9 @@ func TestSaveMessages(t *testing.T) {
 }
 
 func TestSaveMessages_NilUsage(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/test/save-nil-usage"
 	dir := sessionDirMust(t, workDir)
@@ -395,10 +380,9 @@ func TestSaveMessages_NilUsage(t *testing.T) {
 }
 
 func TestLoadMessages(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/test/load-messages"
 	dir := sessionDirMust(t, workDir)
@@ -424,10 +408,9 @@ func TestLoadMessages(t *testing.T) {
 }
 
 func TestLoadMessages_NonExistent(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	_, err := LoadMessages("/test/load-nonexistent", "nosuchid")
 	if err == nil {
@@ -436,10 +419,9 @@ func TestLoadMessages_NonExistent(t *testing.T) {
 }
 
 func TestGetSessionInfo(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/test/get-session-info"
 	dir := sessionDirMust(t, workDir)
@@ -458,10 +440,9 @@ func TestGetSessionInfo(t *testing.T) {
 }
 
 func TestGetSessionInfo_NewProject(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	info, err := GetSessionInfo("/test/get-new-project")
 	if err != nil {
@@ -476,10 +457,9 @@ func TestGetSessionInfo_NewProject(t *testing.T) {
 }
 
 func TestAppendMessage_WithUsage(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/test/append-usage"
 	dir := sessionDirMust(t, workDir)
@@ -509,10 +489,9 @@ func TestAppendMessage_WithUsage(t *testing.T) {
 }
 
 func TestAppendMessage_MalformedJSON(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/test/append-malformed"
 	dir := sessionDirMust(t, workDir)
@@ -533,10 +512,9 @@ func TestAppendMessage_MalformedJSON(t *testing.T) {
 }
 
 func TestSaveMessagesJSONL_MultipleMessages(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/test/jsonl-multi"
 	_ = sessionDirMust(t, workDir)
@@ -564,10 +542,9 @@ func TestSaveMessagesJSONL_MultipleMessages(t *testing.T) {
 }
 
 func TestLoadMessagesJSONL_MalformedLines(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	workDir := "/test/jsonl-malformed"
 	dir := sessionDirMust(t, workDir)
@@ -591,10 +568,9 @@ func TestLoadMessagesJSONL_MalformedLines(t *testing.T) {
 }
 
 func TestClearSession_NonExistent(t *testing.T) {
-	home := os.Getenv("HOME")
 	tmpHome := tempDir(t)
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", home)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	err := ClearSession("/test/clear-nonexistent", "nosuchid")
 	if err != nil {

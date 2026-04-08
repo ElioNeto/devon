@@ -32,16 +32,16 @@ func TextContent(s string) *string { return &s }
 
 // Message representa uma mensagem no histórico da conversa.
 type Message struct {
-	Role       Role        `json:"role"`
-	Content    *string     `json:"content,omitempty"` // nil → omitido no JSON
-	ToolCallID string      `json:"tool_call_id,omitempty"`
-	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
+	Role       Role       `json:"role"`
+	Content    *string    `json:"content,omitempty"` // nil → omitido no JSON
+	ToolCallID string     `json:"tool_call_id,omitempty"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 }
 
 // ToolCall representa uma chamada de ferramenta solicitada pelo modelo.
 type ToolCall struct {
-	ID       string          `json:"id"`
-	Type     string          `json:"type"`
+	ID       string           `json:"id"`
+	Type     string           `json:"type"`
 	Function ToolCallFunction `json:"function"`
 }
 
@@ -52,8 +52,8 @@ type ToolCallFunction struct {
 
 // ToolDef define uma ferramenta disponível para o modelo.
 type ToolDef struct {
-	Type     string       `json:"type"` // sempre "function"
-	Function ToolDefFunc  `json:"function"`
+	Type     string      `json:"type"` // sempre "function"
+	Function ToolDefFunc `json:"function"`
 }
 
 type ToolDefFunc struct {
@@ -73,11 +73,11 @@ type ChatRequest struct {
 
 // StreamEvent é emitido durante o streaming.
 type StreamEvent struct {
-	Type    string    // "text" | "tool_call" | "done" | "error"
-	Text    string    // para Type=="text"
-	Tool    *ToolCall // para Type=="tool_call"
-	Err     error     // para Type=="error"
-	Usage   *Usage    // para Type=="done"
+	Type  string    // "text" | "tool_call" | "done" | "error"
+	Text  string    // para Type=="text"
+	Tool  *ToolCall // para Type=="tool_call"
+	Err   error     // para Type=="error"
+	Usage *Usage    // para Type=="done"
 }
 
 // Usage reporta tokens consumidos.
@@ -294,7 +294,7 @@ func parseSSE(ctx context.Context, body io.ReadCloser, ch chan<- StreamEvent) {
 	// buffers para tool_calls que chegam fragmentados no stream
 	toolBuf := map[int]*ToolCall{}
 	nameBuf := map[int]string{}
-	argBuf  := map[int]string{}
+	argBuf := map[int]string{}
 
 	send := func(e StreamEvent) {
 		select {
@@ -326,7 +326,7 @@ func parseSSE(ctx context.Context, body io.ReadCloser, ch chan<- StreamEvent) {
 		var chunk struct {
 			Choices []struct {
 				Delta struct {
-					Content   string     `json:"content"`
+					Content   string `json:"content"`
 					ToolCalls []struct {
 						Index    int    `json:"index"`
 						ID       string `json:"id"`

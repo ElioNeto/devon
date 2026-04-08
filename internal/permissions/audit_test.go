@@ -8,9 +8,8 @@ import (
 
 func TestNewAuditLogger(t *testing.T) {
 	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", origHome)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	a, err := NewAuditLogger()
 	if err != nil {
@@ -30,9 +29,8 @@ func TestNewAuditLogger(t *testing.T) {
 
 func TestAuditLogger_LogAndEntries(t *testing.T) {
 	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", origHome)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	a, err := NewAuditLogger()
 	if err != nil {
@@ -64,9 +62,8 @@ func TestAuditLogger_LogAndEntries(t *testing.T) {
 
 func TestAuditLogger_Entries_NotFound(t *testing.T) {
 	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", origHome)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	a, err := NewAuditLogger()
 	if err != nil {
@@ -85,9 +82,8 @@ func TestAuditLogger_Entries_NotFound(t *testing.T) {
 
 func TestAuditLogger_Summary(t *testing.T) {
 	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", origHome)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	a, err := NewAuditLogger()
 	if err != nil {
@@ -110,9 +106,8 @@ func TestAuditLogger_Summary(t *testing.T) {
 
 func TestAuditLogger_Summary_Empty(t *testing.T) {
 	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", origHome)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	a, err := NewAuditLogger()
 	if err != nil {
@@ -131,9 +126,8 @@ func TestAuditLogger_Summary_Empty(t *testing.T) {
 
 func TestAuditLogger_Close_MultipleCalls(t *testing.T) {
 	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", origHome)
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 
 	a, err := NewAuditLogger()
 	if err != nil {

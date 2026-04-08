@@ -23,11 +23,11 @@ type agentResult struct {
 type leftSection int
 
 const (
-	secTurno      leftSection = iota // Tasks (turno ativo + tool calls)
-	secHistorico                     // não usado no left mas mantido para syncRightView
-	secFerramentas                   // Tools ativos
-	secMemoria                       // Files Modified
-	secTokens                        // Memory / Context
+	secTurno       leftSection = iota // Tasks (turno ativo + tool calls)
+	secHistorico                      // não usado no left mas mantido para syncRightView
+	secFerramentas                    // Tools ativos
+	secMemoria                        // Files Modified
+	secTokens                         // Memory / Context
 )
 
 type leftItem struct {
@@ -87,11 +87,11 @@ func buildLeftItems(m *appModel) []leftItem {
 			meta = fmtElapsed(ht.Elapsed)
 		}
 		items = append(items, leftItem{
-			Label:   lbl,
+			Label:      lbl,
 			StatusKind: kind,
-			Section: secTurno,
-			Index:   i,
-			Meta:    meta,
+			Section:    secTurno,
+			Index:      i,
+			Meta:       meta,
 		})
 	}
 
@@ -252,10 +252,10 @@ func progressBar(val, max, width int) string {
 type rightView int
 
 const (
-	viewLogs    rightView = iota // tab 1: Logs — stream de eventos
-	viewDiff                     // tab 2: Diff — último diff de arquivo
-	viewConfig                   // tab 3: Config — variáveis / sessão
-	viewSteps                    // tab 4: Steps — histórico de turno selecionado
+	viewLogs   rightView = iota // tab 1: Logs — stream de eventos
+	viewDiff                    // tab 2: Diff — último diff de arquivo
+	viewConfig                  // tab 3: Config — variáveis / sessão
+	viewSteps                   // tab 4: Steps — histórico de turno selecionado
 )
 
 // ── Context menu ──────────────────────────────────────────────────────────────
@@ -315,9 +315,9 @@ func renderLeftPanel(m *appModel, width, height int, focused bool) string {
 	sessionLine := s.configKey.Render(" devon ") +
 		s.configVal.Render("v"+appVersion) +
 		"  " +
-		s.statusVal.Render("sessão "+ truncate(m.sessionID(), 8)) +
+		s.statusVal.Render("sessão "+truncate(m.sessionID(), 8)) +
 		"  " +
-		s.statusVal.Render("model "+ truncate(m.cfg.Model, 12)) +
+		s.statusVal.Render("model "+truncate(m.cfg.Model, 12)) +
 		"  tokens " +
 		s.configVal.Render(fmtShort(m.totalTokens()))
 	lines = append(lines, sessionLine)
@@ -329,7 +329,7 @@ func renderLeftPanel(m *appModel, width, height int, focused bool) string {
 		if item.StatusKind == "header" {
 			// ─Tasks─
 			dash := strings.Repeat("─", 2)
-			line = s.itemSection.Render(dash+item.Label+dash)
+			line = s.itemSection.Render(dash + item.Label + dash)
 		} else if item.StatusKind == "prog" {
 			// barra de progresso verde
 			line = " " + s.progFill.Render(item.Label)

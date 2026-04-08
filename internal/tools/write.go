@@ -20,9 +20,11 @@ type writeParams struct {
 	Content string `json:"content"`
 }
 
-func (t *WriteTool) Name() string        { return "write" }
+func (t *WriteTool) Name() string                            { return "write" }
 func (t *WriteTool) Permission() permissions.PermissionLevel { return permissions.PermWrite }
-func (t *WriteTool) Description() string { return "Escreve conteudo em um arquivo. Cria diretorios intermediarios se necessario. Arquivos existentes serao sobrescritos." }
+func (t *WriteTool) Description() string {
+	return "Escreve conteudo em um arquivo. Cria diretorios intermediarios se necessario. Arquivos existentes serao sobrescritos."
+}
 func (t *WriteTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",

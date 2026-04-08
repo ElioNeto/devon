@@ -29,7 +29,7 @@ func NewOllamaProvider(baseURL, model string, cfg ProviderConfig) *OllamaProvide
 	}
 }
 
-func (p *OllamaProvider) Name() string { return p.info.Name }
+func (p *OllamaProvider) Name() string    { return p.info.Name }
 func (p *OllamaProvider) Info() ModelInfo { return p.info }
 
 func (p *OllamaProvider) Stream(ctx context.Context, messages []Message, tools []ToolDef) (<-chan Delta, error) {

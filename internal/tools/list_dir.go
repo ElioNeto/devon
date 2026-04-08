@@ -21,7 +21,7 @@ type listDirParams struct {
 	Path string `json:"path"`
 }
 
-func (t *ListDirTool) Name() string { return "list_dir" }
+func (t *ListDirTool) Name() string                            { return "list_dir" }
 func (t *ListDirTool) Permission() permissions.PermissionLevel { return permissions.PermRead }
 func (t *ListDirTool) Description() string {
 	return "Lista arquivos e diretorios em um caminho, com metadados (tipo, tamanho em bytes, ultima modificacao)."

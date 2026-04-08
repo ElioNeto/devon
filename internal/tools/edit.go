@@ -22,7 +22,7 @@ type editParams struct {
 	NewString string `json:"new_string"`
 }
 
-func (t *EditTool) Name() string { return "edit" }
+func (t *EditTool) Name() string                            { return "edit" }
 func (t *EditTool) Permission() permissions.PermissionLevel { return permissions.PermWrite }
 func (t *EditTool) Description() string {
 	return "Edição cirurgica em um arquivo: substitui um trecho exato (old_string) por outro (new_string). Falha se old_string não for encontrado ou aparecer mais de uma vez."

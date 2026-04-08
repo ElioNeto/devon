@@ -203,7 +203,7 @@ func TestAnthropicProvider_buildBody(t *testing.T) {
 			Function: ToolDefFunc{
 				Name:        "calc",
 				Description: "Do math",
-				Parameters: json.RawMessage(`{"type":"object","properties":{}}`),
+				Parameters:  json.RawMessage(`{"type":"object","properties":{}}`),
 			},
 		},
 	}
@@ -265,8 +265,8 @@ func TestAnthropicProvider_buildBody_SystemMerges(t *testing.T) {
 
 func TestAnthropicProvider_buildBody_TagsVision(t *testing.T) {
 	cases := []struct {
-		model       string
-		wantVision  bool
+		model      string
+		wantVision bool
 	}{
 		{"claude-3-opus", true},
 		{"claude-3-sonnet", true},

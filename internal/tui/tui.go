@@ -4,8 +4,8 @@ package tui
 import (
 	"fmt"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/ElioNeto/devon/internal/config"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Run inicia a TUI e bloqueia atÃ© o usuÃ¡rio sair.

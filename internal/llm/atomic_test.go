@@ -20,10 +20,10 @@ type mockProvider struct {
 }
 
 type mockStreamCfg struct {
-	text    string
-	err     error
+	text     string
+	err      error
 	toolCall *ToolCall
-	usage   *Usage
+	usage    *Usage
 }
 
 func (m *mockProvider) addStream(cfg mockStreamCfg) { m.streams = append(m.streams, cfg) }
@@ -192,9 +192,9 @@ func TestAtomicClient_ContextCanceledDuringRetry(t *testing.T) {
 
 func TestIsRetryable(t *testing.T) {
 	cases := []struct {
-		name     string
-		err      error
-		want     bool
+		name string
+		err  error
+		want bool
 	}{
 		{"429", httpStatusErr(429, "rl"), true},
 		{"500", httpStatusErr(500, "err"), true},

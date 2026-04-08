@@ -22,9 +22,11 @@ type globParams struct {
 	Pattern string `json:"pattern"`
 }
 
-func (t *GlobTool) Name() string        { return "glob" }
+func (t *GlobTool) Name() string                            { return "glob" }
 func (t *GlobTool) Permission() permissions.PermissionLevel { return permissions.PermRead }
-func (t *GlobTool) Description() string { return "Busca arquivos por padrao glob. Suporta ** para busca recursiva em diretorios." }
+func (t *GlobTool) Description() string {
+	return "Busca arquivos por padrao glob. Suporta ** para busca recursiva em diretorios."
+}
 func (t *GlobTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",

@@ -7,7 +7,7 @@ import "fmt"
 type leftPanelSection int
 
 const (
-	SectionSession  leftPanelSection = iota
+	SectionSession leftPanelSection = iota
 	SectionHistory
 	SectionTools
 	SectionTokens
@@ -71,7 +71,7 @@ func calcLayout(w, h int) layout {
 	return l
 }
 
-func (l layout) HeaderBar() string  { return "" }
+func (l layout) HeaderBar() string { return "" }
 
 func (l layout) ProgressBar(pct float64, width int) string {
 	if width < 2 {

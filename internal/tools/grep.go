@@ -15,9 +15,9 @@ import (
 
 // GrepTool busca conteudo por regex em arquivos.
 type GrepTool struct {
-	Dir       string
-	MaxLines  int
-	MaxFiles  int
+	Dir          string
+	MaxLines     int
+	MaxFiles     int
 	MaxMatchSize int
 }
 
@@ -27,9 +27,11 @@ type grepParams struct {
 	NoCase  bool   `json:"no_case"` // busca case-insensitive
 }
 
-func (t *GrepTool) Name() string        { return "grep" }
+func (t *GrepTool) Name() string                            { return "grep" }
 func (t *GrepTool) Permission() permissions.PermissionLevel { return permissions.PermRead }
-func (t *GrepTool) Description() string { return "Busca um padrao regex em arquivos. Retorna linhas com matches, arquivos e numeros de linha." }
+func (t *GrepTool) Description() string {
+	return "Busca um padrao regex em arquivos. Retorna linhas com matches, arquivos e numeros de linha."
+}
 func (t *GrepTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
@@ -170,13 +172,13 @@ func readFileMatches(ctx context.Context, path string, opts regexpSyntax, maxLin
 // shouldSkipDir verifica se um diretorio deve ser ignorado durante a busca.
 func shouldSkipDir(name string) bool {
 	skip := map[string]bool{
-		".git":    true,
+		".git":         true,
 		"node_modules": true,
-		"vendor":  true,
-		".cache":  true,
-		".tox":    true,
-		"__pycache__": true,
-		".eggs":   true,
+		"vendor":       true,
+		".cache":       true,
+		".tox":         true,
+		"__pycache__":  true,
+		".eggs":        true,
 	}
 	return skip[name]
 }

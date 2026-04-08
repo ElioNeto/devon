@@ -94,11 +94,11 @@ type uiStyles struct {
 	menuSelected lipgloss.Style
 
 	// Config / table
-	configKey   lipgloss.Style
-	configVal   lipgloss.Style
-	tableHeader lipgloss.Style
-	tableRow    lipgloss.Style
-	tableRowSel lipgloss.Style
+	configKey       lipgloss.Style
+	configVal       lipgloss.Style
+	tableHeader     lipgloss.Style
+	tableRow        lipgloss.Style
+	tableRowSel     lipgloss.Style
 	tableRowMissing lipgloss.Style
 
 	// Progress bar
@@ -151,39 +151,39 @@ func newUIStyles() uiStyles {
 	// ── Status badges
 	s.statusRunning = lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
 	s.statusWaiting = lipgloss.NewStyle().Foreground(colorMuted)
-	s.statusDone    = lipgloss.NewStyle().Foreground(colorFaint)
+	s.statusDone = lipgloss.NewStyle().Foreground(colorFaint)
 	s.statusPending = lipgloss.NewStyle().Foreground(colorYellow)
-	s.statusError   = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
-	s.statusExited  = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
-	s.statusOther   = lipgloss.NewStyle().Foreground(colorYellow)
+	s.statusError = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
+	s.statusExited = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
+	s.statusOther = lipgloss.NewStyle().Foreground(colorYellow)
 
 	// ── Tool statuses
 	s.toolRunning = lipgloss.NewStyle().Foreground(colorYellow)
-	s.toolDone    = lipgloss.NewStyle().Foreground(colorGreen)
-	s.toolError   = lipgloss.NewStyle().Foreground(colorRed)
+	s.toolDone = lipgloss.NewStyle().Foreground(colorGreen)
+	s.toolError = lipgloss.NewStyle().Foreground(colorRed)
 
 	// ── File change indicators
 	s.fileModified = lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
-	s.fileAdded    = lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
-	s.fileDeleted  = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
-	s.fileLines    = lipgloss.NewStyle().Foreground(colorMuted)
+	s.fileAdded = lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
+	s.fileDeleted = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
+	s.fileLines = lipgloss.NewStyle().Foreground(colorMuted)
 
 	// ── Log actors
 	s.actorAgent = lipgloss.NewStyle().Foreground(colorCyan)
-	s.actorTool  = lipgloss.NewStyle().Foreground(colorYellow)
-	s.actorWarn  = lipgloss.NewStyle().Foreground(colorRed)
-	s.actorOk    = lipgloss.NewStyle().Foreground(colorGreen)
-	s.actorTs    = lipgloss.NewStyle().Foreground(colorFaint)
+	s.actorTool = lipgloss.NewStyle().Foreground(colorYellow)
+	s.actorWarn = lipgloss.NewStyle().Foreground(colorRed)
+	s.actorOk = lipgloss.NewStyle().Foreground(colorGreen)
+	s.actorTs = lipgloss.NewStyle().Foreground(colorFaint)
 
 	// ── Tabs
-	s.tabActive   = lipgloss.NewStyle().Foreground(colorText).Underline(true).Bold(true)
+	s.tabActive = lipgloss.NewStyle().Foreground(colorText).Underline(true).Bold(true)
 	s.tabInactive = lipgloss.NewStyle().Foreground(colorMuted)
 
 	// ── Chat
-	s.userMsg  = lipgloss.NewStyle().Foreground(colorPrimary).PaddingLeft(1)
+	s.userMsg = lipgloss.NewStyle().Foreground(colorPrimary).PaddingLeft(1)
 	s.agentMsg = lipgloss.NewStyle().Foreground(colorText).PaddingLeft(1)
-	s.sysMsg   = lipgloss.NewStyle().Foreground(colorMuted).Italic(true).PaddingLeft(1)
-	s.errMsg   = lipgloss.NewStyle().Foreground(colorRed).PaddingLeft(1)
+	s.sysMsg = lipgloss.NewStyle().Foreground(colorMuted).Italic(true).PaddingLeft(1)
+	s.errMsg = lipgloss.NewStyle().Foreground(colorRed).PaddingLeft(1)
 
 	// ── Input
 	s.inputBar = lipgloss.NewStyle().
@@ -194,8 +194,8 @@ func newUIStyles() uiStyles {
 	s.cursorStyle = lipgloss.NewStyle().Foreground(colorPrimary)
 
 	// ── Diff
-	s.diffAdd  = lipgloss.NewStyle().Foreground(colorGreen)
-	s.diffDel  = lipgloss.NewStyle().Foreground(colorRed)
+	s.diffAdd = lipgloss.NewStyle().Foreground(colorGreen)
+	s.diffDel = lipgloss.NewStyle().Foreground(colorRed)
 	s.diffHunk = lipgloss.NewStyle().Foreground(colorCyan)
 
 	// ── Context menu
@@ -204,24 +204,24 @@ func newUIStyles() uiStyles {
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(colorPrimary).
 		Padding(0, 1)
-	s.menuItem     = lipgloss.NewStyle().Foreground(colorMuted).PaddingLeft(1)
+	s.menuItem = lipgloss.NewStyle().Foreground(colorMuted).PaddingLeft(1)
 	s.menuSelected = lipgloss.NewStyle().Foreground(colorText).Background(colorSurface).PaddingLeft(1)
 
 	// ── Config / table
-	s.configKey   = lipgloss.NewStyle().Foreground(colorMuted)
-	s.configVal   = lipgloss.NewStyle().Foreground(colorGreen)
+	s.configKey = lipgloss.NewStyle().Foreground(colorMuted)
+	s.configVal = lipgloss.NewStyle().Foreground(colorGreen)
 	s.tableHeader = lipgloss.NewStyle().Foreground(colorText).Bold(true).PaddingLeft(1)
-	s.tableRow    = lipgloss.NewStyle().Foreground(colorMuted).PaddingLeft(1)
+	s.tableRow = lipgloss.NewStyle().Foreground(colorMuted).PaddingLeft(1)
 	s.tableRowSel = lipgloss.NewStyle().Foreground(colorText).Background(colorSurface2).PaddingLeft(1)
 	s.tableRowMissing = lipgloss.NewStyle().Foreground(colorFaint).PaddingLeft(1)
 
 	// ── Progress bar
-	s.progFill  = lipgloss.NewStyle().Foreground(colorGreen)
+	s.progFill = lipgloss.NewStyle().Foreground(colorGreen)
 	s.progEmpty = lipgloss.NewStyle().Foreground(colorFaint)
 
 	// ── Misc
 	s.helpStyle = lipgloss.NewStyle().Foreground(colorFaint)
-	s.keyStyle  = lipgloss.NewStyle().Foreground(colorPrimary).Bold(true)
+	s.keyStyle = lipgloss.NewStyle().Foreground(colorPrimary).Bold(true)
 	s.badge = lipgloss.NewStyle().
 		Foreground(colorBg).Background(colorPrimary).
 		PaddingLeft(1).PaddingRight(1)

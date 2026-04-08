@@ -11,7 +11,7 @@ type mockTool struct {
 	perm PermissionLevel
 }
 
-func (m *mockTool) Name() string               { return m.name }
+func (m *mockTool) Name() string                { return m.name }
 func (m *mockTool) Permission() PermissionLevel { return m.perm }
 
 func TestPermissionLevel_String(t *testing.T) {

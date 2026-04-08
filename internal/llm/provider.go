@@ -57,12 +57,12 @@ type Provider interface {
 
 // ModelInfo holds metadata about a model.
 type ModelInfo struct {
-	Name        string
-	Provider    string
-	InputCost   float64 // cost per 1M input tokens (USD)
-	OutputCost  float64 // cost per 1M output tokens (USD)
-	MaxTokens   int
-	SupportsTools bool
+	Name           string
+	Provider       string
+	InputCost      float64 // cost per 1M input tokens (USD)
+	OutputCost     float64 // cost per 1M output tokens (USD)
+	MaxTokens      int
+	SupportsTools  bool
 	SupportsVision bool
 }
 

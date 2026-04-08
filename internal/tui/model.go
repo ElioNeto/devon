@@ -96,14 +96,14 @@ type appModel struct {
 	confirm confirmState
 
 	// Input
-	input       string
-	cursor      int
-	scroll      int
-	statusMsg   string
-	inputHist   inputHistory
+	input     string
+	cursor    int
+	scroll    int
+	statusMsg string
+	inputHist inputHistory
 
 	// Multi-line input bar
-	multilineRows   int // number of visible rows the input bar currently has
+	multilineRows int // number of visible rows the input bar currently has
 
 	// Token history per turn
 	tokenPerTurn []int

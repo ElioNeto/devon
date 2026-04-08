@@ -174,9 +174,9 @@ func (p *AnthropicProvider) parseSSE(ctx context.Context, body io.ReadCloser, de
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, bufio.MaxScanTokenSize), 1024*1024)
 
-	toolNames   := map[int]string{}        // index → name (from content_block_start)
-	toolIDs     := map[int]string{}        // index → id
-	toolArgBuf  := map[int]*strings.Builder{}
+	toolNames := map[int]string{} // index → name (from content_block_start)
+	toolIDs := map[int]string{}   // index → id
+	toolArgBuf := map[int]*strings.Builder{}
 
 	send := func(d Delta) {
 		select {
@@ -210,8 +210,8 @@ func (p *AnthropicProvider) parseSSE(ctx context.Context, body io.ReadCloser, de
 			// Try text_delta first
 			var textEv struct {
 				Delta struct {
-					Type  string `json:"type"`
-					Text  string `json:"text"`
+					Type string `json:"type"`
+					Text string `json:"text"`
 				} `json:"delta"`
 			}
 			if err := json.Unmarshal([]byte(data), &textEv); err == nil {
@@ -240,7 +240,7 @@ func (p *AnthropicProvider) parseSSE(ctx context.Context, body io.ReadCloser, de
 
 		case "content_block_start":
 			var blockEv struct {
-				Index int `json:"index"`
+				Index        int `json:"index"`
 				ContentBlock struct {
 					Type  string          `json:"type"`
 					ID    string          `json:"id"`

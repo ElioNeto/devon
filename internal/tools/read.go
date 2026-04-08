@@ -22,7 +22,7 @@ type readParams struct {
 	Limit  int    `json:"limit"`
 }
 
-func (t *ReadTool) Name() string { return "read" }
+func (t *ReadTool) Name() string                            { return "read" }
 func (t *ReadTool) Permission() permissions.PermissionLevel { return permissions.PermRead }
 func (t *ReadTool) Description() string {
 	return "Lee o conteudo de um arquivo e retorna como uma string com numeros de linha. Suporta offset e limit para ler parcialmente arquivos grandes."

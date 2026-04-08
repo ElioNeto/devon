@@ -27,7 +27,7 @@ func NewOpenAIProvider(baseURL, model string, cfg ProviderConfig) *OpenAIProvide
 	}
 }
 
-func (p *OpenAIProvider) Name() string { return p.info.Name }
+func (p *OpenAIProvider) Name() string    { return p.info.Name }
 func (p *OpenAIProvider) Info() ModelInfo { return p.info }
 
 func (p *OpenAIProvider) Stream(ctx context.Context, messages []Message, tools []ToolDef) (<-chan Delta, error) {

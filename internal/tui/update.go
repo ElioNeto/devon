@@ -9,8 +9,8 @@ import (
 	"github.com/ElioNeto/devon/internal/cost"
 	"github.com/ElioNeto/devon/internal/history"
 	"github.com/ElioNeto/devon/internal/llm"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
