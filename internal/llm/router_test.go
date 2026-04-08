@@ -4,18 +4,17 @@ import (
 	"context"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
 // mockStreamProvider returns a pre-built error delta or text delta.
 type mockStreamProvider struct {
-	name  string
-	// errOnStream: if set, Stream returns nil, err immediately
+	name        string
 	errOnStream error
-	// errDelta: if set, Stream returns a channel that emits this error first
-	errDelta error
-	text     string
-	called   int
+	errDelta    error
+	text        string
+	called      atomic.Int32
 }
 
 func (m *mockStreamProvider) Name() string { return m.name }
@@ -24,7 +23,7 @@ func (m *mockStreamProvider) Info() ModelInfo {
 }
 
 func (m *mockStreamProvider) Stream(ctx context.Context, messages []Message, tools []ToolDef) (<-chan Delta, error) {
-	m.called++
+	m.called.Add(1)
 
 	if m.errOnStream != nil {
 		return nil, m.errOnStream
@@ -71,11 +70,11 @@ func TestRouter_FirstStrategy_FallbackOn429(t *testing.T) {
 	if text != "Hello from p2" {
 		t.Errorf("text = %q", text)
 	}
-	if p1.called != 1 {
-		t.Errorf("p1 called %d times, want 1", p1.called)
+	if p1.called.Load() != 1 {
+		t.Errorf("p1 called %d times, want 1", p1.called.Load())
 	}
-	if p2.called != 1 {
-		t.Errorf("p2 called %d times, want 1", p2.called)
+	if p2.called.Load() != 1 {
+		t.Errorf("p2 called %d times, want 1", p2.called.Load())
 	}
 }
 
@@ -95,7 +94,7 @@ func TestRouter_FirstStrategy_ImmediateFailNonRetryable(t *testing.T) {
 		t.Fatal("expected error")
 	}
 	// p2 should NOT be called because 401 is non-retryable
-	if p2.called != 0 {
+	if p2.called.Load() != 0 {
 		t.Error("p2 should not be called for non-retryable error")
 	}
 }
@@ -136,8 +135,8 @@ func TestRouter_FirstStrategy_FirstSucceeds(t *testing.T) {
 	if text != "from p1" {
 		t.Errorf("text = %q, want %q", text, "from p1")
 	}
-	if p2.called != 0 {
-		t.Errorf("p2 called %d times, want 0", p2.called)
+	if p2.called.Load() != 0 {
+		t.Errorf("p2 called %d times, want 0", p2.called.Load())
 	}
 }
 
@@ -177,22 +176,18 @@ func TestRouter_RoundRobin_Distributes(t *testing.T) {
 		}
 	}
 
-	// First call should go to p1 (current=0), then current becomes 1
-	// Second call goes to p2 (current=1), then current becomes 0
 	if text1 != "from p1" {
 		t.Errorf("Stream1 text = %q, want %q", text1, "from p1")
 	}
 	if text2 != "from p2" {
 		t.Errorf("Stream2 text = %q, want %q", text2, "from p2")
 	}
-	if p1.called != 1 || p2.called != 1 {
-		t.Errorf("p1=%d, p2=%d, want both 1", p1.called, p2.called)
+	if p1.called.Load() != 1 || p2.called.Load() != 1 {
+		t.Errorf("p1=%d, p2=%d, want both 1", p1.called.Load(), p2.called.Load())
 	}
 }
 
 func TestRouter_RoundRobin_FallbackOn429(t *testing.T) {
-	// In round-robin mode, first call uses p1 and advances current to 1
-	// If p1 returns 429, we try p2
 	p1 := &mockStreamProvider{
 		name:        "p1",
 		errOnStream: &httpStatusError{StatusCode: http.StatusTooManyRequests},
@@ -218,8 +213,8 @@ func TestRouter_RoundRobin_FallbackOn429(t *testing.T) {
 	if text != "from p2" {
 		t.Errorf("text = %q", text)
 	}
-	if p1.called != 1 || p2.called != 1 {
-		t.Errorf("p1=%d, p2=%d", p1.called, p2.called)
+	if p1.called.Load() != 1 || p2.called.Load() != 1 {
+		t.Errorf("p1=%d, p2=%d", p1.called.Load(), p2.called.Load())
 	}
 }
 
@@ -251,7 +246,7 @@ func TestRouter_ConcurrentSafety(t *testing.T) {
 	}
 	wg.Wait()
 
-	if p1.called+p2.called != 10 {
-		t.Errorf("total calls = %d, want 10", p1.called+p2.called)
+	if p1.called.Load()+p2.called.Load() != 10 {
+		t.Errorf("total calls = %d, want 10", p1.called.Load()+p2.called.Load())
 	}
 }
