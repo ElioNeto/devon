@@ -105,6 +105,7 @@ func TestOpenAIProvider_Stream_ToolCall(t *testing.T) {
 				f.Flush()
 			}
 		}
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	}))
 	defer server.Close()
 
@@ -146,7 +147,9 @@ func TestOpenAIProvider_Stream_BadRequest(t *testing.T) {
 
 func TestOpenAIProvider_Stream_InvalidURL(t *testing.T) {
 	p := NewOpenAIProvider("://invalid", "model", ProviderConfig{Name: "test", APIKey: "k", Timeout: time.Second})
-	_, err := p.Stream(context.Background(), nil, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := p.Stream(ctx, nil, nil)
 	if err == nil {
 		t.Error("expected error for invalid URL")
 	}
