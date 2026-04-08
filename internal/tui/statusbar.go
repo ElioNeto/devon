@@ -51,20 +51,6 @@ func renderStatusBar(m *appModel, width int) string {
 	return s.statusBar.Width(width).Render(line)
 }
 
-func renderModeBadge(m *appModel) string {
-	mode := m.cfg.Mode.String()
-	var color lipgloss.Color
-	switch mode {
-	case "yolo":
-		color = colorRed
-	case "safe":
-		color = colorGreen
-	default:
-		color = colorYellow
-	}
-	return lipgloss.NewStyle().Foreground(color).Bold(true).Render(mode)
-}
-
 // renderInputBar renderiza a barra de input.
 func renderInputBar(m *appModel, width int) string {
 	s := m.styles
@@ -140,7 +126,7 @@ func renderInputLine(m *appModel) string {
 	ru := []rune(m.input)
 	s := m.styles
 	if len(ru) == 0 {
-		return s.sysMsg.Render(fmt.Sprintf("envie uma mensagem  [!] comandos  [?] ajuda"))
+		return s.sysMsg.Render("envie uma mensagem  [!] comandos  [?] ajuda")
 	}
 	if m.cursor >= len(ru) {
 		return m.input + s.cursorStyle.Render("▋")
@@ -188,12 +174,4 @@ func buildStatusRight(m *appModel) string {
 	}
 
 	return right
-}
-
-// renderCostBar renderiza a barra de custo/progresso (usada em renderStatusBar modo verboso).
-func renderCostBar(m *appModel) string {
-	if m.tracker == nil {
-		return ""
-	}
-	return cost.FormatCost(m.tracker.TotalCostUSD)
 }

@@ -24,12 +24,12 @@ func isRateLimited(err error) bool {
 
 // Event é emitido pelo agente para a TUI durante o processamento.
 type Event struct {
-	Type string // "text" | "tool_start" | "tool_done" | "tool_error" | "rate_limited" | "turn_done" | "error" | "confirm_request"
-	Text string // fragmento de texto (streaming)
-	Tool string // nome da ferramenta
-	Args string // argumentos JSON da ferramenta
+	Type   string // "text" | "tool_start" | "tool_done" | "tool_error" | "rate_limited" | "turn_done" | "error" | "confirm_request"
+	Text   string // fragmento de texto (streaming)
+	Tool   string // nome da ferramenta
+	Args   string // argumentos JSON da ferramenta
 	Result string // resultado da ferramenta
-	Err  error
+	Err    error
 }
 
 // ConfirmReply is sent back from TUI when user responds to confirm_request.

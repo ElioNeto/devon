@@ -191,7 +191,7 @@ func renderCmdMenuOverlay(m *appModel, width int) string {
 		BorderForeground(colorPrimary).
 		Padding(0, 1).
 		Width(overlayW - 2).
-		Render(fmt.Sprintf("%s", joinLines(lines)))
+		Render(joinLines(lines))
 }
 
 func joinLines(ss []string) string {

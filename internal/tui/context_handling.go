@@ -10,11 +10,6 @@ import (
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
-func (m *appModel) handleCtxMenuOpen() {
-	m.showMenu = true
-	m.menuCursor = 0
-}
-
 func (m *appModel) handleCtxMenuKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch key.String() {
 	case "esc":

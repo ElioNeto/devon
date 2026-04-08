@@ -5,9 +5,6 @@ import (
 	"github.com/ElioNeto/devon/internal/history"
 )
 
-// sectionLabels maps leftSection index → display label.
-var sectionLabels = []string{"Turno Ativo", "Histórico", "Ferramentas", "Memória", "Tokens"}
-
 // workspaceSlot holds the state for one workspace (Ctrl+1..5).
 type workspaceSlot struct {
 	session    *history.Session

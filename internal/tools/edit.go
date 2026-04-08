@@ -91,17 +91,6 @@ func (t *EditTool) Execute(ctx context.Context, params json.RawMessage) (string,
 	return fmt.Sprintf("Edicao aplicada com sucesso em %s (%d ocorrencias substituidas)", t.relativePath(path), 1), nil
 }
 
-func (t *EditTool) resolvePath(p string) string {
-	if filepath.IsAbs(p) {
-		return p
-	}
-	dir := t.Dir
-	if dir == "" {
-		dir = "."
-	}
-	return filepath.Join(dir, p)
-}
-
 func (t *EditTool) relativePath(p string) string {
 	dir := t.Dir
 	if dir == "" || !filepath.IsAbs(p) {

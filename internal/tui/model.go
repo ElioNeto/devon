@@ -100,11 +100,9 @@ type appModel struct {
 	cursor      int
 	scroll      int
 	statusMsg   string
-	inputActive bool // typing in the input bar (not navigating panels)
 	inputHist   inputHistory
 
 	// Multi-line input bar
-	multilineCursor int // rune offset within input (supports \n)
 	multilineRows   int // number of visible rows the input bar currently has
 
 	// Token history per turn

@@ -256,14 +256,6 @@ const (
 	viewDiff                     // tab 2: Diff — último diff de arquivo
 	viewConfig                   // tab 3: Config — variáveis / sessão
 	viewSteps                    // tab 4: Steps — histórico de turno selecionado
-
-	// aliases para syncRightView (compatibilidade)
-	viewTurnoAtivo    = viewLogs
-	viewToolCall      = viewLogs
-	viewHistoricoTurno = viewSteps
-	viewFerramentas   = viewLogs
-	viewMemoria       = viewConfig
-	viewTokens        = viewConfig
 )
 
 // ── Context menu ──────────────────────────────────────────────────────────────

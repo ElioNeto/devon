@@ -147,7 +147,7 @@ func TestEditTool_Execute_PathOutsideDir(t *testing.T) {
 	dir := t.TempDir()
 	outsideDir := t.TempDir()
 	outsideFile := filepath.Join(outsideDir, "out.txt")
-	os.WriteFile(outsideFile, []byte("out"), 0o644)
+	_ = os.WriteFile(outsideFile, []byte("out"), 0o644)
 	tool := &EditTool{Dir: dir}
 	_, err := tool.Execute(context.Background(), json.RawMessage(`{"path":"`+outsideFile+`","old_string":"out","new_string":"in"}`))
 	if err == nil {

@@ -33,16 +33,7 @@ type layout struct {
 
 	leftFocus  leftPanelSection
 	rightFocus rightPanel
-	panelFocus panelFocus
 }
-
-type panelFocus int
-
-const (
-	FocusLeft  panelFocus = iota
-	FocusRight
-	FocusInput
-)
 
 type rightPanel = string
 

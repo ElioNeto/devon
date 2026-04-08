@@ -248,8 +248,8 @@ func TestGrepTool_Execute_MaxFilesExceeded(t *testing.T) {
 func TestGrepTool_Execute_ContextCancelled(t *testing.T) {
 	dir := t.TempDir()
 	for i := 0; i < 10; i++ {
-		os.MkdirAll(filepath.Join(dir, fmt.Sprintf("dir_%d", i)), 0755)
-		os.WriteFile(filepath.Join(dir, fmt.Sprintf("dir_%d/test.txt", i)), []byte("search term\n"), 0o644)
+		_ = os.MkdirAll(filepath.Join(dir, fmt.Sprintf("dir_%d", i)), 0755)
+		_ = os.WriteFile(filepath.Join(dir, fmt.Sprintf("dir_%d/test.txt", i)), []byte("search term\n"), 0o644)
 	}
 
 	tool := &GrepTool{Dir: dir}
@@ -260,7 +260,7 @@ func TestGrepTool_Execute_ContextCancelled(t *testing.T) {
 
 func TestGrepTool_Execute_AbsolutePath(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello world\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello world\n"), 0o644)
 
 	tool := &GrepTool{Dir: dir, MaxFiles: 10}
 	result, err := tool.Execute(context.Background(), json.RawMessage(`{"path":"`+dir+`","pattern":"hello"}`))

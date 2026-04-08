@@ -10,7 +10,7 @@ import (
 func TestDoctor_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"models":[]}`))
+		_, _ = w.Write([]byte(`{"models":[]}`))
 	}))
 	defer srv.Close()
 
@@ -84,7 +84,7 @@ func TestDoctor_WithAPIKeyAndContextDoc(t *testing.T) {
 			t.Error("missing auth header")
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"models":[]}`))
+		_, _ = w.Write([]byte(`{"models":[]}`))
 	}))
 	defer srv.Close()
 

@@ -14,7 +14,7 @@ import (
 
 func newTestConfig() *config.Config {
 	workDir := "/tmp/test-workdir-" + os.Getenv("USER")
-	os.MkdirAll(workDir, 0755)
+	_ = os.MkdirAll(workDir, 0755)
 	return &config.Config{
 		WorkDir:  workDir,
 		Model:    "test-model",

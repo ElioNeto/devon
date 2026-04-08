@@ -50,9 +50,3 @@ func (h *inputHistory) navigateDown() string {
 	}
 	return ""
 }
-
-// reset clears the history navigator back to the present.
-func (h *inputHistory) reset() {
-	h.cursor = 0
-	h.draft = ""
-}

@@ -75,10 +75,6 @@ func (t *GrepTool) Execute(ctx context.Context, params json.RawMessage) (string,
 	}
 
 	opts := regexpOptions(p)
-	maxMatchSize := t.MaxMatchSize
-	if maxMatchSize == 0 {
-		maxMatchSize = 32 * 1024
-	}
 
 	var results []string
 	var fileCount int

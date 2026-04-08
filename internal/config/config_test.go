@@ -84,7 +84,7 @@ func TestLoad_Success(t *testing.T) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() { _ = os.Chdir(oldWd) }()
 	// Clear env vars that could interfere
 	os.Unsetenv("DEVON_API_KEY")
 	os.Unsetenv("DEVON_MODEL")
@@ -134,8 +134,8 @@ func TestLoad_EnvFileNotFound_Succeeds(t *testing.T) {
 func TestLoad_EmptyDir_Succeeds(t *testing.T) {
 	dir := t.TempDir()
 	oldWd, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldWd)
+	_ = os.Chdir(dir)
+	defer func() { _ = os.Chdir(oldWd) }()
 	for _, k := range []string{"DEVON_API_KEY", "DEVON_MODEL", "DEVON_BASE_URL", "DEVON_MODE", "DEVON_MAX_TURNS", "DEVON_TIMEOUT"} {
 		os.Unsetenv(k)
 	}

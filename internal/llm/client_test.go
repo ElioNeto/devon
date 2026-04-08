@@ -86,7 +86,7 @@ func TestStream_ResponseOK(t *testing.T) {
 			t.Errorf("wrong content type: %s", r.Header.Get("Content-Type"))
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		w.Write([]byte("data: {\"choices\":[],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}\n\ndata: [DONE]\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}\n\ndata: [DONE]\n\n"))
 	}))
 	defer srv.Close()
 

@@ -405,7 +405,3 @@ func min(a, b int) int {
 	}
 	return b
 }
-
-func itoaF(n int) string {
-	return fmt.Sprintf("%d", n)
-}

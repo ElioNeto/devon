@@ -17,11 +17,11 @@ import (
 
 // Session represents a single conversation session.
 type Session struct {
-	ID        string       `json:"id"`
-	CreatedAt time.Time    `json:"created_at"`
-	UpdatedAt time.Time    `json:"updated_at"`
+	ID        string        `json:"id"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt time.Time     `json:"updated_at"`
 	Messages  []llm.Message `json:"messages"`
-	Usage     UsageSummary `json:"usage"`
+	Usage     UsageSummary  `json:"usage"`
 }
 
 // UsageSummary tracks token consumption for a session.

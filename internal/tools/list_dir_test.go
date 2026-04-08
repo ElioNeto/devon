@@ -25,7 +25,7 @@ func TestListDirTool_NameDescSchema(t *testing.T) {
 func TestListDirTool_Execute_Success(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("hello"), 0o644)
-	os.Mkdir(filepath.Join(dir, "subdir"), 0o755)
+	_ = os.Mkdir(filepath.Join(dir, "subdir"), 0o755)
 
 	tool := &ListDirTool{Dir: dir}
 	result, err := tool.Execute(context.Background(), json.RawMessage(`{"path":""}`))

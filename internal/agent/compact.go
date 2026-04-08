@@ -9,12 +9,12 @@ import (
 
 // contextLimits maps model names (or prefixes) to their token limits.
 var contextLimits = map[string]int{
-	"gpt-4o":       128_000,
-	"gpt-4o-mini":  128_000,
-	"gpt-4":        8_192,
-	"claude":       200_000,
-	"gemini-2.5":   1_000_000,
-	"qwen":         32_000,
+	"gpt-4o":      128_000,
+	"gpt-4o-mini": 128_000,
+	"gpt-4":       8_192,
+	"claude":      200_000,
+	"gemini-2.5":  1_000_000,
+	"qwen":        32_000,
 }
 
 // estimateTokens returns a rough token count using 4-chars-per-token heuristic.
