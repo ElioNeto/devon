@@ -31,4 +31,8 @@ build/
 *.db
 *.db-wal
 *.db-shm
+# Cobertura de testes
+coverage.out
+coverage.html
+
 node_modules
