@@ -161,7 +161,7 @@ func newModel(cfg *config.Config) appModel {
 
 	registry := tools.NewRegistry()
 	client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
-	agt := agent.New(cfg, client, registry)
+	agt := agent.New(cfg, client, registry, nil, "")
 	tracker := cost.NewSession(cfg.Model)
 
 	maxCtx := 32000

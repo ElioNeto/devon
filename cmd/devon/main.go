@@ -213,7 +213,7 @@ type fakeDB struct{}
 
 func (f *fakeDB) CreateSession(ctx context.Context, id string) error { return nil }
 func (f *fakeDB) GetSession(ctx context.Context, id string) (bool, error) { return false, nil }
-func (f *fakeDB) ListSessions(ctx context.Context, limit int) ([]db.Message, error) { return nil, nil }
+func (f *fakeDB) ListSessions(ctx context.Context, limit int) ([]string, error) { return nil, nil }
 func (f *fakeDB) PutMessage(ctx context.Context, agentID, sessionID, role, content string) error { return nil }
 func (f *fakeDB) GetMessages(ctx context.Context, agentID, sessionID string, limit int) ([]db.Message, error) { return nil, nil }
 func (f *fakeDB) SlidingWindow(ctx context.Context, agentID, sessionID string, windowSize int) error { return nil }

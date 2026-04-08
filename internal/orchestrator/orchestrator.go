@@ -87,9 +87,7 @@ func (o *Orchestrator) ProcessTask(userTask string, numWorkers int) (string, err
 
 	// Cleanup
 	for _, w := range o.workers {
-		if w.Cancel != nil {
-			w.Cancel()
-		}
+		w.Cancel()
 	}
 
 	aggregateResult := o.aggregator.Aggregate()
