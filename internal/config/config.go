@@ -92,6 +92,20 @@ type AgentConfig struct {
 	EnabledTools []string `toml:"-"`
 }
 
+// CommandTimeout define um timeout específico para padrões de comando.
+type CommandTimeout struct {
+	Pattern string        `toml:"pattern"`
+	Timeout time.Duration `toml:"timeout"`
+}
+
+// SandboxConfig define restrições de sandboxing.
+type SandboxConfig struct {
+	Blocklist     []string      `toml:"blocklist"`
+	Allowlist     []string      `toml:"allowlist"`
+	MaxProcesses  int           `toml:"max_processes"`
+	Timeouts      []CommandTimeout `toml:"timeouts"`
+}
+
 // Config contém toda a configuração de runtime do Devon.
 type Config struct {
 	// Provider
@@ -119,6 +133,9 @@ type Config struct {
 	// Projeto
 	WorkDir    string
 	ContextDoc string
+
+	// Sandbox
+	Sandbox SandboxConfig `toml:"sandbox"`
 }
 
 // Load carrega a configuração.
@@ -155,6 +172,16 @@ func Load(envFile string) (*Config, error) {
 		Agents:            []AgentConfig{},
 	}
 
+	// Carrega devon.toml e aplica sandbox
+	if tc, err := LoadToml(); err == nil && tc != nil {
+		if tc.Defaults.Mode != "" {
+			cfg.Mode = ParseMode(tc.Defaults.Mode)
+		}
+		if tc.Sandbox != nil {
+			cfg.Sandbox = *tc.Sandbox
+		}
+	}
+
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
@@ -187,6 +214,12 @@ func (c *Config) Doctor(ctx context.Context) error {
 	if c.ContextDoc != "" {
 		fmt.Printf("  DEVON.md:        encontrado (%d bytes)\n", len(c.ContextDoc))
 	}
+
+	fmt.Printf("\n[Sandbox]\n")
+	fmt.Printf("  Blocklist:       %d regras\n", len(c.Sandbox.Blocklist))
+	fmt.Printf("  Allowlist:       %d regras\n", len(c.Sandbox.Allowlist))
+	fmt.Printf("  MaxProcesses:    %d\n", c.Sandbox.MaxProcesses)
+	fmt.Printf("  Timeouts:        %d padrões\n", len(c.Sandbox.Timeouts))
 
 	modelsURL := strings.TrimRight(c.BaseURL, "/") + "/models"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)

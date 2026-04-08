@@ -26,6 +26,7 @@ type TomlConfig struct {
 		Mode    string `toml:"mode"`
 	} `toml:"defaults"`
 	Profiles []Profile `toml:"profiles"`
+	Sandbox  *SandboxConfig `toml:"sandbox"`
 }
 
 // LoadToml carrega devon.toml do diretório atual ou home (~/.devon.toml).

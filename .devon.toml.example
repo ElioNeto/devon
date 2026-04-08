@@ -28,3 +28,34 @@ api_key_env = "ANTHROPIC_KEY"
 base_url    = "https://api.anthropic.com/v1"
 model       = "claude-sonnet-4-5"
 fallback    = ["fast"]
+
+# =============================================================================
+# SANDBOX — Restrições de execução de comandos shell
+# =============================================================================
+# Blocklist: comandos sempre bloqueados (combina padrões internos + entradas do usuário)
+[sandbox]
+blocklist = [
+    # Comandos personalizados sempre bloqueados
+    # "rm -rf /tmp/seu-diretorio",
+]
+
+# Allowlist: se definida, APENAS comandos na lista podem ser executados
+# Quando vazia, todos os comandos (não blocklistados) são permitidos
+allowlist = [
+    # "go",
+    # "git",
+    # "make",
+]
+
+# Limite máximo de processos subshell paralelos (0 = ilimitado)
+max_processes = 3
+
+# Timeouts específicos por padrão de comando
+# Se definido, sobreposta o timeout global DEVON_TIMEOUT
+# [[sandbox.timeouts]]
+# pattern = "go test"
+# timeout = "120s"
+#
+# [[sandbox.timeouts]]
+# pattern = "npm install"
+# timeout = "180s"
