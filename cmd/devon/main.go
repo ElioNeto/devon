@@ -79,6 +79,9 @@ func newRootCommand() *cobra.Command {
 	}
 	root.AddCommand(doctor)
 
+	// Subcomando profiles
+	root.AddCommand(newProfilesCommand())
+
 	// Subcomando run (one-shot non-interactive)
 	runCmd := &cobra.Command{
 		Use:   "run <tarefa>",
