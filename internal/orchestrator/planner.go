@@ -1,21 +1,19 @@
 package orchestrator
 
-package orchestrator
-
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/ElioNeto/devon/internal/llm"
 )
 
-type jsonHelper struct{}
-
-func (j jsonHelper) Marshal(v any) ([]byte, error) {
-	return json.Marshal(v)
-}
+const (
+	userTaskPlaceholder = "[[USER_TASK]]"
+	planResultLabel     = "PLANNED_TASKS:"
+)
 
 // Task representa uma subtask no DAG de execução.
 type Task struct {
@@ -28,7 +26,7 @@ type Task struct {
 // Plan é um conjunto de Tasks organizadas em DAG.
 type Plan struct {
 	Tasks     []Task `json:"tasks"`
-	RootTasks []Task `json:"root_tasks"` // tasks sem dependências
+	RootTasks []Task `json:"root_tasks"`
 }
 
 // Planner usa LLM para decompor uma task em subtasks.
@@ -45,77 +43,115 @@ func NewPlanner(client llm.Streamer) *Planner {
 	}
 }
 
-//分解 decompõe uma task complexa em subtasks.
+// Plan decompõe uma task complexa em subtasks.
 func (p *Planner) Plan(ctx context.Context, userTask string, maxTasks int) (*Plan, error) {
-	prompt := fmt.Sprintf("%s\n\nUser Task: %s\n\nReturn JSON with tasks array (max %d), where each task has: id, description, depends_on (array of task IDs), and priority (1-5).",
-		p.promptTemp, userTask, maxTasks)
+	prompt := fmt.Sprintf(p.promptTemp, userTask, maxTasks)
 
 	// Chama o LLM para gerar o plano
-	resp, err := p.client.Generate(ctx, prompt, []llm.ToolDef{})
+	messages := []llm.Message{
+		{Role: llm.RoleSystem, Content: llm.TextContent(defaultSystemPrompt)},
+		{Role: llm.RoleUser, Content: llm.TextContent(prompt)},
+	}
+
+	stream, err := p.client.Stream(ctx, messages, []llm.ToolDef{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate plan: %w", err)
+		return nil, fmt.Errorf("llm stream: %w", err)
 	}
 
-	// Parse da resposta
-	plan, err := parsePlan(resp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse plan: %w", err)
+	var textBuf strings.Builder
+	for ev := range stream {
+		switch ev.Type {
+		case "text":
+			textBuf.WriteString(ev.Text)
+		case "error":
+			return nil, ev.Err
+		case "done":
+			break
+		}
 	}
 
-	return plan, nil
-}
-
-// Decompor manual - usa heurística simples se LLM não disponível
-func (p *Planner) PlanSimple(userTask string) *Plan {
-	// Detecção simples baseada em palavras-chave
-	tasks := []Task{
-		{
-			ID:          "1",
-			Description: userTask,
-			Priority:    1,
-		},
-	}
-
-	rootTasks := []Task{tasks[0]}
-
-	return &Plan{
-		Tasks:     tasks,
-		RootTasks: rootTasks,
-	}
+	text := textBuf.String()
+	return parsePlan(text, userTask)
 }
 
 // parsePlan extrai JSON de texto livre.
-func parsePlan(text string) (*Plan, error) {
-	// Tenta encontrar blocos JSON
-	text = strings.Trim(text)
-	if !strings.HasPrefix(text, "{") {
-		// Procura primeiro {
-		start := strings.Index(text, "{")
-		if start == -1 {
-			return nil, fmt.Errorf("no JSON found in response")
-		}
-		text = text[start:]
+func parsePlan(text, userTask string) (*Plan, error) {
+	text = strings.TrimSpace(text)
+
+	// Procura por PLANNED_TASKS: ou tenta parsear direto
+	start := 0
+	if idx := strings.Index(text, planResultLabel); idx >= 0 {
+		start = idx + len(planResultLabel)
 	}
 
+	// Procura primeiro {
+	jsonStart := strings.Index(text[start:], "{")
+	if jsonStart == -1 {
+		return pFallback(userTask), errors.New("no JSON found in response")
+	}
+	jsonStart += start
+
+	// Conta chaves para fechar corretamente
+	bracketCount := 0
+	jsonEnd := -1
+	for i := jsonStart; i < len(text); i++ {
+		switch text[i] {
+		case '{':
+			bracketCount++
+		case '}':
+			bracketCount--
+			if bracketCount == 0 {
+				jsonEnd = i + 1
+				break
+			}
+		}
+	}
+
+	if jsonEnd == -1 {
+		jsonEnd = len(text)
+	}
+
+	jsonStr := text[jsonStart:jsonEnd]
+
 	var plan Plan
-	if err := json.Unmarshal([]byte(text), &plan); err != nil {
-		// Se falhou, retorna plano simples
-		return &Plan{
-			Tasks: []Task{
-				{ID: "1", Description: userTaskOverride, Priority: 1},
-			},
-			RootTasks: []Task{{ID: "1", Description: userTaskOverride, Priority: 1}},
-		}, nil
+	if err := json.Unmarshal([]byte(jsonStr), &plan); err != nil {
+		return pFallback(userTask), err
+	}
+
+	if len(plan.Tasks) == 0 || (len(plan.RootTasks) == 0 && len(plan.Tasks) > 0) {
+		// Se não tem rootTasks, calcula automaticamente
+		hasDep := make(map[string]bool)
+		for _, t := range plan.Tasks {
+			for _, d := range t.DependsOn {
+				hasDep[d] = true
+			}
+		}
+		for _, t := range plan.Tasks {
+			if !hasDep[t.ID] {
+				plan.RootTasks = append(plan.RootTasks, t)
+			}
+		}
 	}
 
 	return &plan, nil
 }
 
-const defaultSystemPrompt = `You are a task planner. Decompose complex requests into sequential or parallel subtasks.
-Each task should have:
-- id: unique identifier (e.g., "1", "2", "3")
-- description: what this task should accomplish
-- depends_on: array of task IDs this task depends on (empty if none)
-- priority: 1-5 (lower = more important)`
+// PlanSimple retorna plano fallback sem LLM.
+func (p *Planner) PlanSimple(userTask string) *Plan {
+	return pFallback(userTask)
+}
 
-const userTaskOverride = "Complete the user's original task"
+func pFallback(userTask string) *Plan {
+	return &Plan{
+		Tasks: []Task{
+			{ID: "1", Description: userTask, Priority: 1},
+		},
+		RootTasks: []Task{{ID: "1", Description: userTask, Priority: 1}},
+	}
+}
+
+const defaultSystemPrompt = `%s
+
+Task Plan (JSON array with objects containing: id, description, depends_on array, priority 1-5).
+Max %d tasks.
+`
