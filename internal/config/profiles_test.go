@@ -147,6 +147,20 @@ func TestResolveAPIKey(t *testing.T) {
 	}
 }
 
+func TestResolveAPIKey_EmptyEnv(t *testing.T) {
+	// APIKeyEnv set but env var not defined
+	p := &Profile{APIKeyEnv: "DEFINITELY_NOT_SET_KEY_XYZ"}
+	if got := p.ResolveAPIKey(); got != "" {
+		t.Errorf("ResolveAPIKey = %q, want empty", got)
+	}
+
+	// APIKeyEnv is empty string (local providers)
+	p2 := &Profile{}
+	if got := p2.ResolveAPIKey(); got != "" {
+		t.Errorf("ResolveAPIKey = %q, want empty", got)
+	}
+}
+
 func TestApplyProfile(t *testing.T) {
 	os.Setenv("P_KEY", "mykey")
 	defer os.Unsetenv("P_KEY")
