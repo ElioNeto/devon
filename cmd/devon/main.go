@@ -16,6 +16,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// applyProfileFromFlag resolves and applies a profile if the flag is set.
+func applyProfileFromFlag(cmd *cobra.Command, cfg *config.Config) error {
+	profileName, _ := cmd.Flags().GetString("profile")
+	if profileName == "" {
+		return nil
+	}
+	tc, err := config.LoadToml()
+	if err != nil {
+		return fmt.Errorf("falha ao carregar devon.toml: %w", err)
+	}
+	p, err := config.ResolveProfile(tc, profileName)
+	if err != nil {
+		return err
+	}
+	if err := config.ApplyProfile(cfg, p); err != nil {
+		return err
+	}
+	return nil
+}
+
 // exitCoder is used to pass exit codes through Cobra's error handling.
 type exitCoder struct {
 	err  error
@@ -43,6 +63,7 @@ func newRootCommand() *cobra.Command {
 	root.PersistentFlags().String("mode", "auto", "Modo de permissão: auto | safe | yolo")
 	root.PersistentFlags().String("model", "", "Modelo a usar (sobrescreve DEVON_MODEL)")
 	root.PersistentFlags().String("env", ".env", "Caminho para o arquivo .env")
+	root.PersistentFlags().String("profile", "", "Perfil de provider (definido em devon.toml)")
 
 	// Subcomando doctor
 	doctor := &cobra.Command{
