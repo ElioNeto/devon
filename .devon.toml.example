@@ -1,24 +1,30 @@
+# devon.toml — configuração de perfis de provider para o Devon
+# Copie este arquivo para devon.toml e ajuste conforme seu ambiente.
+# SEGURANÇA: Chaves de API NUNCA devem ser colocadas aqui em texto plano.
+# Use sempre `api_key_env` apontando para o nome de uma variável de ambiente.
+
 [defaults]
-profile = "fast"
-mode = "auto"
+profile = "fast"   # perfil usado quando --profile não é especificado
+mode    = "auto"   # auto | safe | yolo
 
 [[profiles]]
-name = "fast"
-provider = "openai"
+name        = "fast"
+provider    = "openai"
 api_key_env = "OPENROUTER_KEY"
-base_url = "https://openrouter.ai/api/v1"
-model = "mistralai/devstral-2512:free"
-fallback = ["local"]
+base_url    = "https://openrouter.ai/api/v1"
+model       = "mistralai/devstral-2512:free"
+fallback    = ["local"]
 
 [[profiles]]
-name = "local"
-provider = "ollama"
-base_url = "http://localhost:11434/v1"
-model = "qwen2.5-coder:32b"
+name        = "local"
+provider    = "ollama"
+base_url    = "http://localhost:11434/v1"
+model       = "qwen2.5-coder:32b"
 
 [[profiles]]
-name = "power"
-provider = "anthropic"
+name        = "power"
+provider    = "anthropic"
 api_key_env = "ANTHROPIC_KEY"
-base_url = "https://api.anthropic.com/v1"
-model = "claude-sonnet-4-5"
+base_url    = "https://api.anthropic.com/v1"
+model       = "claude-sonnet-4-5"
+fallback    = ["fast"]

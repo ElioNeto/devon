@@ -1,237 +1,222 @@
 # Configuração Avançada do Devon
 
-Este guia cobre configuração de providers, perfis por projeto, diagnósticos e opções de runtime.
+Este guia cobre configuração de providers, perfis multi-provider, diagnósticos e opções de runtime.
 
 ---
 
-## Instalação
+## 1. Configuração básica (variáveis de ambiente)
 
-### Opção A: npm (versão atual TypeScript)
+O modo mais simples de configurar o Devon continua sendo via variáveis de ambiente. **Zero breaking change** — `DEVON_API_KEY`, `DEVON_BASE_URL` e `DEVON_MODEL` continuam funcionando exatamente como antes.
 
-```bash
-git clone https://github.com/ElioNeto/devon.git
-cd devon
-bun install
-bun run build
-npm link
-```
-
-### Opção B: Executar direto com Bun
+Crie um `.env` na raiz do projeto:
 
 ```bash
-git clone https://github.com/ElioNeto/devon.git
-cd devon
-bun install
-bun run dev
+DEVON_API_KEY=sk-or-sua-chave-aqui
+DEVON_BASE_URL=https://openrouter.ai/api/v1
+DEVON_MODEL=mistralai/devstral-2512:free
 ```
 
-> **Em breve:** Versão Go com binário único estático. Sem Node, sem Bun, sem dependências. Veja [#7](https://github.com/ElioNeto/devon/issues/7).
-
----
-
-## Configuração de Provider
-
-O Devon conecta a qualquer API compatível com OpenAI. Configure via variáveis de ambiente ou arquivo `.env` local.
-
-### Usando `.env` (recomendado)
-
-Crie um `.env` na raiz do projeto que quiser usar:
+Inicie o Devon:
 
 ```bash
-CLAUDE_CODE_USE_OPENAI=1
-OPENAI_API_KEY=sk-or-sua-chave-aqui
-OPENAI_BASE_URL=https://openrouter.ai/api/v1
-OPENAI_MODEL=mistralai/devstral-2512:free
+devon
 ```
 
-Certifique-se que `.env` está no `.gitignore`:
-
-```bash
-echo ".env" >> .gitignore
-```
-
-Inicie carregando o `.env`:
-
-```bash
-set -a && source .env && set +a && devon
-```
-
----
-
-## Exemplos de Providers
-
-### OpenRouter (modelos gratuitos)
-
-Crie sua chave em [openrouter.ai/keys](https://openrouter.ai/keys) — sem cartão de crédito.
-
-```bash
-CLAUDE_CODE_USE_OPENAI=1
-OPENAI_API_KEY=sk-or-sua-chave-aqui
-OPENAI_BASE_URL=https://openrouter.ai/api/v1
-OPENAI_MODEL=mistralai/devstral-2512:free
-```
-
-Modelos gratuitos recomendados para código:
-
-| Modelo | Contexto | Destaque |
-|---|---|---|
-| `mistralai/devstral-2512:free` | 262K | Melhor para código |
-| `qwen/qwen3-coder:free` | 262K | Forte em tool use |
-| `deepseek/deepseek-r1:free` | 128K | Raciocínio em código |
-
-### Google Gemini
-
-Chave gratuita em [aistudio.google.com](https://aistudio.google.com).
-
-```bash
-CLAUDE_CODE_USE_OPENAI=1
-OPENAI_API_KEY=AIzaSy-sua-chave-aqui
-OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
-OPENAI_MODEL=gemini-2.5-flash
-```
-
-### DeepSeek
-
-```bash
-CLAUDE_CODE_USE_OPENAI=1
-OPENAI_API_KEY=sk-sua-chave-aqui
-OPENAI_BASE_URL=https://api.deepseek.com/v1
-OPENAI_MODEL=deepseek-chat
-```
-
-### Groq
-
-```bash
-CLAUDE_CODE_USE_OPENAI=1
-OPENAI_API_KEY=gsk_sua-chave-aqui
-OPENAI_BASE_URL=https://api.groq.com/openai/v1
-OPENAI_MODEL=llama-3.3-70b-versatile
-```
-
-### Ollama (local)
-
-```bash
-ollama pull qwen2.5-coder:32b
-
-CLAUDE_CODE_USE_OPENAI=1
-OPENAI_BASE_URL=http://localhost:11434/v1
-OPENAI_MODEL=qwen2.5-coder:32b
-# OPENAI_API_KEY não é necessário para modelos locais
-```
-
-### LM Studio
-
-```bash
-CLAUDE_CODE_USE_OPENAI=1
-OPENAI_BASE_URL=http://localhost:1234/v1
-OPENAI_MODEL=nome-do-seu-modelo
-```
-
-### OpenAI
-
-```bash
-CLAUDE_CODE_USE_OPENAI=1
-OPENAI_API_KEY=sk-sua-chave-aqui
-OPENAI_MODEL=gpt-4o
-```
-
-### Azure OpenAI
-
-```bash
-CLAUDE_CODE_USE_OPENAI=1
-OPENAI_API_KEY=sua-chave-azure
-OPENAI_BASE_URL=https://seu-recurso.openai.azure.com/openai/deployments/seu-deployment/v1
-OPENAI_MODEL=gpt-4o
-```
-
----
-
-## Configuração para OpenRouter :free
-
-Os modelos gratuitos do OpenRouter (`:free`) têm limites rígidos de RPM e podem retornar **429** (rate limit) com frequência. O Devon já faz retry automático com backoff exponencial, mas duas variáveis ajudam a evitar os rate limits antes que aconteçam:
-
-```bash
-# Pausa entre turnos do agente (evita rajadas rápidas)
-DEVON_TURN_DELAY=2s
-
-# Máximo de turnos por conversa (padrão: 50)
-DEVON_MAX_TURNS=30
-```
-
-- `DEVON_TURN_DELAY` — tempo de espera entre cada turno do agente. Use `2s` a `5s` para modelos `:free`. Aceita sufixos `s`, `m` (ex: `30s`, `1m`).
-- `DEVON_MAX_TURNS` — limite de iterações LLM por conversa. Reduzir evita consumo excessivo em loops longos.
-
-Isso somado ao retry automático (até 5 tentativas com backoff exponecial para 429/5xx) permite usar modelos gratuitos sem intervenção manual.
-
----
-
-## BYOK (Bring Your Own Key)
-
-O Devon não armazena ou envia sua chave para nenhum serviço além do provider configurado. Todo tráfego vai direto do seu terminal para o endpoint da API (definido em `DEVON_BASE_URL`). Não há telemetria, tracking, ou intermediários.
-
----
-
-## Variáveis de Ambiente
+O Devon carrega automaticamente o `.env` do diretório atual.
 
 | Variável | Obrigatória | Descrição |
 |---|---|---|
-| `CLAUDE_CODE_USE_OPENAI` | Sim | Defina como `1` para habilitar provider OpenAI-compatible |
-| `OPENAI_API_KEY` | Sim* | Chave de API (`*` não necessária para modelos locais) |
-| `OPENAI_MODEL` | Sim | Nome do modelo (ex: `mistralai/devstral-2512:free`) |
-| `OPENAI_BASE_URL` | Não | Endpoint da API. Padrão: `https://api.openai.com/v1` |
+| `DEVON_API_KEY` | Sim* | Chave de API (`*` não necessária para modelos locais) |
+| `DEVON_BASE_URL` | Sim | Endpoint da API (ex: `https://openrouter.ai/api/v1`) |
+| `DEVON_MODEL` | Sim | Nome do modelo (ex: `mistralai/devstral-2512:free`) |
 
 ---
 
-## Perfis por Projeto
+## 2. devon.toml
 
-O Devon salva um perfil local para não precisar configurar o ambiente toda vez:
+Para cenários com múltiplos providers ou ambientes, o Devon suporta um arquivo `devon.toml` com perfis nomeados.
+
+### Onde colocar o arquivo
+
+O Devon procura o `devon.toml` na seguinte ordem:
+
+1. **Diretório atual** — `./devon.toml`
+2. **Home do usuário** — `~/.devon.toml`
+
+Se nenhum for encontrado, o Devon usa as variáveis de ambiente normalmente.
+
+### Campos disponíveis
+
+```toml
+[defaults]
+profile = "fast"   # string — perfil usado quando --profile não é especificado
+mode    = "auto"   # string — auto | safe | yolo
+
+[[profiles]]
+name        = "fast"                              # string — nome único do perfil
+provider    = "openai"                            # string — identificador do provider
+api_key_env = "OPENROUTER_KEY"                    # string — nome da env var com a API key
+base_url    = "https://openrouter.ai/api/v1"      # string — endpoint da API
+model       = "mistralai/devstral-2512:free"      # string — modelo a usar
+fallback    = ["local"]                           # []string — perfis de fallback (opcional)
+```
+
+### Como o Devon decide qual perfil usar
+
+A resolução segue esta prioridade (maior para menor):
+
+1. **Flag `--profile`** — `devon --profile power`
+2. **`defaults.profile`** no `devon.toml`
+3. **Variáveis de ambiente** — `DEVON_API_KEY` / `DEVON_BASE_URL` / `DEVON_MODEL`
+
+Se `--profile` for passado, o perfil correspondente é carregado do `devon.toml`. Se não houver `--profile` nem `devon.toml`, as variáveis de ambiente são usadas diretamente.
+
+---
+
+## 3. Gerenciando perfis
 
 ```bash
-# inicializar perfil com OpenRouter
-bun run profile:init -- --provider openai --api-key sk-or-... --model mistralai/devstral-2512:free
+# Usar perfil "power"
+devon --profile power
 
-# inicializar com Ollama
-bun run profile:init -- --provider ollama --model qwen2.5-coder:32b
+# Usar Ollama local
+devon --profile local
+# Alias curto com -p
+devon -p local
 
-# iniciar usando perfil salvo (.devon-profile.json)
-bun run dev:profile
+# Sobrescrever o modelo do perfil ativo
+devon --model qwen3:latest
+
+# Combinar perfil + override de modelo
+devon --profile fast --model gpt-4o
+
+# Listar perfis e status das keys
+devon profiles list
+
+# Testar conectividade de cada perfil
+devon profiles test
 ```
 
-O arquivo `.devon-profile.json` é criado na raiz do projeto e já está no `.gitignore` por padrão.
+### `devon profiles list`
+
+Exibe todos os perfis configurados no `devon.toml` com o status de cada API key:
+
+```
+Perfis configurados (devon.toml):
+
+  ● fast    openai      mistralai/devstral-2512:free      key: ✔
+  ● local   ollama      qwen2.5-coder:32b                 key: —
+  ● power   anthropic   claude-sonnet-4-5                 key: ✔
+
+Padrão: fast
+```
+
+- `key: ✔` — a variável de ambiente referenciada em `api_key_env` está definida
+- `key: —` — `api_key_env` vazio (provider local) ou variável não definida
+
+### `devon profiles test`
+
+Testa a conectividade com cada provider configurado:
+
+```
+Testando perfis...
+
+  fast    → https://openrouter.ai/api/v1  [PASS] HTTP 200
+  local   → http://localhost:11434/v1     [FAIL] connection refused
+  power   → https://api.anthropic.com/v1 [PASS] HTTP 200
+
+Resultado: 2/3 perfis acessíveis.
+```
 
 ---
 
-## Contexto de Projeto (DEVON.md)
+## 4. Fallback automático
 
-Crie um `DEVON.md` na raiz do projeto para dar contexto permanente ao agente:
+Quando um perfil define o campo `fallback`, o Devon tenta automaticamente o próximo perfil da lista em caso de:
 
-```markdown
-# Contexto do Projeto
+- **HTTP 429** — rate limit atingido
+- **HTTP 5xx** — erro do servidor
 
-- Stack: Go 1.22, PostgreSQL, gRPC
-- Convenções: todos os erros devem ser wrapped com `fmt.Errorf("...: %w", err)`
-- Testes: usar `testify/assert`, sem mocks de terceiros
-- Não alterar arquivos em `vendor/` sem permissão explícita
+Exemplo de configuração:
+
+```toml
+[[profiles]]
+name     = "fast"
+# ...
+fallback = ["local"]   # se "fast" der 429 ou 5xx, tenta "local"
+
+[[profiles]]
+name     = "power"
+# ...
+fallback = ["fast"]    # se "power" falhar, tenta "fast"
 ```
 
-O Devon lê esse arquivo automaticamente ao iniciar em um diretório que o contém.
+O fallback é tentado uma vez por perfil da lista. Se todos falharem, o erro original é retornado ao usuário.
 
 ---
 
-## Diagnósticos
+## 5. Exemplos práticos
+
+### OpenRouter (modelos gratuitos + pagos)
+
+Crie sua chave em [openrouter.ai/keys](https://openrouter.ai/keys).
+
+```toml
+[[profiles]]
+name        = "openrouter"
+provider    = "openai"
+api_key_env = "OPENROUTER_KEY"
+base_url    = "https://openrouter.ai/api/v1"
+model       = "mistralai/devstral-2512:free"
+```
 
 ```bash
-# verificar configuração e conexão com provider
-bun run doctor:runtime
-
-# saída em JSON para scripts
-bun run doctor:runtime:json
-
-# persistir relatório em reports/doctor-runtime.json
-bun run doctor:report
+export OPENROUTER_KEY=sk-or-sua-chave-aqui
+devon --profile openrouter
 ```
 
-O `doctor:runtime` falha imediatamente se a chave de API estiver ausente ou o endpoint inacessível, antes de iniciar o agente.
+### Ollama (local, sem chave)
+
+```bash
+ollama pull qwen2.5-coder:32b
+```
+
+```toml
+[[profiles]]
+name     = "local"
+provider = "ollama"
+base_url = "http://localhost:11434/v1"
+model    = "qwen2.5-coder:32b"
+```
+
+```bash
+devon --profile local
+```
+
+### Anthropic (direto)
+
+```toml
+[[profiles]]
+name        = "anthropic"
+provider    = "anthropic"
+api_key_env = "ANTHROPIC_KEY"
+base_url    = "https://api.anthropic.com/v1"
+model       = "claude-sonnet-4-5"
+```
+
+```bash
+export ANTHROPIC_KEY=sk-ant-sua-chave-aqui
+devon --profile anthropic
+```
+
+---
+
+## 6. Segurança
+
+- **Nunca coloque chaves de API diretamente no `devon.toml`**. Use sempre o campo `api_key_env` apontando para o nome de uma variável de ambiente.
+- O `devon.toml` **pode ser commitado no repositório** com segurança, pois contém apenas nomes de variáveis de ambiente — nunca valores.
+- Chaves devem ser exportadas via shell (`export OPENROUTER_KEY=...`) ou definidas em um `.env` local (que está no `.gitignore`).
+- O Devon não armazena, envia ou faz proxy de suas chaves para nenhum serviço além do provider configurado. Todo tráfego vai direto do seu terminal para o endpoint da API.
 
 ---
 
@@ -244,6 +229,17 @@ devon --mode auto    # padrão: leitura livre, escrita/shell pedem confirmação
 devon --mode safe    # toda ferramenta pede confirmação
 devon --mode yolo    # executa tudo sem perguntar
 ```
+
+---
+
+## Diagnósticos
+
+```bash
+# verificar configuração e conexão com provider
+devon doctor
+```
+
+O `doctor` valida a configuração e testa a conexão com o provider antes de iniciar o agente.
 
 ---
 
@@ -263,23 +259,8 @@ echo "refatore auth.go" | devon run
 # combinando argumento + stdin
 echo "adicione testes" | devon run "no arquivo read.go"
 
-# com modo de permissão
-devon run "adicione testes ao read.go" --mode yolo
-```
-
-O conteúdo do stdin é anexado à tarefa, separado por duas quebras de linha.
-
-### Output
-
-- **stdout**: texto da resposta do agente (para capturar ou pipear)
-- **stderr**: informações de execução (tool calls, erros)
-
-```bash
-# capturar resposta
-resultado=$(devon run "explique o código em auth.go")
-
-# redirecionar tools para arquivo
-devon run "refatore auth.go" 2> tools.log
+# com modo de permissão e perfil
+devon run "adicione testes ao read.go" --mode yolo --profile fast
 ```
 
 ### Exit Codes
@@ -291,17 +272,11 @@ devon run "refatore auth.go" 2> tools.log
 | `2` | Erro de configuração (`.env` ausente, variáveis faltando) |
 | `130` | Cancelado pelo usuário (SIGINT / Ctrl+C) |
 
-```bash
-devon run "tarefa impossível"
-if [ $? -eq 2 ]; then
-  echo "Configuração inválida — verifique o .env"
-fi
-```
-
 ### Flags
 
 | Flag | Descrição |
 |---|---|
+| `--profile`, `-p` | Perfil de provider definido em `devon.toml` |
+| `--model` | Sobrescreve o modelo do perfil ativo |
 | `--mode` | Modo de permissão: `auto` (padrão), `safe`, `yolo` |
-| `--model` | Sobrescreve o modelo configurado no `.env` |
 | `--env` | Caminho para o arquivo `.env` (padrão: `.env` no diretório atual) |
