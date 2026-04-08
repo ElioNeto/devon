@@ -1,11 +1,8 @@
 # Devon
 
-
 [![CI](https://github.com/ElioNeto/devon/actions/workflows/ci.yml/badge.svg)](https://github.com/ElioNeto/devon/actions/workflows/ci.yml)
 
 Agente de código com TUI, escrito em Go. Use qualquer LLM com API compatível com OpenAI — OpenRouter, Gemini, Groq, Ollama ou qualquer provider local.
-
-> **Status:** Em reescrita ativa. A versão atual ainda usa a base TypeScript do OpenClaude. A versão Go com TUI está sendo desenvolvida nas [issues planejadas](https://github.com/ElioNeto/devon/issues).
 
 ---
 
@@ -21,42 +18,41 @@ O Devon é um agente de código de linha de comando que:
 
 ---
 
-## Início Rápido (versão atual — TypeScript)
+## Instalação
 
-Enquanto a versão Go está sendo desenvolvida, a versão atual ainda usa a base TypeScript.
+```bash
+curl -fsSL https://raw.githubusercontent.com/ElioNeto/devon/main/install.sh | bash
+```
 
-### 1. Instale as dependências
+Ou compile do fonte:
 
 ```bash
 git clone https://github.com/ElioNeto/devon.git
 cd devon
-bun install
-bun run build
-npm link
+make build
 ```
 
-### 2. Configure o provider
+---
+
+## Início Rápido
+
+### 1. Configure o provider
 
 Crie um `.env` na raiz do projeto que quiser usar:
 
 ```bash
-CLAUDE_CODE_USE_OPENAI=1
-OPENAI_API_KEY=sk-or-sua-chave-aqui
-OPENAI_BASE_URL=https://openrouter.ai/api/v1
-OPENAI_MODEL=mistralai/devstral-2512:free
+DEVON_API_KEY=sk-or-sua-chave-aqui
+DEVON_BASE_URL=https://openrouter.ai/api/v1
+DEVON_MODEL=mistralai/devstral-2512:free
 ```
 
-### 3. Inicie
+### 2. Inicie
 
 ```bash
-# com .env local
-set -a && source .env && set +a && openclaude
-
-# ou com perfil persistido
-bun run dev:profile
+devon
 ```
 
-Veja o [Guia de Configuração](docs/advanced-setup.md) para todos os providers suportados.
+Veja o [Playbook](docs/PLAYBOOK.md) e o [Guia de Configuração](docs/advanced-setup.md) para mais detalhes.
 
 ---
 
@@ -77,7 +73,7 @@ Veja o [Guia de Configuração](docs/advanced-setup.md) para todos os providers 
 
 O Devon executa um loop `prompt → LLM → tool call → resultado → LLM` com as seguintes ferramentas:
 
-- **Filesystem:** `read_file`, `write_file`, `edit_file`, `list_dir`, `glob`, `search_files`
+- **Filesystem:** `read_file`, `write_file`, `edit_file`, `list_dir`, `glob`, `grep`
 - **Shell:** `bash` com timeout, captura de stdout/stderr e controle de permissão
 - **Contexto:** leitura de `DEVON.md` na raiz do projeto como system prompt adicional
 
@@ -98,20 +94,12 @@ devon --mode yolo    # máxima velocidade
 
 ---
 
-## Roadmap (versão Go)
+## Roadmap
 
-- [#1 Estrutura base Go + Bubble Tea](https://github.com/ElioNeto/devon/issues/1)
-- [#2 Sistema de config e providers](https://github.com/ElioNeto/devon/issues/2)
-- [#3 Loop do agente e ferramentas](https://github.com/ElioNeto/devon/issues/3)
-- [#4 TUI com visibilidade de tool calls em tempo real](https://github.com/ElioNeto/devon/issues/4)
-- [#5 Histórico de conversas e contexto de projeto](https://github.com/ElioNeto/devon/issues/5)
-- [#6 Modo de permissões e confirmações](https://github.com/ElioNeto/devon/issues/6)
-- [#7 Build, distribuição e binário estático](https://github.com/ElioNeto/devon/issues/7)
+Veja as [issues abertas](https://github.com/ElioNeto/devon/issues) para o roadmap completo de funcionalidades planejadas.
 
 ---
 
 ## Licença
 
-Código Go (Devon): MIT.
-
-A base TypeScript atual é derivada do [openclaude](https://github.com/ElioNeto/openclaude), que por sua vez é um fork educacional do snapshot do Claude Code. O código original da Anthropic está sujeito aos termos da Anthropic. Este repositório não é afiliado nem endossado pela Anthropic.
+MIT.
