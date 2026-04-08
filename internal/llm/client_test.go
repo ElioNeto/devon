@@ -35,10 +35,24 @@ func TestNew_NoAuthHeader(t *testing.T) {
 }
 
 func TestStream_HTTPError(t *testing.T) {
-	c := New("key", "http://127.0.0.1:19999", "model", 1*time.Second)
-	_, err := c.Stream(context.Background(), []Message{}, nil)
+	// Use a server that immediately closes the connection to avoid
+	// hanging on TCP SYN retransmits to an unreachable port.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// hijack and immediately close
+		hj, ok := w.(http.Hijacker)
+		if ok {
+			conn, _, _ := hj.Hijack()
+			conn.Close()
+		}
+	}))
+	defer srv.Close()
+
+	c := New("key", srv.URL, "model", 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := c.Stream(ctx, []Message{}, nil)
 	if err == nil {
-		t.Fatal("expected error for unreachable server")
+		t.Fatal("expected error for broken connection")
 	}
 }
 
