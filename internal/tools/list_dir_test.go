@@ -24,7 +24,7 @@ func TestListDirTool_NameDescSchema(t *testing.T) {
 
 func TestListDirTool_Execute_Success(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("hello"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "file.txt"), []byte("hello"), 0o644)
 	_ = os.Mkdir(filepath.Join(dir, "subdir"), 0o755)
 
 	tool := &ListDirTool{Dir: dir}
@@ -39,7 +39,7 @@ func TestListDirTool_Execute_Success(t *testing.T) {
 
 func TestListDirTool_Execute_DefaultPath(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "default.txt"), []byte("data"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "default.txt"), []byte("data"), 0o644)
 
 	tool := &ListDirTool{Dir: dir}
 	result, err := tool.Execute(context.Background(), nil)
@@ -53,7 +53,7 @@ func TestListDirTool_Execute_DefaultPath(t *testing.T) {
 
 func TestListDirTool_Execute_NotADir(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("data"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "file.txt"), []byte("data"), 0o644)
 
 	tool := &ListDirTool{Dir: dir}
 	_, err := tool.Execute(context.Background(), json.RawMessage(`{"path":"file.txt"}`))

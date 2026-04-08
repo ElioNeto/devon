@@ -7,9 +7,8 @@ import (
 	"fmt"
 
 	"github.com/ElioNeto/devon/internal/llm"
+	"github.com/ElioNeto/devon/internal/permissions"
 )
-
-import "github.com/ElioNeto/devon/internal/permissions"
 
 // Tool é a interface que toda ferramenta do Devon deve implementar.
 type Tool interface {

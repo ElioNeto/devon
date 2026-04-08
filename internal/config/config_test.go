@@ -133,8 +133,11 @@ func TestLoad_EnvFileNotFound_Succeeds(t *testing.T) {
 
 func TestLoad_EmptyDir_Succeeds(t *testing.T) {
 	dir := t.TempDir()
+	dir, _ = filepath.EvalSymlinks(dir)
 	oldWd, _ := os.Getwd()
-	_ = os.Chdir(dir)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
 	defer func() { _ = os.Chdir(oldWd) }()
 	for _, k := range []string{"DEVON_API_KEY", "DEVON_MODEL", "DEVON_BASE_URL", "DEVON_MODE", "DEVON_MAX_TURNS", "DEVON_TIMEOUT"} {
 		os.Unsetenv(k)
@@ -176,8 +179,10 @@ func TestLoad_DEVONMD(t *testing.T) {
 		t.Fatal(err)
 	}
 	oldWd, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldWd)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldWd) }()
 	for _, k := range []string{"DEVON_API_KEY", "DEVON_MODEL"} {
 		os.Setenv(k, "k")
 	}
@@ -198,8 +203,10 @@ func TestLoad_DEVONMD(t *testing.T) {
 func TestLoad_Validation_MissingModel(t *testing.T) {
 	dir := t.TempDir()
 	oldWd, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldWd)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldWd) }()
 	for _, k := range []string{"DEVON_MODEL", "DEVON_API_KEY"} {
 		os.Unsetenv(k)
 	}
@@ -212,8 +219,10 @@ func TestLoad_Validation_MissingModel(t *testing.T) {
 func TestLoad_Validation_MissingKey_NonLocal(t *testing.T) {
 	dir := t.TempDir()
 	oldWd, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldWd)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldWd) }()
 	os.Setenv("DEVON_MODEL", "gpt-4")
 	os.Setenv("DEVON_BASE_URL", "https://api.openai.com/v1")
 	defer func() {
@@ -229,8 +238,10 @@ func TestLoad_Validation_MissingKey_NonLocal(t *testing.T) {
 func TestLoad_LocalURL_NoKeyRequired(t *testing.T) {
 	dir := t.TempDir()
 	oldWd, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldWd)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldWd) }()
 	os.Setenv("DEVON_MODEL", "m")
 	os.Setenv("DEVON_BASE_URL", "http://localhost:11434/v1")
 	defer func() {

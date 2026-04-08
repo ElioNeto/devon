@@ -113,9 +113,9 @@ func TestStream_ResponseOK(t *testing.T) {
 
 func TestStream_TextEvents(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n"))
-		w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\" world\"}}]}\n"))
-		w.Write([]byte("data: [DONE]\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\" world\"}}]}\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n"))
 	}))
 	defer srv.Close()
 
