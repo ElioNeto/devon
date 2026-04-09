@@ -51,7 +51,7 @@ type Agent struct {
 
 // New cria um novo Agent com DB injection.
 func New(cfg *config.Config, client llm.Streamer, registry *tools.Registry, db db.Store, agentID string) *Agent {
-	tools.RegisterBuiltin(registry, cfg.WorkDir, cfg.Timeout)
+	tools.RegisterBuiltin(registry, cfg.WorkDir, cfg.Timeout, cfg.Sandbox)
 
 	blocklist := permissions.DefaultBlocklist
 
