@@ -223,6 +223,31 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	return cfg.Doctor(cmd.Context())
 }
 
+func runMemoryClear(cmd *cobra.Command, args []string) error {
+	envFile, _ := cmd.Flags().GetString("env")
+	cfg, err := config.Load(envFile)
+	if err != nil {
+		return fmt.Errorf("falha ao carregar configuração: %w", err)
+	}
+
+	dbPath := filepath.Join(cfg.WorkDir, ".devon", "devon.db")
+	store, err := db.New(dbPath)
+	if err != nil {
+		return fmt.Errorf("falha ao abrir banco: %w", err)
+	}
+	defer store.Close()
+
+	projectID := memory.ProjectIDFromWorkDir(cfg.WorkDir)
+	mem := memory.New(store, projectID)
+
+	if err := mem.Clear(cmd.Context(), projectID); err != nil {
+		return fmt.Errorf("falha ao limpar memória: %w", err)
+	}
+
+	fmt.Fprintf(os.Stdout, "Memória do projeto limpa (WorkDir: %s)\n", cfg.WorkDir)
+	return nil
+}
+
 // fakeDB is a simple in-memory store for one-shot mode
 type fakeDB struct{}
 
