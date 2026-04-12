@@ -767,3 +767,18 @@ func (f *fakeDBStore) UpdateCostSummary(ctx context.Context, sessionID string, c
 func (f *fakeDBStore) Subscribe(ctx context.Context, topic string) (<-chan db.Event, error)                   { return nil, nil }
 func (f *fakeDBStore) Publish(ctx context.Context, topic string, payload interface{}) error                     { return nil }
 func (f *fakeDBStore) Close() error                                                                           { return nil }
+func (f *fakeDBStore) PutFact(ctx context.Context, projectID, category, content, context string) error        { return nil }
+func (f *fakeDBStore) GetFacts(ctx context.Context, projectID, category string, limit int) ([]db.Fact, error) {
+	return nil, nil
+}
+func (f *fakeDBStore) ListFacts(ctx context.Context, projectID string) ([]db.Fact, error)                      { return nil, nil }
+func (f *fakeDBStore) DeleteFacts(ctx context.Context, projectID string) error                                 { return nil }
+func (f *fakeDBStore) RecordFileAccess(ctx context.Context, sessionID, filePath, accessType string) error    { return nil }
+func (f *fakeDBStore) GetFileAccess(ctx context.Context, sessionID string, limit int) ([]db.FileAccess, error) {
+	return nil, nil
+}
+func (f *fakeDBStore) PutErrorPattern(ctx context.Context, projectID, pattern, context string) error         { return nil }
+func (f *fakeDBStore) IncrementErrorPattern(ctx context.Context, projectID, pattern string) error           { return nil }
+func (f *fakeDBStore) GetErrorPatterns(ctx context.Context, projectID string, limit int) ([]db.ErrorPattern, error) {
+	return nil, nil
+}

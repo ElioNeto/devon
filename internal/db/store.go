@@ -59,6 +59,38 @@ type CostSummary struct {
 	AgentCosts  map[string]float64 `json:"agent_costs"`
 }
 
+// Fact representa um fato sobre o projeto.
+type Fact struct {
+	ID         int64     `json:"id"`
+	ProjectID  string    `json:"project_id"`
+	Category   string    `json:"category"`
+	Content    string    `json:"content"`
+	Context    string    `json:"context,omitempty"`
+	Confidence float64   `json:"confidence"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// FileAccess representa acesso a arquivo.
+type FileAccess struct {
+	ID        int64     `json:"id"`
+	SessionID string    `json:"session_id"`
+	FilePath  string    `json:"file_path"`
+	AccessType string   `json:"access_type"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// ErrorPattern representa um padrão de erro detectado.
+type ErrorPattern struct {
+	ID         int64     `json:"id"`
+	ProjectID  string    `json:"project_id"`
+	Pattern    string    `json:"pattern"`
+	Context    string    `json:"context,omitempty"`
+	Occurrences int      `json:"occurrences"`
+	FirstSeen  time.Time `json:"first_seen"`
+	LastSeen   time.Time `json:"last_seen"`
+}
+
 // Store é a interface para armazenamento persistente.
 type Store interface {
 	// Sessions
@@ -91,12 +123,27 @@ type Store interface {
 	GetCostSummary(ctx context.Context, sessionID string) (*CostSummary, error)
 	UpdateCostSummary(ctx context.Context, sessionID string, cost float64, tokens map[string]int) error
 
+	// Memoria semântica - Facts
+	PutFact(ctx context.Context, projectID, category, content, context string) error
+	GetFacts(ctx context.Context, projectID string, category string, limit int) ([]Fact, error)
+	ListFacts(ctx context.Context, projectID string) ([]Fact, error)
+	DeleteFacts(ctx context.Context, projectID string) error
+
+	// Memoria semântica - File Access
+	RecordFileAccess(ctx context.Context, sessionID, filePath, accessType string) error
+	GetFileAccess(ctx context.Context, sessionID string, limit int) ([]FileAccess, error)
+
+	// Memoria semantica - Error Patterns
+	PutErrorPattern(ctx context.Context, projectID, pattern, context string) error
+	IncrementErrorPattern(ctx context.Context, projectID, pattern string) error
+GetErrorPatterns(ctx context.Context, projectID string, limit int) ([]ErrorPattern, error)
+
 	// Pub/Sub
 	Subscribe(ctx context.Context, topic string) (<-chan Event, error)
 	Publish(ctx context.Context, topic string, payload any) error
 
 	// Close
-	Close() error
+Close() error
 }
 
 // SQLiteStore é a implementação Store usando modernc.org/sqlite.
@@ -453,5 +500,125 @@ func (s *SQLiteStore) Close() error {
 	}
 	s.muPubsub.Unlock()
 	return s.db.Close()
+}
+
+// Memória semântica - Facts
+func (s *SQLiteStore) PutFact(ctx context.Context, projectID, category, content, context string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO facts (project_id, category, content, context, confidence, updated_at)
+		 VALUES (?, ?, ?, ?, 1.0, datetime('now'))
+		 ON CONFLICT(project_id, category, content) DO UPDATE SET
+		 context=COALESCE(EXCLUDED.context, context), confidence=1.0, updated_at=datetime('now')`,
+		projectID, category, content, context)
+	return err
+}
+
+func (s *SQLiteStore) GetFacts(ctx context.Context, projectID, category string, limit int) ([]Fact, error) {
+	query := `SELECT id, project_id, category, content, context, confidence, created_at, updated_at
+			  FROM facts WHERE project_id=?`
+	args := []any{projectID}
+
+	if category != "" {
+		query += ` AND category=?`
+		args = append(args, category)
+	}
+
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var facts []Fact
+	for rows.Next() {
+		var f Fact
+		if err := rows.Scan(&f.ID, &f.ProjectID, &f.Category, &f.Content,
+			&f.Context, &f.Confidence, &f.CreatedAt, &f.UpdatedAt); err != nil {
+			return nil, err
+		}
+		facts = append(facts, f)
+	}
+	return facts, rows.Err()
+}
+
+func (s *SQLiteStore) ListFacts(ctx context.Context, projectID string) ([]Fact, error) {
+	return s.GetFacts(ctx, projectID, "", 1000)
+}
+
+func (s *SQLiteStore) DeleteFacts(ctx context.Context, projectID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM facts WHERE project_id=?`, projectID)
+	return err
+}
+
+// Memória semântica - File Access
+func (s *SQLiteStore) RecordFileAccess(ctx context.Context, sessionID, filePath, accessType string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO file_access (session_id, file_path, access_type) VALUES (?, ?, ?)`,
+		sessionID, filePath, accessType)
+	return err
+}
+
+func (s *SQLiteStore) GetFileAccess(ctx context.Context, sessionID string, limit int) ([]FileAccess, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, session_id, file_path, access_type, timestamp
+		 FROM file_access WHERE session_id=? ORDER BY timestamp DESC LIMIT ?`,
+		sessionID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var accesses []FileAccess
+	for rows.Next() {
+		var fa FileAccess
+		if err := rows.Scan(&fa.ID, &fa.SessionID, &fa.FilePath, &fa.AccessType, &fa.Timestamp); err != nil {
+			return nil, err
+		}
+		accesses = append(accesses, fa)
+	}
+	return accesses, rows.Err()
+}
+
+// Memória semântica - Error Patterns
+func (s *SQLiteStore) PutErrorPattern(ctx context.Context, projectID, pattern, context string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO error_patterns (project_id, pattern, context, occurrences, last_seen)
+		 VALUES (?, ?, ?, 1, datetime('now'))
+		 ON CONFLICT(project_id, pattern) DO UPDATE SET
+		 context=COALESCE(EXCLUDED.context, context), occurrences=occurrences+1, last_seen=datetime('now')`,
+		projectID, pattern, context)
+	return err
+}
+
+func (s *SQLiteStore) IncrementErrorPattern(ctx context.Context, projectID, pattern string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE error_patterns SET occurrences=occurrences+1, last_seen=datetime('now')
+		 WHERE project_id=? AND pattern=?`, projectID, pattern)
+	return err
+}
+
+func (s *SQLiteStore) GetErrorPatterns(ctx context.Context, projectID string, limit int) ([]ErrorPattern, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, project_id, pattern, context, occurrences, first_seen, last_seen
+		 FROM error_patterns WHERE project_id=? ORDER BY occurrences DESC LIMIT ?`,
+		projectID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var patterns []ErrorPattern
+	for rows.Next() {
+		var ep ErrorPattern
+		if err := rows.Scan(&ep.ID, &ep.ProjectID, &ep.Pattern, &ep.Context,
+			&ep.Occurrences, &ep.FirstSeen, &ep.LastSeen); err != nil {
+			return nil, err
+		}
+		patterns = append(patterns, ep)
+	}
+	return patterns, rows.Err()
 }
 

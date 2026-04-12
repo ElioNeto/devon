@@ -71,6 +71,44 @@ CREATE TABLE IF NOT EXISTS cost_summary (
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
+-- TABELAS DE MEMÓRIA SEMANTICA (fatos sobre o projeto)
+
+CREATE TABLE IF NOT EXISTS facts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL,
+    category TEXT NOT NULL,
+    content TEXT NOT NULL,
+    context TEXT,
+    confidence REAL DEFAULT 1.0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_facts_project (project_id),
+    INDEX idx_facts_category (category)
+);
+
+CREATE TABLE IF NOT EXISTS file_access (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    access_type TEXT NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    INDEX idx_file_access_session (session_id),
+    INDEX idx_file_access_path (file_path)
+);
+
+CREATE TABLE IF NOT EXISTS error_patterns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL,
+    pattern TEXT NOT NULL,
+    context TEXT,
+    occurrences INTEGER DEFAULT 1,
+    first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_error_patterns_project (project_id),
+    INDEX idx_error_patterns_pattern (pattern)
+);
+
 -- Índices para performance
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_agent ON messages(agent_id);
