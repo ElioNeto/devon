@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ElioNeto/devon/internal/config"
+	"github.com/ElioNeto/devon/internal/memory"
 )
 
 // RegisterBuiltin registra todas as ferramentas nativas no registry.
@@ -16,6 +17,12 @@ func RegisterBuiltin(r *Registry, dir string, timeout time.Duration, sandbox con
 	r.Register(&GlobTool{Dir: dir})
 	r.Register(&GrepTool{Dir: dir})
 	r.Register(&ListDirTool{Dir: dir})
+}
+
+// RegisterMemoryTools registers memory tools (remember, recall).
+func RegisterMemoryTools(r *Registry, mem *memory.Manager, projectID string) {
+	r.Register(&memory.RememberTool{Manager: mem, ProjectID: projectID})
+	r.Register(&memory.RecallTool{Manager: mem, ProjectID: projectID})
 }
 
 // RegisterBuiltinWithConfig oferece controle granular sobre cada tool.

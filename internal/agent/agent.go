@@ -11,6 +11,7 @@ import (
 	"github.com/ElioNeto/devon/internal/agent/prompts"
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/llm"
+	"github.com/ElioNeto/devon/internal/memory"
 	"github.com/ElioNeto/devon/internal/permissions"
 	"github.com/ElioNeto/devon/internal/tools"
 )
@@ -47,11 +48,14 @@ type Agent struct {
 	history     []llm.Message
 	ReplyCh     chan ConfirmReply
 	mu          chan Event
+	mem         *memory.Manager
+	projectID   string
 }
 
 // New cria um novo Agent com DB injection.
-func New(cfg *config.Config, client llm.Streamer, registry *tools.Registry, db db.Store, agentID string) *Agent {
+func New(cfg *config.Config, client llm.Streamer, registry *tools.Registry, db db.Store, agentID string, mem *memory.Manager, projectID string) *Agent {
 	tools.RegisterBuiltin(registry, cfg.WorkDir, cfg.Timeout, cfg.Sandbox)
+	tools.RegisterMemoryTools(registry, mem, projectID)
 
 	blocklist := permissions.DefaultBlocklist
 
@@ -61,6 +65,8 @@ func New(cfg *config.Config, client llm.Streamer, registry *tools.Registry, db d
 		client:      client,
 		registry:    registry,
 		db:          db,
+		mem:         mem,
+		projectID:   projectID,
 		checker: &permissions.Checker{
 			Mode:      cfg.Mode,
 			Session:   make(map[string]bool),
@@ -237,6 +243,14 @@ func (a *Agent) buildSystemMessages() []llm.Message {
 	if a.cfg.ContextDoc != "" {
 		system += "\n\n# Contexto do Projeto (DEVON.md)\n"
 		system += a.cfg.ContextDoc
+	}
+
+	// Append semantic memory context if manager is available
+	if a.mem != nil {
+		memCtx, _ := a.mem.ContextFor(context.Background(), a.projectID, "")
+		if memCtx != "" {
+			system += "\n\n" + memCtx
+		}
 	}
 
 	return []llm.Message{

@@ -12,6 +12,7 @@ import (
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/db"
 	"github.com/ElioNeto/devon/internal/llm"
+	"github.com/ElioNeto/devon/internal/memory"
 	"github.com/ElioNeto/devon/internal/tools"
 	"github.com/ElioNeto/devon/internal/tui"
 	"github.com/spf13/cobra"
@@ -177,7 +178,7 @@ func runOneShot(ctx context.Context, cfg *config.Config, task string) (string, e
 
 	// Create a simple in-memory store for run-only mode
 	fakeDB := &fakeDB{}
-	agent := agentpkg.New(cfg, client, registry, fakeDB, "default-agent")
+	agent := agentpkg.New(cfg, client, registry, fakeDB, "default-agent", nil, "")
 
 	events := agent.Run(ctx, task)
 
@@ -227,6 +228,16 @@ func (f *fakeDB) PutArtifact(ctx context.Context, key, sessionID string, data []
 func (f *fakeDB) GetArtifact(ctx context.Context, key string) ([]byte, error) { return nil, nil }
 func (f *fakeDB) GetCostSummary(ctx context.Context, sessionID string) (*db.CostSummary, error) { return nil, nil }
 func (f *fakeDB) UpdateCostSummary(ctx context.Context, sessionID string, cost float64, tokens map[string]int) error { return nil }
+func (f *fakeDB) PutFact(ctx context.Context, projectID, category, content, context string) error { return nil }
+func (f *fakeDB) GetFacts(ctx context.Context, projectID, category string, limit int) ([]db.Fact, error) { return nil, nil }
+func (f *fakeDB) ListFacts(ctx context.Context, projectID string) ([]db.Fact, error) { return nil, nil }
+func (f *fakeDB) DeleteFacts(ctx context.Context, projectID string) error { return nil }
+func (f *fakeDB) RecordFileAccess(ctx context.Context, sessionID, filePath, accessType string) error { return nil }
+func (f *fakeDB) GetFileAccess(ctx context.Context, sessionID string, limit int) ([]db.FileAccess, error) { return nil, nil }
+func (f *fakeDB) PutErrorPattern(ctx context.Context, projectID, pattern, context string) error { return nil }
+func (f *fakeDB) IncrementErrorPattern(ctx context.Context, projectID, pattern string) error { return nil }
+func (f *fakeDB) GetErrorPatterns(ctx context.Context, projectID string, limit int) ([]db.ErrorPattern, error) { return nil, nil }
+func (f *fakeDB) QueryFacts(ctx context.Context, projectID, keyword string, limit int) ([]db.FactRow, error) { return nil, nil }
 func (f *fakeDB) Subscribe(ctx context.Context, topic string) (<-chan db.Event, error) { return nil, nil }
 func (f *fakeDB) Publish(ctx context.Context, topic string, payload interface{}) error { return nil }
 func (f *fakeDB) Close() error { return nil }

@@ -91,6 +91,13 @@ type ErrorPattern struct {
 	LastSeen   time.Time `json:"last_seen"`
 }
 
+// FactRow representa um fato para consulta simples (sem metadados de tempo).
+type FactRow struct {
+	ID       int64  `json:"id"`
+	Category string `json:"category"`
+	Content  string `json:"content"`
+}
+
 // Store é a interface para armazenamento persistente.
 type Store interface {
 	// Sessions
@@ -136,7 +143,10 @@ type Store interface {
 	// Memoria semantica - Error Patterns
 	PutErrorPattern(ctx context.Context, projectID, pattern, context string) error
 	IncrementErrorPattern(ctx context.Context, projectID, pattern string) error
-GetErrorPatterns(ctx context.Context, projectID string, limit int) ([]ErrorPattern, error)
+	GetErrorPatterns(ctx context.Context, projectID string, limit int) ([]ErrorPattern, error)
+
+	// QueryFacts para tools (busca simples por keyword)
+	QueryFacts(ctx context.Context, projectID, keyword string, limit int) ([]FactRow, error)
 
 	// Pub/Sub
 	Subscribe(ctx context.Context, topic string) (<-chan Event, error)
@@ -620,5 +630,36 @@ func (s *SQLiteStore) GetErrorPatterns(ctx context.Context, projectID string, li
 		patterns = append(patterns, ep)
 	}
 	return patterns, rows.Err()
+}
+
+// QueryFacts retorna fatos que contêm uma keyword no conteúdo ou categoria.
+func (s *SQLiteStore) QueryFacts(ctx context.Context, projectID, keyword string, limit int) ([]FactRow, error) {
+	query := `SELECT id, category, content FROM facts WHERE project_id=?`
+	args := []any{projectID}
+
+	if keyword != "" {
+		query += ` AND (content LIKE ? OR category LIKE ?)`
+		pattern := "%" + keyword + "%"
+		args = append(args, pattern, pattern)
+	}
+
+	query += ` ORDER BY created_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var facts []FactRow
+	for rows.Next() {
+		var f FactRow
+		if err := rows.Scan(&f.ID, &f.Category, &f.Content); err != nil {
+			return nil, err
+		}
+		facts = append(facts, f)
+	}
+	return facts, rows.Err()
 }
 

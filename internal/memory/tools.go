@@ -1,3 +1,4 @@
+// Package memory contém as ferramentas de memória semântica e seu Manager.
 package memory
 
 import (
@@ -6,266 +7,118 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ElioNeto/devon/internal/db"
 	"github.com/ElioNeto/devon/internal/permissions"
-	"github.com/ElioNeto/devon/internal/tools"
 )
 
-// RememberTool salva fatos sobre o projeto na memória semântica.
+// RememberTool — name: "remember"
+// Salva um fato no banco usando Manager.Remember.
+// Permission: PermRead (não modifica arquivos, só o banco).
 type RememberTool struct {
-	DB db.Store
+	Manager   *Manager
+	ProjectID string
 }
 
+// Name retorna o nome da ferramenta.
 func (t *RememberTool) Name() string { return "remember" }
-func (t *RememberTool) Permission() permissions.PermissionLevel {
-	return permissions.PermWrite
-}
+
+// Description descreve o propósito da ferramenta.
 func (t *RememberTool) Description() string {
-	return `Salva um fato sobre o projeto para futura recuperação. Utiliza para memorizar:
-- Estrutura de arquivos e diretórios
-- Padrões de arquitetura
-- Decisões técnicas importantes
-- Convenções de código
-- Configurações específicas do projeto
+	return `Salva um fato sobre o projeto para memória semântica.
 
-Exemplos:
-- "O projeto usa Next.js 13 com App Router"
-- "Todos os componentes usam Tailwind CSS para estilização"
-- "O banco de dados é PostgreSQL com migrations controladas por Prisma"
-`
+Args: {
+  "category": "string",     // categoria (ex: "convention", "architecture", "error")
+  "content": "string"       // o fato em si
+}`
 }
 
-type rememberParams struct {
-	Category string `json:"category"`
-	Content  string `json:"content"`
-	Context  string `json:"context,omitempty"`
-}
-
+// Schema retorna o JSON Schema dos parâmetros.
 func (t *RememberTool) Schema() json.RawMessage {
-	return json.RawMessage(`{
-		"type": "object",
-		"properties": {
-			"category": {
-				"type": "string",
-				"description": "Categoria do fato (ex: 'arquitetura', 'config', 'conven', 'estrutura')"
-			},
-			"content": {
-				"type": "string",
-				"description": "O fato a ser memorizado, em linguagem natural"
-			},
-			"context": {
-				"type": "string",
-				"description": "Contexto adicional opcional para o fato"
-			}
-		},
-		"required": ["category", "content"]
-	}`)
+	return json.RawMessage(`{"type":"object","properties":{"category":{"type":"string","description":"categoria do fato"},"content":{"type":"string","description":"conteúdo do fato a ser salvo"}},"required":["category","content"]}`)
 }
 
+// Execute executa a ferramenta, salvando o fato.
 func (t *RememberTool) Execute(ctx context.Context, params json.RawMessage) (string, error) {
-	var p rememberParams
-	if err := json.Unmarshal(params, &p); err != nil {
-		return "", fmt.Errorf("remember: parametros invalidos: %w", err)
+	var req struct {
+		Category string `json:"category"`
+		Content  string `json:"content"`
 	}
-	if p.Category == "" {
-		return "", fmt.Errorf("remember: categoria nao pode estar vazia")
+	if err := json.Unmarshal(params, &req); err != nil {
+		return "", fmt.Errorf("remember: invalid params: %w", err)
 	}
-	if p.Content == "" {
-		return "", fmt.Errorf("remember: conteudo nao pode estar vazio")
+	if req.Category == "" || req.Content == "" {
+		return "", fmt.Errorf("remember: category and content are required")
 	}
-
-	if err := t.DB.PutFact(ctx, "default", p.Category, p.Content, p.Context); err != nil {
-		return "", fmt.Errorf("remember: nao foi possivel salvar fato: %w", err)
+	if err := t.Manager.Remember(ctx, t.ProjectID, req.Category, req.Content); err != nil {
+		return "", fmt.Errorf("remember: %w", err)
 	}
-
-	return fmt.Sprintf("Fato salvo com sucesso na categoria '%s': %s", p.Category, truncate(p.Content, 100)), nil
+	return fmt.Sprintf("Saved fact [%s]: %s", req.Category, req.Content), nil
 }
 
-type forgetParams struct {
-	Category string `json:"category,omitempty"`
-	Content  string `json:"content,omitempty"`
-}
-
-// ForgetTool remove fatos salvos.
-type ForgetTool struct {
-	DB db.Store
-}
-
-func (t *ForgetTool) Name() string { return "forget" }
-func (t *ForgetTool) Permission() permissions.PermissionLevel {
-	return permissions.PermWrite
-}
-func (t *ForgetTool) Description() string {
-	return `Remove fatos salvos da memória semântica.
-
-Exemplos:
-- Remove todos os fatos de uma categoria
-- Remove um fato específico pelo conteúdo
-`
-}
-
-func (t *ForgetTool) Schema() json.RawMessage {
-	return json.RawMessage(`{
-		"type": "object",
-		"properties": {
-			"category": {
-				"type": "string",
-				"description": "Categoria dos fatos a serem removidos"
-			},
-			"content": {
-				"type": "string",
-				"description": "Conteúdo exato do fato a ser removido (parcial é aceito)"
-			}
-		}
-	}`)
-}
-
-func (t *ForgetTool) Execute(ctx context.Context, params json.RawMessage) (string, error) {
-	var p forgetParams
-	if err := json.Unmarshal(params, &p); err != nil {
-		return "", fmt.Errorf("forget: parametros invalidos: %w", err)
-	}
-
-	if p.Category == "" && p.Content == "" {
-		return "", fmt.Errorf("forget: especifique categoria ou conteudo para remover")
-	}
-
-	facts, err := t.DB.GetFacts(ctx, "default", "", 1000)
-	if err != nil {
-		return "", fmt.Errorf("forget: Falha ao buscar fatos: %w", err)
-	}
-
-	deleted := 0
-	for _, f := range facts {
-		match := false
-		if p.Category != "" && f.Category == p.Category {
-			match = true
-		}
-		if p.Content != "" && strings.Contains(f.Content, p.Content) {
-			match = true
-		}
-		if match {
-			if err := t.DB.PutFact(ctx, f.ProjectID, f.Category, "", ""); err != nil {
-				return "", fmt.Errorf("forget: %w", err)
-			}
-			deleted++
-		}
-	}
-
-	if deleted == 0 {
-		return "Nenhum fato encontrado para remover", nil
-	}
-
-	return fmt.Sprintf("%d fato(s) removido(s)", deleted), nil
-}
-
-type RecallTool struct {
-	DB db.Store
-}
-
-func (t *RecallTool) Name() string { return "recall" }
-func (t *RecallTool) Permission() permissions.PermissionLevel {
+// Permission retorna o nível de permissão necessário.
+func (t *RememberTool) Permission() permissions.PermissionLevel {
 	return permissions.PermRead
 }
+
+// RecallTool — name: "recall"
+// Retorna lista formatada de fatos.
+// Permission: PermRead.
+type RecallTool struct {
+	Manager   *Manager
+	ProjectID string
+}
+
+// Name retorna o nome da ferramenta.
+func (t *RecallTool) Name() string { return "recall" }
+
+// Description descreve o propósito da ferramenta.
 func (t *RecallTool) Description() string {
-	return `Recupera fatos relevantes da memória semântica.
+	return `Retrieves facts from semantic memory.
 
-Exemplos:
-- recall --category "arquitetura" -> busca fatos sobre arquitetura
-- recall --query "next.js" -> busca fatos contendo next.js
-- recall --all -> lista todos os fatos
-`
+Args: {
+  "category": "string",  // optional: filter by category
+  "keyword": "string"    // optional: search by keyword in content
+}`
 }
 
+// Schema retorna o JSON Schema dos parâmetros.
 func (t *RecallTool) Schema() json.RawMessage {
-	return json.RawMessage(`{
-		"type": "object",
-		"properties": {
-			"category": {
-				"type": "string",
-				"description": "Categoria específica para buscar"
-			},
-			"query": {
-				"type": "string",
-				"description": "Texto para busca parcial no conteúdo"
-			},
-			"all": {
-				"type": "boolean",
-				"description": "Se true, retorna todos os fatos"
-			},
-			"limit": {
-				"type": "integer",
-				"description": "Número máximo de fatos a retornar (default 20)"
-			}
-		}
-	}`)
+	return json.RawMessage(`{"type":"object","properties":{"category":{"type":"string","description":"filter by category"},"keyword":{"type":"string","description":"search keyword"}}}`)
 }
 
+// Execute executa a ferramenta, buscando fatos.
 func (t *RecallTool) Execute(ctx context.Context, params json.RawMessage) (string, error) {
-	var p struct {
+	var req struct {
 		Category string `json:"category"`
-		Query    string `json:"query"`
-		All      bool   `json:"all"`
-		Limit    int    `json:"limit"`
+		Keyword  string `json:"keyword"`
 	}
-
-	if err := json.Unmarshal(params, &p); err != nil {
-		return "", fmt.Errorf("recall: parametros invalidos: %w", err)
+	if err := json.Unmarshal(params, &req); err != nil {
+		return "", fmt.Errorf("recall: invalid params: %w", err)
 	}
-
-	if p.Limit <= 0 {
-		p.Limit = 20
-	}
-
-	facts, err := t.DB.GetFacts(ctx, "default", p.Category, p.Limit)
+	facts, err := t.Manager.Recall(ctx, t.ProjectID, req.Category, req.Keyword)
 	if err != nil {
-		return "", fmt.Errorf("recall: Falha ao buscar fatos: %w", err)
+		return "", fmt.Errorf("recall: %w", err)
 	}
-
-	// Filtra por query se especificada
-	if p.Query != "" {
-		filtered := make([]db.Fact, 0)
-		for _, f := range facts {
-			if strings.Contains(f.Content, p.Query) || (f.Context != "" && strings.Contains(f.Context, p.Query)) {
-				filtered = append(filtered, f)
-			}
-		}
-		facts = filtered
-	}
-
 	if len(facts) == 0 {
-		if p.All {
-			return "Sem fatos salvos", nil
+		if req.Category != "" && req.Keyword != "" {
+			return fmt.Sprintf("No facts found for category=%q and keyword=%q", req.Category, req.Keyword), nil
 		}
-		msg := "Nenhum fato encontrado"
-		if p.Category != "" {
-			msg += " para esta categoria"
-		} else if p.Query != "" {
-			msg += " para sua busca"
+		if req.Category != "" {
+			return fmt.Sprintf("No facts found for category=%q", req.Category), nil
 		}
-		return msg, nil
+		if req.Keyword != "" {
+			return fmt.Sprintf("No facts found with keyword=%q", req.Keyword), nil
+		}
+		return "No facts found.", nil
 	}
-
-	var sb strings.Builder
-	for i, f := range facts {
-		sb.WriteString(fmt.Sprintf("%d. [%s] %s", i+1, f.Category, f.Content))
-		if i < len(facts)-1 {
-			sb.WriteString("\n")
-		}
+	var b strings.Builder
+	b.WriteString("Facts:\n")
+	for _, f := range facts {
+		b.WriteString(fmt.Sprintf("- [%s] %s\n", f.Category, f.Content))
 	}
-
-	return sb.String(), nil
+	return strings.TrimSuffix(b.String(), "\n"), nil
 }
 
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
-}
-
-func RegisterMemoryTools(r *tools.Registry, store db.Store) {
-	r.Register(&RememberTool{DB: store})
-	r.Register(&ForgetTool{DB: store})
-	r.Register(&RecallTool{DB: store})
+// Permission retorna o nível de permissão necessário.
+func (t *RecallTool) Permission() permissions.PermissionLevel {
+	return permissions.PermRead
 }
