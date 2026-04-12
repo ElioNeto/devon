@@ -76,7 +76,7 @@ var commonStopwords = map[string]bool{
 	"it": true, "its": true, "this": true, "that": true, "these": true, "those": true,
 	"i":  true, "you": true, "he": true, "she": true, "we": true, "they": true,
 	"what": true, "which": true, "who": true, "where": true, "when": true, "why": true, "how": true,
-	"o":  true, "os": true, "as": true, "de": true, "do": true, "da": true,
+	"o":  true, "os": true, "de": true, "da": true,
 	"dos": true, "das": true, "em": true, "no": true, "na": true, "nos": true, "nas": true,
 	"para": true, "por": true, "com": true, "sem": true, "sobre": true, "entre": true,
 	"mais": true, "menos": true, "mas": true, "ou": true, "que": true, "quem": true,
@@ -175,7 +175,7 @@ func (b *BM25Calculator) ScoreTerm(tf, docFreq, totalDocs, avgDocLen, docLen flo
 		return 0
 	}
 	idf := math.Log(float64(totalDocs) / docFreq)
-	tfScore := (tf * (b.K1 + 1)) / (tf + b.K1*(1-b+b*docLen/avgDocLen))
+	tfScore := (tf * (b.K1 + 1)) / (tf + b.K1*(1-b.B+b.B*docLen/avgDocLen))
 	return tfScore * idf
 }
 
@@ -286,7 +286,7 @@ func (i *Index) Search(query string, topK int) []DocumentWithScore {
 			continue
 		}
 
-		for docID, tf := range i.termFreqs[docID] {
+		for docID, tf := range i.termFreqs[term] {
 			score := bm25.ScoreTerm(
 				float64(tf),
 				float64(docFreq),

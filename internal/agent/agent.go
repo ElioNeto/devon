@@ -10,6 +10,7 @@ import (
 	"github.com/ElioNeto/devon/internal/db"
 	"github.com/ElioNeto/devon/internal/agent/prompts"
 	"github.com/ElioNeto/devon/internal/config"
+	"github.com/ElioNeto/devon/internal/index"
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/memory"
 	"github.com/ElioNeto/devon/internal/permissions"
@@ -50,6 +51,7 @@ type Agent struct {
 	mu          chan Event
 	mem         *memory.Manager
 	projectID   string
+	idxMgr      *index.Manager
 }
 
 // New cria um novo Agent com DB injection.
@@ -74,7 +76,26 @@ func New(cfg *config.Config, client llm.Streamer, registry *tools.Registry, db d
 		},
 		ReplyCh: make(chan ConfirmReply, 1),
 	}
-	a.history = a.buildSystemMessages()
+
+	// Registrar search_codebase se indexação estiver habilitada
+	if cfg.Index.Enabled {
+		idxMgr, err := index.NewManager(cfg.WorkDir, index.ManagerConfig{
+			Enabled: true,
+			IndexedConfig: index.IndexedConfig{
+				Extensions:    cfg.Index.Extensions,
+				Excludes:      cfg.Index.Exclude,
+				MaxFileSizeKB: cfg.Index.MaxFileSizeKB,
+				TopK:          cfg.Index.TopK,
+			},
+		})
+		if err == nil {
+			_ = idxMgr.Index(context.Background(), cfg.WorkDir)
+			a.registry.Register(idxMgr.CreateTool())
+			a.idxMgr = idxMgr
+		}
+	}
+
+	a.history = a.buildSystemMessages("")
 
 	// Persiste mensagem inicial no DB
 	if db != nil {
@@ -237,7 +258,7 @@ func (a *Agent) executeToolWithPermission(ctx context.Context, tc llm.ToolCall, 
 	return t.Execute(ctx, json.RawMessage(tc.Function.Arguments))
 }
 
-func (a *Agent) buildSystemMessages() []llm.Message {
+func (a *Agent) buildSystemMessages(userPrompt string) []llm.Message {
 	system := prompts.GetSystemPrompt()
 
 	if a.cfg.ContextDoc != "" {
@@ -250,6 +271,17 @@ func (a *Agent) buildSystemMessages() []llm.Message {
 		memCtx, _ := a.mem.ContextFor(context.Background(), a.projectID, "")
 		if memCtx != "" {
 			system += "\n\n" + memCtx
+		}
+	}
+
+	// Injetar top-K arquivos relevantes quando indexação ativa
+	if a.idxMgr != nil && a.idxMgr.IsEnabled() && userPrompt != "" {
+		results, _ := a.idxMgr.Search(userPrompt, 0)
+		if len(results) > 0 {
+			system += "\n\n## Arquivos relevantes para esta tarefa\n"
+			for i, r := range results {
+				system += fmt.Sprintf("%d. %s (score: %.2f)\n", i+1, r.Path, r.Score)
+			}
 		}
 	}
 

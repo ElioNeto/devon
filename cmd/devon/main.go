@@ -12,6 +12,7 @@ import (
 	agentpkg "github.com/ElioNeto/devon/internal/agent"
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/db"
+	"github.com/ElioNeto/devon/internal/index"
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/memory"
 	"github.com/ElioNeto/devon/internal/tools"
@@ -73,6 +74,8 @@ func newRootCommand() *cobra.Command {
 	root.PersistentFlags().String("model", "", "Sobrescreve o modelo do perfil ativo")
 	root.PersistentFlags().String("env", ".env", "Caminho para o arquivo .env")
 	root.PersistentFlags().StringP("profile", "p", "", "Perfil de provider definido em devon.toml")
+	root.PersistentFlags().Bool("index", false, "Ativa indexação semântica do codebase")
+	root.PersistentFlags().Bool("no-index", false, "Desativa indexação semântica (força contexto completo)")
 
 	// Subcomando doctor
 	doctor := &cobra.Command{
@@ -107,6 +110,49 @@ Exit codes:
 	runCmd.Flags().String("mode", "auto", "Modo de permissão: auto | safe | yolo")
 	root.AddCommand(runCmd)
 
+	// Subcomando index
+	indexCmd := &cobra.Command{
+		Use:   "index",
+		Short: "Gerencia o índice semântico do codebase",
+	}
+	indexRebuildCmd := &cobra.Command{
+		Use:   "rebuild",
+		Short: "Reconstrói o índice semântico do zero",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			envFile, _ := cmd.Flags().GetString("env")
+			cfg, err := config.Load(envFile)
+			if err != nil {
+				return fmt.Errorf("falha ao carregar configuração: %w", err)
+			}
+
+			mgr, err := index.NewManager(cfg.WorkDir, index.ManagerConfig{
+				Enabled: true,
+				IndexedConfig: index.IndexedConfig{
+					Extensions:    cfg.Index.Extensions,
+					Excludes:      cfg.Index.Exclude,
+					MaxFileSizeKB: cfg.Index.MaxFileSizeKB,
+					TopK:          cfg.Index.TopK,
+				},
+			})
+			if err != nil {
+				return fmt.Errorf("falha ao criar indexer: %w", err)
+			}
+			defer mgr.Close()
+
+			fmt.Fprintf(os.Stdout, "Reconstruindo índice em %s...\n", cfg.WorkDir)
+			if err := mgr.Rebuild(cmd.Context(), cfg.WorkDir); err != nil {
+				return fmt.Errorf("falha ao reindexar: %w", err)
+			}
+
+			stats := mgr.GetStats()
+			fmt.Fprintf(os.Stdout, "Índice reconstruído: %d arquivos, %d termos\n",
+				stats.TotalDocs, stats.TermCount)
+			return nil
+		},
+	}
+	indexCmd.AddCommand(indexRebuildCmd)
+	root.AddCommand(indexCmd)
+
 	// Subcomando memory
 	memoryCmd := &cobra.Command{
 		Use:   "memory",
@@ -137,6 +183,13 @@ func runAgent(cmd *cobra.Command, _ []string) error {
 	mode, _ := cmd.Flags().GetString("mode")
 	cfg.Mode = config.ParseMode(mode)
 
+	if v, _ := cmd.Flags().GetBool("index"); v {
+		cfg.Index.Enabled = true
+	}
+	if v, _ := cmd.Flags().GetBool("no-index"); v {
+		cfg.Index.Enabled = false
+	}
+
 	return tui.Run(cfg)
 }
 
@@ -166,6 +219,13 @@ func runTask(cmd *cobra.Command, args []string) error {
 
 	mode, _ := cmd.Flags().GetString("mode")
 	cfg.Mode = config.ParseMode(mode)
+
+	if v, _ := cmd.Flags().GetBool("index"); v {
+		cfg.Index.Enabled = true
+	}
+	if v, _ := cmd.Flags().GetBool("no-index"); v {
+		cfg.Index.Enabled = false
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()

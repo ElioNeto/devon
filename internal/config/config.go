@@ -134,6 +134,9 @@ type Config struct {
 	WorkDir    string
 	ContextDoc string
 
+	// Indexação
+	Index IndexConfig
+
 	// Sandbox
 	Sandbox SandboxConfig `toml:"sandbox"`
 }
@@ -172,13 +175,16 @@ func Load(envFile string) (*Config, error) {
 		Agents:            []AgentConfig{},
 	}
 
-	// Carrega devon.toml e aplica sandbox
+	// Carrega devon.toml e aplica sandbox + index
 	if tc, err := LoadToml(); err == nil && tc != nil {
 		if tc.Defaults.Mode != "" {
 			cfg.Mode = ParseMode(tc.Defaults.Mode)
 		}
 		if tc.Sandbox != nil {
 			cfg.Sandbox = *tc.Sandbox
+		}
+		if tc.Index != nil {
+			cfg.Index = *tc.Index
 		}
 	}
 
@@ -213,6 +219,15 @@ func (c *Config) Doctor(ctx context.Context) error {
 
 	if c.ContextDoc != "" {
 		fmt.Printf("  DEVON.md:        encontrado (%d bytes)\n", len(c.ContextDoc))
+	}
+
+	fmt.Printf("\n[Index]\n")
+	fmt.Printf("  Enabled:         %v\n", c.Index.Enabled)
+	if c.Index.Enabled {
+		fmt.Printf("  Extensions:      %v\n", c.Index.Extensions)
+		fmt.Printf("  Excludes:        %v\n", c.Index.Exclude)
+		fmt.Printf("  TopK:            %d\n", c.Index.TopK)
+		fmt.Printf("  MaxFileSizeKB:   %d\n", c.Index.MaxFileSizeKB)
 	}
 
 	fmt.Printf("\n[Sandbox]\n")

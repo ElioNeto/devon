@@ -19,14 +19,24 @@ type Profile struct {
 	Fallback  []string `toml:"fallback"`
 }
 
+// IndexConfig configura a indexação semântica do codebase.
+type IndexConfig struct {
+	Enabled       bool     `toml:"enabled"`
+	Extensions    []string `toml:"extensions"`
+	Exclude       []string `toml:"exclude"`
+	MaxFileSizeKB int      `toml:"max_file_size_kb"`
+	TopK          int      `toml:"top_k"`
+}
+
 // TomlConfig represents the structure of devon.toml.
 type TomlConfig struct {
 	Defaults struct {
 		Profile string `toml:"profile"`
 		Mode    string `toml:"mode"`
 	} `toml:"defaults"`
-	Profiles []Profile `toml:"profiles"`
+	Profiles []Profile      `toml:"profiles"`
 	Sandbox  *SandboxConfig `toml:"sandbox"`
+	Index    *IndexConfig   `toml:"index"`
 }
 
 // LoadToml carrega devon.toml do diretório atual ou home (~/.devon.toml).

@@ -9,6 +9,7 @@ import (
 	"github.com/ElioNeto/devon/internal/cost"
 	"github.com/ElioNeto/devon/internal/history"
 	"github.com/ElioNeto/devon/internal/llm"
+	"github.com/ElioNeto/devon/internal/memory"
 	"github.com/ElioNeto/devon/internal/tools"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -161,7 +162,8 @@ func newModel(cfg *config.Config) appModel {
 
 	registry := tools.NewRegistry()
 	client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
-	agt := agent.New(cfg, client, registry, nil, "")
+	mem := memory.New(nil, cfg.WorkDir) // nil store para memória em memória apenas
+	agt := agent.New(cfg, client, registry, nil, "", mem, cfg.WorkDir)
 	tracker := cost.NewSession(cfg.Model)
 
 	maxCtx := 32000

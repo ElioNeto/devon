@@ -9,6 +9,7 @@ import (
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/db"
 	"github.com/ElioNeto/devon/internal/llm"
+	"github.com/ElioNeto/devon/internal/memory"
 	"github.com/ElioNeto/devon/internal/tools"
 )
 
@@ -46,7 +47,8 @@ func TestAgent_NewWithAgentID(t *testing.T) {
 	r := tools.NewRegistry()
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, &llm.MockClient{}, r, fakeDB, "test-agent-1")
+	mem := memory.New(nil, "/tmp/test-workdir")
+	a := New(cfg, &llm.MockClient{}, r, fakeDB, "test-agent-1", mem, "/tmp/test-workdir")
 
 	if a == nil {
 		t.Fatal("New() returned nil")
@@ -62,7 +64,8 @@ func TestAgent_New(t *testing.T) {
 	r := tools.NewRegistry()
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, &llm.MockClient{}, r, fakeDB, "default-agent")
+	mem := memory.New(nil, "/tmp/test-workdir")
+	a := New(cfg, &llm.MockClient{}, r, fakeDB, "default-agent", mem, "/tmp/test-workdir")
 
 	if a == nil {
 		t.Fatal("New() returned nil")
