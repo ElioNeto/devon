@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 
 	agentpkg "github.com/ElioNeto/devon/internal/agent"
@@ -105,6 +106,19 @@ Exit codes:
 	}
 	runCmd.Flags().String("mode", "auto", "Modo de permissão: auto | safe | yolo")
 	root.AddCommand(runCmd)
+
+	// Subcomando memory
+	memoryCmd := &cobra.Command{
+		Use:   "memory",
+		Short: "Gerencia a memória semântica do projeto",
+	}
+	memoryClearCmd := &cobra.Command{
+		Use:   "clear",
+		Short: "Limpa todos os fatos da memória semântica do projeto atual",
+		RunE:  runMemoryClear,
+	}
+	memoryCmd.AddCommand(memoryClearCmd)
+	root.AddCommand(memoryCmd)
 
 	return root
 }
