@@ -12,6 +12,7 @@ func RegisterBuiltin(r *Registry, dir string, timeout time.Duration, sandbox con
 	r.Register(&ReadTool{Dir: dir})
 	r.Register(&WriteTool{Dir: dir})
 	r.Register(&EditTool{Dir: dir})
+	r.Register(&PatchTool{Dir: dir})
 	r.Register(&GlobTool{Dir: dir})
 	r.Register(&GrepTool{Dir: dir})
 	r.Register(&ListDirTool{Dir: dir})
