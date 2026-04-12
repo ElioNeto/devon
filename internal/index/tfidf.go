@@ -39,13 +39,13 @@ type DocumentWithScore struct {
 
 // Index represents a searchable TF-IDF index.
 type Index struct {
-	mu         sync.RWMutex
-	documents  map[string]*Document      // id -> doc
-	docIDByPath map[string]string        // path -> doc ID
-	termFreqs  map[string]map[string]int // term -> docID -> freq
-	docFreqs   map[string]int            // term -> number of docs containing term
-	totalDocs  int
-	corpusLen  float64 // sum of all doc lengths
+	mu          sync.RWMutex
+	documents   map[string]*Document
+	docIDByPath map[string]string
+	termFreqs   map[string]map[string]int
+	docFreqs    map[string]int
+	totalDocs   int
+	corpusLen   float64
 }
 
 // NewIndex creates a new empty index.
@@ -60,25 +60,23 @@ func NewIndex() *Index {
 
 // Tokenizer splits text into tokens.
 type Tokenizer struct {
-	minLength       int
-	stopwords       map[string]bool
-	caseSensitive   bool
+	minLength     int
+	stopwords     map[string]bool
+	caseSensitive bool
 }
 
 // Stopwords for common languages (English + Portuguese).
 var commonStopwords = map[string]bool{
-	// English
-	"a": true, "an": true, "the": true, "and": true, "or": true, "but": true,
+	"a":  true, "an": true, "the": true, "and": true, "or": true, "but": true,
 	"in": true, "on": true, "at": true, "to": true, "for": true, "of": true,
 	"with": true, "by": true, "from": true, "as": true, "is": true, "was": true,
 	"are": true, "were": true, "been": true, "be": true, "have": true, "has": true,
 	"had": true, "do": true, "does": true, "did": true, "will": true, "would": true,
 	"could": true, "should": true, "may": true, "might": true, "must": true,
 	"it": true, "its": true, "this": true, "that": true, "these": true, "those": true,
-	"i": true, "you": true, "he": true, "she": true, "we": true, "they": true,
+	"i":  true, "you": true, "he": true, "she": true, "we": true, "they": true,
 	"what": true, "which": true, "who": true, "where": true, "when": true, "why": true, "how": true,
-	// Portuguese
-	"o": true, "a": true, "os": true, "as": true, "de": true, "do": true, "da": true,
+	"o":  true, "os": true, "as": true, "de": true, "do": true, "da": true,
 	"dos": true, "das": true, "em": true, "no": true, "na": true, "nos": true, "nas": true,
 	"para": true, "por": true, "com": true, "sem": true, "sobre": true, "entre": true,
 	"mais": true, "menos": true, "mas": true, "ou": true, "que": true, "quem": true,
@@ -109,10 +107,8 @@ func (t *Tokenizer) WithStopwords(sw map[string]bool) *Tokenizer {
 // Tokenize splits text into tokens.
 func (t *Tokenizer) Tokenize(text string) []Token {
 	var tokens []Token
-	var (
-		start = 0
-		pos   = 0
-	)
+	var start = 0
+	var pos int = 0
 
 	for i, r := range text {
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
@@ -130,22 +126,8 @@ func (t *Tokenizer) Tokenize(text string) []Token {
 			start = i + 1
 			continue
 		}
-		// Handle end of string
-		if i == len(text)-1 && !isWordChar(r) {
-			if i > start {
-				word := text[start:]
-				if t.shouldKeep(word) {
-					tokens = append(tokens, Token{
-						Text:     t.normalize(word),
-						Offset:   start,
-						Position: pos,
-					})
-				}
-			}
-		}
 	}
 
-	// Handle last token if string ends with word char
 	if start < len(text) {
 		word := text[start:]
 		if t.shouldKeep(word) {
@@ -158,10 +140,6 @@ func (t *Tokenizer) Tokenize(text string) []Token {
 	}
 
 	return tokens
-}
-
-func isWordChar(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
 func (t *Tokenizer) shouldKeep(word string) bool {
@@ -182,8 +160,8 @@ func (t *Tokenizer) normalize(word string) string {
 
 // BM25Calculator computes BM25 relevance scores.
 type BM25Calculator struct {
-	K1 float64 // term frequency saturation parameter
-	B  float64 // length normalization parameter
+	K1 float64
+	B  float64
 }
 
 // NewBM25Calculator creates a BM25 calculator with standard parameters.
@@ -196,13 +174,8 @@ func (b *BM25Calculator) ScoreTerm(tf, docFreq, totalDocs, avgDocLen, docLen flo
 	if docFreq == 0 || totalDocs == 0 {
 		return 0
 	}
-
-	// IDF component (with smoothing)
-	idf := math.Log(float64(totalDocs)/docFreq)
-
-	// TF component with saturation
+	idf := math.Log(float64(totalDocs) / docFreq)
 	tfScore := (tf * (b.K1 + 1)) / (tf + b.K1*(1-b+b*docLen/avgDocLen))
-
 	return tfScore * idf
 }
 
@@ -211,12 +184,10 @@ func (i *Index) Index(doc *Document) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// Remove old version if exists
 	if oldID, exists := i.docIDByPath[doc.Path]; exists {
 		i.removeDocument(oldID)
 	}
 
-	// Calculate word length (excluding stop words)
 	var wordLen float64
 	for _, tok := range doc.Tokens {
 		if !i.isStopword(tok.Text) {
@@ -226,25 +197,21 @@ func (i *Index) Index(doc *Document) {
 	doc.WordLen = wordLen
 	doc.Length = len(doc.Tokens)
 
-	// Add to index
-	docID := doc.Path // Use path as unique ID
+	docID := doc.Path
 	i.documents[docID] = doc
 	i.docIDByPath[doc.Path] = docID
 
-	// Update term frequencies
 	if _, exists := i.termFreqs[docID]; !exists {
 		i.termFreqs[docID] = make(map[string]int)
 	}
 
 	for _, tok := range doc.Tokens {
-		// Skip stopwords in index
 		if i.isStopword(tok.Text) {
 			continue
 		}
 
 		i.termFreqs[docID][tok.Text]++
 
-		// Update document frequency
 		if _, exists := i.docFreqs[tok.Text]; !exists {
 			i.docFreqs[tok.Text] = 0
 		}
@@ -262,14 +229,12 @@ func (i *Index) RemoveDocument(docID string) {
 	i.removeDocument(docID)
 }
 
-// removeDocument removes a document from the index (internal, lock assumed).
 func (i *Index) removeDocument(docID string) {
 	doc, exists := i.documents[docID]
 	if !exists {
 		return
 	}
 
-	// Remove from term frequencies
 	for term := range i.termFreqs[docID] {
 		i.docFreqs[term]--
 		if i.docFreqs[term] == 0 {
@@ -284,7 +249,6 @@ func (i *Index) removeDocument(docID string) {
 	i.corpusLen -= doc.WordLen
 }
 
-// isStopword checks if a term is a stopword.
 func (i *Index) isStopword(term string) bool {
 	_, ok := commonStopwords[term]
 	return ok
@@ -295,50 +259,46 @@ func (i *Index) Search(query string, topK int) []DocumentWithScore {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
-	// Tokenize query
+	if topK <= 0 {
+		topK = 5
+	}
+
 	tokenizer := NewTokenizer()
 	queryTokens := tokenizer.Tokenize(query)
 
-	// Calculate average document length
 	var avgDocLen float64
 	if i.totalDocs > 0 {
 		avgDocLen = i.corpusLen / float64(i.totalDocs)
 	}
 	if avgDocLen == 0 {
-		avgDocLen = 1 // Avoid division by zero
+		avgDocLen = 1
 	}
 
-	// BM25 calculator with standard parameters
 	bm25 := NewBM25Calculator(1.2, 0.75)
 
-	// Score documents
 	scores := make(map[string]float64)
 	matches := make(map[string]int)
 
 	for _, queryToken := range queryTokens {
 		term := queryToken.Text
-
-		// Document frequency for IDF
 		docFreq, exists := i.docFreqs[term]
 		if !exists {
 			continue
 		}
 
-		// Score each document containing this term
 		for docID, tf := range i.termFreqs[docID] {
 			score := bm25.ScoreTerm(
-				float64(tf),        // term frequency in doc
-				float64(docFreq),   // document frequency
-				float64(i.totalDocs), // total documents
-				avgDocLen,          // average document length
-				i.documents[docID].WordLen, // actual document length
+				float64(tf),
+				float64(docFreq),
+				float64(i.totalDocs),
+				avgDocLen,
+				i.documents[docID].WordLen,
 			)
 			scores[docID] += score
 			matches[docID]++
 		}
 	}
 
-	// Sort by score
 	result := make([]DocumentWithScore, 0, len(scores))
 	for docID, score := range scores {
 		doc, exists := i.documents[docID]
@@ -352,12 +312,10 @@ func (i *Index) Search(query string, topK int) []DocumentWithScore {
 		})
 	}
 
-	// Sort descending by score
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Score > result[j].Score
 	})
 
-	// Return top-K
 	if len(result) > topK {
 		result = result[:topK]
 	}
@@ -416,22 +374,20 @@ func (i *Index) GetTerms() []string {
 	return terms
 }
 
-// BuildRegex creates a regex pattern from terms.
+// BuildRegex creates a regex pattern string from terms.
 func BuildRegex(terms []string) string {
 	if len(terms) == 0 {
 		return ""
 	}
 
-	// Create alternation pattern with word boundaries
 	patterns := make([]string, len(terms))
 	for i, term := range terms {
-		// Escape special regex characters
 		escaped := term
-		specialChars := []string{`.`, `^`, `$`, `*`, `+`, `?`, `(`, `)`, `[`, `]`, `{`, `}`, `|`, `\`}
+		specialChars := []string{".", "^", "$", "*", "+", "?", "(", ")", "[", "]", "{", "}", "|", "\\"}
 		for _, ch := range specialChars {
-			escaped = strings.ReplaceAll(escaped, ch, `\"+ch)
+			escaped = strings.ReplaceAll(escaped, ch, "\\"+ch)
 		}
-		patterns[i] = `\b` + escaped + `\b`
+		patterns[i] = "\\b" + escaped + "\\b"
 	}
 
 	return strings.Join(patterns, "|")
