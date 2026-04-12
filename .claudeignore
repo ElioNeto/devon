@@ -88,3 +88,4 @@ vscode-extension/*.vsix
 
 docs/
 *.sh
+.git/

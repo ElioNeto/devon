@@ -2,22 +2,32 @@ package tools
 
 import (
 	"time"
+
+	"github.com/ElioNeto/devon/internal/config"
+	"github.com/ElioNeto/devon/internal/memory"
 )
 
 // RegisterBuiltin registra todas as ferramentas nativas no registry.
-func RegisterBuiltin(r *Registry, dir string, timeout time.Duration) {
-	r.Register(&BashTool{Dir: dir, Timeout: timeout})
+func RegisterBuiltin(r *Registry, dir string, timeout time.Duration, sandbox config.SandboxConfig) {
+	r.Register(&BashTool{Dir: dir, Timeout: timeout, Sandbox: sandbox})
 	r.Register(&ReadTool{Dir: dir})
 	r.Register(&WriteTool{Dir: dir})
 	r.Register(&EditTool{Dir: dir})
+	r.Register(&PatchTool{Dir: dir})
 	r.Register(&GlobTool{Dir: dir})
 	r.Register(&GrepTool{Dir: dir})
 	r.Register(&ListDirTool{Dir: dir})
 }
 
+// RegisterMemoryTools registers memory tools (remember, recall).
+func RegisterMemoryTools(r *Registry, mem *memory.Manager, projectID string) {
+	r.Register(&memory.RememberTool{Manager: mem, ProjectID: projectID})
+	r.Register(&memory.RecallTool{Manager: mem, ProjectID: projectID})
+}
+
 // RegisterBuiltinWithConfig oferece controle granular sobre cada tool.
-func RegisterBuiltinWithConfig(r *Registry, dir string, timeout time.Duration, maxLines, maxFiles, maxMatchSize int) {
-	r.Register(&BashTool{Dir: dir, Timeout: timeout})
+func RegisterBuiltinWithConfig(r *Registry, dir string, timeout time.Duration, sandbox config.SandboxConfig, maxLines, maxFiles, maxMatchSize int) {
+	r.Register(&BashTool{Dir: dir, Timeout: timeout, Sandbox: sandbox})
 	r.Register(&ReadTool{Dir: dir})
 	r.Register(&WriteTool{Dir: dir})
 	r.Register(&EditTool{Dir: dir})

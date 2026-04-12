@@ -1,5 +1,3 @@
-// Package agent implementa o loop principal do Devon:
-// prompt → LLM → tool calls → resultado → LLM → ...
 package agent
 
 import (
@@ -9,70 +7,114 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ElioNeto/devon/internal/db"
 	"github.com/ElioNeto/devon/internal/agent/prompts"
 	"github.com/ElioNeto/devon/internal/config"
+	"github.com/ElioNeto/devon/internal/index"
 	"github.com/ElioNeto/devon/internal/llm"
+	"github.com/ElioNeto/devon/internal/memory"
 	"github.com/ElioNeto/devon/internal/permissions"
 	"github.com/ElioNeto/devon/internal/tools"
 )
 
-// isRateLimited detects rate-limit errors from the LLM provider.
+// isRateLimited detects rate-limit errors.
 func isRateLimited(err error) bool {
 	s := err.Error()
 	return strings.Contains(s, "429") || strings.Contains(s, "rate")
 }
 
-// Event é emitido pelo agente para a TUI durante o processamento.
+// Event é emitido pelo agente para a TUI.
 type Event struct {
 	Type   string // "text" | "tool_start" | "tool_done" | "tool_error" | "rate_limited" | "turn_done" | "error" | "confirm_request"
-	Text   string // fragmento de texto (streaming)
-	Tool   string // nome da ferramenta
-	Args   string // argumentos JSON da ferramenta
-	Result string // resultado da ferramenta
+	Text   string
+	Tool   string
+	Args   string
+	Result string
 	Err    error
 }
 
-// ConfirmReply is sent back from TUI when user responds to confirm_request.
+// ConfirmReply is sent back from TUI.
 type ConfirmReply struct {
 	Level int // 0=no, 1=yes, 2=always
 }
 
 // Agent executa o loop de raciocínio do Devon.
 type Agent struct {
-	cfg      *config.Config
-	client   llm.Streamer
-	registry *tools.Registry
-	checker  *permissions.Checker
-	history  []llm.Message
-	ReplyCh  chan ConfirmReply // receives user response to confirm_request
+	id          string
+	cfg         *config.Config
+	client      llm.Streamer
+	registry    *tools.Registry
+	checker     *permissions.Checker
+	db          db.Store
+	history     []llm.Message
+	ReplyCh     chan ConfirmReply
+	mu          chan Event
+	mem         *memory.Manager
+	projectID   string
+	idxMgr      *index.Manager
 }
 
-// New cria um novo Agent com todas as ferramentas nativas registradas.
-func New(cfg *config.Config, client llm.Streamer, registry *tools.Registry) *Agent {
-	tools.RegisterBuiltin(registry, cfg.WorkDir, cfg.Timeout)
+// New cria um novo Agent com DB injection.
+func New(cfg *config.Config, client llm.Streamer, registry *tools.Registry, db db.Store, agentID string, mem *memory.Manager, projectID string) *Agent {
+	tools.RegisterBuiltin(registry, cfg.WorkDir, cfg.Timeout, cfg.Sandbox)
+	tools.RegisterMemoryTools(registry, mem, projectID)
 
 	blocklist := permissions.DefaultBlocklist
 
 	a := &Agent{
-		cfg:      cfg,
-		client:   client,
-		registry: registry,
+		id:          agentID,
+		cfg:         cfg,
+		client:      client,
+		registry:    registry,
+		db:          db,
+		mem:         mem,
+		projectID:   projectID,
 		checker: &permissions.Checker{
 			Mode:      cfg.Mode,
 			Session:   make(map[string]bool),
 			Blocklist: blocklist,
 		},
+		ReplyCh: make(chan ConfirmReply, 1),
 	}
-	a.history = a.buildSystemMessages()
+
+	// Registrar search_codebase se indexação estiver habilitada
+	if cfg.Index.Enabled {
+		idxMgr, err := index.NewManager(cfg.WorkDir, index.ManagerConfig{
+			Enabled: true,
+			IndexedConfig: index.IndexedConfig{
+				Extensions:    cfg.Index.Extensions,
+				Excludes:      cfg.Index.Exclude,
+				MaxFileSizeKB: cfg.Index.MaxFileSizeKB,
+				TopK:          cfg.Index.TopK,
+			},
+		})
+		if err == nil {
+			_ = idxMgr.Index(context.Background(), cfg.WorkDir)
+			a.registry.Register(idxMgr.CreateTool())
+			a.idxMgr = idxMgr
+		}
+	}
+
+	a.history = a.buildSystemMessages("")
+
+	// Persiste mensagem inicial no DB
+	if db != nil {
+		db.CreateSession(context.Background(), agentID)
+	}
+
 	return a
 }
 
-// Run processa um turno do usuário e emite eventos no canal retornado.
-// O canal é fechado quando o turno termina.
+// AgentID retorna o ID único deste agente.
+func (a *Agent) AgentID() string {
+	return a.id
+}
+
+// Run processa um turno do usuário.
 func (a *Agent) Run(ctx context.Context, userInput string) <-chan Event {
-	ch := make(chan Event, 64)
-	go a.run(ctx, userInput, ch)
-	return ch
+	a.mu = make(chan Event, 64)
+	go a.run(ctx, userInput, a.mu)
+	return a.mu
 }
 
 func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
@@ -83,12 +125,16 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 		Content: llm.TextContent(userInput),
 	})
 
+	// Persiste mensagem no DB
+	if a.db != nil {
+		a.db.PutMessage(ctx, a.id, a.id, "user", userInput)
+	}
+
 	for turn := 0; turn < a.cfg.MaxTurns; turn++ {
 		if ctx.Err() != nil {
 			return
 		}
 
-		// Throttle between turns (skip on first turn)
 		if turn > 0 && a.cfg.TurnDelay > 0 {
 			select {
 			case <-time.After(a.cfg.TurnDelay):
@@ -97,12 +143,12 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 			}
 		}
 
-		// Auto-compact context if approaching token limit
+		// Auto-compact context
 		used := estimateTokens(a.history)
 		if compacted, ok := compactIfNeeded(a.history, a.cfg.Model, used); ok && len(compacted) < len(a.history) {
 			removed := len(a.history) - len(compacted)
 			a.history = compacted
-			ch <- Event{Type: "system", Text: fmt.Sprintf("Contexto compactado: removidas %d mensagens antigas", removed)}
+			ch <- Event{Type: "system", Text: fmt.Sprintf("Contexto compactado: removidas %d mensagens", removed)}
 		}
 
 		stream, err := a.client.Stream(ctx, a.history, a.registry.Defs())
@@ -132,7 +178,6 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 			}
 		}
 
-		// Adiciona resposta do assistente ao histórico
 		assistantMsg := llm.Message{Role: llm.RoleAssistant}
 		if textBuf.Len() > 0 {
 			assistantMsg.Content = llm.TextContent(textBuf.String())
@@ -142,13 +187,18 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 		}
 		a.history = append(a.history, assistantMsg)
 
-		// Se não há tool calls, o turno terminou
 		if len(pendingTools) == 0 {
 			ch <- Event{Type: "turn_done"}
+
+			// Persiste snapshot do estado
+			if a.db != nil {
+				snapshot, _ := json.Marshal(a.history)
+				a.db.PutAgentState(ctx, a.id, a.id, string(snapshot))
+			}
+
 			return
 		}
 
-		// Executa cada tool call e adiciona resultados ao histórico
 		for _, tc := range pendingTools {
 			ch <- Event{Type: "tool_start", Tool: tc.Function.Name, Args: tc.Function.Arguments}
 
@@ -165,6 +215,11 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 				ToolCallID: tc.ID,
 				Content:    llm.TextContent(result),
 			})
+
+			// Persistir tool call no DB
+			if a.db != nil {
+				_, _ = a.db.PutToolCall(ctx, a.id, a.id, tc.Function.Name, tc.Function.Arguments, "completed", result, "")
+			}
 		}
 	}
 
@@ -179,7 +234,7 @@ func (a *Agent) executeToolWithPermission(ctx context.Context, tc llm.ToolCall, 
 
 	blocked, needsConfirm := a.checker.Requires(t)
 	if blocked {
-		return fmt.Sprintf("ferramenta %q bloqueada pela blocklist", tc.Function.Name), fmt.Errorf("ferramenta bloqueada")
+		return fmt.Sprintf("ferramenta %q bloqueada", tc.Function.Name), fmt.Errorf("ferramenta bloqueada")
 	}
 
 	if needsConfirm {
@@ -190,9 +245,9 @@ func (a *Agent) executeToolWithPermission(ctx context.Context, tc llm.ToolCall, 
 		case reply := <-a.ReplyCh:
 			a.ReplyCh = nil
 			switch reply.Level {
-			case 0: // no
-				return fmt.Sprintf("ferramenta %q recusada pelo usuário", tc.Function.Name), fmt.Errorf("recusado pelo usuário")
-			case 2: // always
+			case 0:
+				return fmt.Sprintf("ferramenta %q recusada", tc.Function.Name), fmt.Errorf("recusado")
+			case 2:
 				a.checker.Approve(tc.Function.Name)
 			}
 		case <-ctx.Done():
@@ -203,12 +258,31 @@ func (a *Agent) executeToolWithPermission(ctx context.Context, tc llm.ToolCall, 
 	return t.Execute(ctx, json.RawMessage(tc.Function.Arguments))
 }
 
-func (a *Agent) buildSystemMessages() []llm.Message {
+func (a *Agent) buildSystemMessages(userPrompt string) []llm.Message {
 	system := prompts.GetSystemPrompt()
 
 	if a.cfg.ContextDoc != "" {
 		system += "\n\n# Contexto do Projeto (DEVON.md)\n"
 		system += a.cfg.ContextDoc
+	}
+
+	// Append semantic memory context if manager is available
+	if a.mem != nil {
+		memCtx, _ := a.mem.ContextFor(context.Background(), a.projectID, "")
+		if memCtx != "" {
+			system += "\n\n" + memCtx
+		}
+	}
+
+	// Injetar top-K arquivos relevantes quando indexação ativa
+	if a.idxMgr != nil && a.idxMgr.IsEnabled() && userPrompt != "" {
+		results, _ := a.idxMgr.Search(userPrompt, 0)
+		if len(results) > 0 {
+			system += "\n\n## Arquivos relevantes para esta tarefa\n"
+			for i, r := range results {
+				system += fmt.Sprintf("%d. %s (score: %.2f)\n", i+1, r.Path, r.Score)
+			}
+		}
 	}
 
 	return []llm.Message{

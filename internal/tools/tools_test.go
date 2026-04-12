@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/ElioNeto/devon/internal/config"
 )
 
 func TestRegistry_RegisterAndDef(t *testing.T) {
@@ -40,7 +42,7 @@ func TestRegistry_GetNotFound(t *testing.T) {
 
 func TestRegisterBuiltin_Count(t *testing.T) {
 	r := NewRegistry()
-	RegisterBuiltin(r, ".", 0)
+	RegisterBuiltin(r, ".", 0, config.SandboxConfig{})
 
 	defs := r.Defs()
 	if len(defs) < 7 {
@@ -60,7 +62,7 @@ func TestRegisterBuiltin_Count(t *testing.T) {
 
 func TestRegisterBuiltinWithConfig(t *testing.T) {
 	r := NewRegistry()
-	RegisterBuiltinWithConfig(r, ".", 5*time.Second, 100, 20, 16*1024)
+	RegisterBuiltinWithConfig(r, ".", 5*time.Second, config.SandboxConfig{}, 100, 20, 16*1024)
 
 	defs := r.Defs()
 	if len(defs) < 5 {

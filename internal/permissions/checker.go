@@ -40,6 +40,8 @@ type Checker struct {
 	Session map[string]bool
 	// Blocklist contem comandos/ferramentas bloqueadas.
 	Blocklist []string
+	// Allowlist, se definido, restringe execução APENAS aos itens da lista.
+	Allowlist []string
 }
 
 // Requires retorna true se a execucao da ferramenta requer confirmacao.
@@ -48,6 +50,20 @@ func (c *Checker) Requires(tool Tool) (blocked bool, needsConfirm bool) {
 	// Verifica blocklist primeiro
 	for _, b := range c.Blocklist {
 		if b == tool.Name() {
+			return true, false
+		}
+	}
+
+	// Se allowlist está definida, só permite ferramentas na lista
+	if len(c.Allowlist) > 0 {
+		allowed := false
+		for _, a := range c.Allowlist {
+			if a == tool.Name() {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
 			return true, false
 		}
 	}
