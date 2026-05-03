@@ -1,104 +1,60 @@
 {
-  "task": "feat: cache de respostas por hash de contexto — zero tokens para prompts repetidos (issue #24)",
+  "task": "feat: multimodal input — anexar imagens ao prompt via TUI (issue #28)",
   "todos": [
     {
       "id": "1",
-      "title": "feat: add CacheConfig type to config package and load from devon.toml",
-      "description": "Add CacheConfig struct (Enabled, TTL, MaxSizeMB, OnlyOneShot) to profiles.go. Add Cache *CacheConfig field to TomlConfig. Add Cache CacheConfig field to Config struct and load from TOML in Config.Load(). Map TOML section [cache].",
-      "files": ["internal/config/profiles.go", "internal/config/config.go"],
-      "evidence": ["CacheConfig struct with toml tags", "TomlConfig.Cache field", "Config.Cache field populated in Load()"],
-      "required": true,
-      "dependsOn": []
+      "title": "Config: add MaxImageSizeMB field to Config and TomlConfig",
+      "done": true
     },
     {
       "id": "2",
-      "title": "feat: add cache_entries table to database schema",
-      "description": "Add CREATE TABLE IF NOT EXISTS cache_entries to internal/db/schema.go with columns: hash_key TEXT PRIMARY KEY, model TEXT NOT NULL, response TEXT NOT NULL, tokens_saved INTEGER DEFAULT 0, file_hashes TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, expires_at DATETIME. Add index on expires_at.",
-      "files": ["internal/db/schema.go"],
-      "evidence": ["cache_entries table in schema const", "CREATE INDEX on expires_at"],
-      "required": true,
-      "dependsOn": []
+      "title": "LLM: create ContentPart types and update Message for multimodal support",
+      "done": true
     },
     {
       "id": "3",
-      "title": "feat: implement deterministic SHA-256 hash for cache keys",
-      "description": "Create internal/cache/hash.go with HashKey(model string, messages []llm.Message) string. Serialize messages deterministically (sorted keys, stable JSON), prepend model name, compute SHA-256 hex digest. Same input must always produce same output.",
-      "files": ["internal/cache/hash.go"],
-      "evidence": ["HashKey function in internal/cache/hash.go", "SHA-256 computation", "deterministic JSON serialization of messages"],
-      "required": true,
-      "dependsOn": []
+      "title": "LLM: update Anthropic provider to serialize image content parts",
+      "done": true
     },
     {
       "id": "4",
-      "title": "feat: implement SQLite-backed cache store operations",
-      "description": "Create internal/cache/store.go with SQLiteCacheStore struct wrapping *sql.DB. Implement: GetEntry(ctx, hashKey) (*CacheEntry, error), SetEntry(ctx, entry) error, DeleteExpired(ctx) error, GetStats(ctx) (*CacheStats, error), Clear(ctx) error. Use modernc.org/sqlite. Run own schema migration for cache_entries table.",
-      "files": ["internal/cache/store.go"],
-      "evidence": ["SQLiteCacheStore struct", "GetEntry/SetEntry/DeleteExpired/GetStats/Clear methods", "uses modernc.org/sqlite"],
-      "required": true,
-      "dependsOn": ["2"]
+      "title": "TUI: add Attachment type and file picker state to appModel",
+      "done": true
     },
     {
       "id": "5",
-      "title": "feat: implement Cache struct with Get/Set/Stats/Clear and TTL + file-invalidation logic",
-      "description": "Create internal/cache/cache.go with Cache struct wrapping SQLiteCacheStore. Get(ctx, key, files) checks entry existence, TTL expiry, file mod-time changes. Set(ctx, key, response, tokens, files) saves entry. Stats(ctx) returns hits/misses/tokens-saved. Clear(ctx) removes all entries. TTL configured from CacheConfig.",
-      "files": ["internal/cache/cache.go"],
-      "evidence": ["Cache struct with Get/Set/Stats/Clear methods", "TTL expiry check", "file modification time invalidation", "tokens-saved counter"],
-      "required": true,
-      "dependsOn": ["3", "4"]
+      "title": "TUI: add Ctrl+I and Ctrl+R key binding constants and help hints",
+      "done": true
     },
     {
       "id": "6",
-      "title": "feat: add --no-cache flag to devon run subcommand",
-      "description": "Add --no-cache bool flag to runCmd in cmd/devon/main.go. Pass its value through to runOneShot. When set, skip cache lookup entirely. Wire to config so --no-cache overrides CacheConfig.Enabled.",
-      "files": ["cmd/devon/main.go"],
-      "evidence": ["--no-cache flag on runCmd", "flag value passed to runOneShot"],
-      "required": true,
-      "dependsOn": ["1"]
+      "title": "TUI: handle file picker lifecycle and attachment management in update loop",
+      "done": true
     },
     {
       "id": "7",
-      "title": "feat: add devon cache subcommand with stats and clear",
-      "description": "Add cache cobra command to newRootCommand() with subcommands: 'devon cache stats' (prints accumulated tokens saved) and 'devon cache clear' (deletes all cache entries). Both open DB at cfg.WorkDir/.devon/devon.db and use Cache struct.",
-      "files": ["cmd/devon/main.go"],
-      "evidence": ["cache cobra command registered", "cache stats subcommand", "cache clear subcommand"],
-      "required": true,
-      "dependsOn": ["5"]
+      "title": "TUI: render attachment badges in input bar",
+      "done": true
     },
     {
       "id": "8",
-      "title": "feat: integrate cache lookup into one-shot execution flow",
-      "description": "In runOneShot (cmd/devon/main.go), after building messages and before calling llm.Stream, compute hash, check cache. On HIT: return cached response immediately (skip LLM call). On MISS: call LLM, save response + tokens to cache. Respect --no-cache flag and CacheConfig.OnlyOneShot.",
-      "files": ["cmd/devon/main.go"],
-      "evidence": ["cache lookup before LLM call in runOneShot", "cache save after successful LLM call", "respects --no-cache and OnlyOneShot"],
-      "required": true,
-      "dependsOn": ["5", "6"]
+      "title": "TUI: build multimodal message on send and clear attachments from RAM",
+      "done": true
     },
     {
       "id": "9",
-      "title": "test: unit tests for deterministic hash",
-      "description": "Create internal/cache/hash_test.go with table-driven tests: same input twice = same hash, different model = different hash, different messages = different hash, empty messages edge case.",
-      "files": ["internal/cache/hash_test.go"],
-      "evidence": ["TestHashKey_Deterministic", "TestHashKey_DifferentInputs", "table-driven test pattern"],
-      "required": true,
-      "dependsOn": ["3"]
+      "title": "Agent: add RunWithMessage for multimodal input and vision-support check",
+      "done": true
     },
     {
       "id": "10",
-      "title": "test: unit tests for cache hit, miss, TTL expiry, and file invalidation",
-      "description": "Create internal/cache/cache_test.go with table-driven tests using in-memory SQLite. Test: Set then Get returns response (hit), Get nonexistent key returns miss, Get expired entry returns miss, Set entry then modify tracked file returns miss, Stats returns correct counters.",
-      "files": ["internal/cache/cache_test.go"],
-      "evidence": ["TestCache_Hit", "TestCache_Miss", "TestCache_TTLExpiry", "TestCache_FileInvalidation", "TestCache_Stats"],
-      "required": true,
-      "dependsOn": ["5"]
+      "title": "Test: unit tests for attachment attach/remove/send flow",
+      "done": true
     },
     {
       "id": "11",
       "title": "chore: run full build, test, vet, and lint suite until green",
-      "description": "Run go build ./..., go test ./... -race, go vet ./..., golangci-lint run. Fix any new issues introduced by prior TODOs. Ensure .task-state.json is cleaned after completion.",
-      "files": [],
-      "evidence": ["go build passes", "go test passes", "go vet passes", "golangci-lint passes"],
-      "required": true,
-      "dependsOn": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      "done": true
     }
   ]
 }

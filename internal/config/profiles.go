@@ -49,6 +49,11 @@ type CacheConfig struct {
 	OnlyOneShot bool   `toml:"only_one_shot"`
 }
 
+// AttachmentsConfig configura o suporte a anexos de imagem.
+type AttachmentsConfig struct {
+	MaxSizeMB int `toml:"max_size_mb"`
+}
+
 // TomlConfig represents the structure of devon.toml.
 type TomlConfig struct {
 	Defaults struct {
@@ -59,6 +64,7 @@ type TomlConfig struct {
 	Sandbox  *SandboxConfig `toml:"sandbox"`
 	Index    *IndexConfig   `toml:"index"`
 	Cache    *CacheConfig   `toml:"cache"`
+	Attachments *AttachmentsConfig `toml:"attachments"`
 	MCPServers []MCPServerConfig `toml:"mcp_servers"`
 }
 

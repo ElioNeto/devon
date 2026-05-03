@@ -11,6 +11,7 @@ import (
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/memory"
 	"github.com/ElioNeto/devon/internal/tools"
+	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -108,6 +109,11 @@ type appModel struct {
 
 	// Token history per turn
 	tokenPerTurn []int
+
+	// Attachments (multimodal input)
+	attachments   []Attachment
+	showFilePicker bool
+	fp             filepicker.Model
 }
 
 type chatMessage struct {
@@ -177,6 +183,13 @@ func newModel(cfg *config.Config, registry *tools.Registry) appModel {
 		session = nil
 	}
 
+	// Initialize file picker
+	fp := filepicker.New()
+	fp.AllowedTypes = allowedImageExts
+	fp.CurrentDirectory = cfg.WorkDir
+	fp.FileAllowed = true
+	fp.DirAllowed = false
+
 	return appModel{
 		cfg:              cfg,
 		agent:            agt,
@@ -191,6 +204,8 @@ func newModel(cfg *config.Config, registry *tools.Registry) appModel {
 		leftFocus:        true,
 		maxContextTokens: maxCtx,
 		activeWorkspace:  0,
+		fp:               fp,
+		attachments:      []Attachment{},
 	}
 }
 

@@ -60,9 +60,21 @@ func renderInputBar(m *appModel, width int) string {
 		return s.inputBar.Width(width - 2).Render(running)
 	}
 
+	// Attachment badges — rendered above the prompt line
+	var badgeLine string
+	if len(m.attachments) > 0 {
+		badgeStyle := s.badge.Copy()
+		var badges []string
+		for _, att := range m.attachments {
+			badge := badgeStyle.Render(att.attachmentBadge())
+			badges = append(badges, badge)
+		}
+		badgeLine = strings.Join(badges, " ") + "\n"
+	}
+
 	if !strings.Contains(m.input, "\n") {
 		prompt := s.inputPrompt.Render("> ")
-		return s.inputBar.Width(width - 2).Render(prompt + renderInputLine(m))
+		return s.inputBar.Width(width - 2).Render(badgeLine + prompt + renderInputLine(m))
 	}
 
 	// Multi-line input: stack rows vertically.
@@ -94,7 +106,11 @@ func renderInputBar(m *appModel, width int) string {
 	}
 
 	m.multilineRows = multilineRows
-	return s.inputBar.Width(width - 2).Render(strings.Join(lines, "\n"))
+	content := strings.Join(lines, "\n")
+	if badgeLine != "" {
+		content = badgeLine + content
+	}
+	return s.inputBar.Width(width - 2).Render(content)
 }
 
 // runeOffset returns the rune index where line `lineIdx` starts in `s`.

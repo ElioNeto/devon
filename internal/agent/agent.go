@@ -110,10 +110,17 @@ func (a *Agent) AgentID() string {
 	return a.id
 }
 
-// Run processa um turno do usuário.
+// Run processa um turno do usuário (texto simples).
 func (a *Agent) Run(ctx context.Context, userInput string) <-chan Event {
 	a.mu = make(chan Event, 64)
 	go a.run(ctx, userInput, a.mu)
+	return a.mu
+}
+
+// RunWithMessage processa um turno com uma mensagem pré-construída (ex: multimodal).
+func (a *Agent) RunWithMessage(ctx context.Context, msg llm.Message) <-chan Event {
+	a.mu = make(chan Event, 64)
+	go a.runWithMessage(ctx, msg, a.mu)
 	return a.mu
 }
 
@@ -130,6 +137,43 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 		a.db.PutMessage(ctx, a.id, a.id, "user", userInput)
 	}
 
+	a.runLoop(ctx, ch)
+}
+
+func (a *Agent) runWithMessage(ctx context.Context, msg llm.Message, ch chan<- Event) {
+	defer close(ch)
+
+	// Check vision support — strip images if model doesn't support vision
+	if llm.HasVisionContent(msg.ContentParts) {
+		info := a.client.Info()
+		if !info.SupportsVision {
+			// Strip image parts, keep only text parts
+			var textParts []llm.ContentPart
+			for _, p := range msg.ContentParts {
+				if p.Type == llm.TypeText {
+					textParts = append(textParts, p)
+				}
+			}
+			msg.ContentParts = textParts
+			ch <- Event{Type: "system", Text: "Aviso: modelo não suporta visão. Imagens removidas da requisição."}
+		}
+	}
+
+	a.history = append(a.history, msg)
+
+	// Persiste mensagem no DB
+	if a.db != nil {
+		label := "[multimodal message]"
+		if msg.Content != nil && *msg.Content != "" {
+			label = *msg.Content
+		}
+		a.db.PutMessage(ctx, a.id, a.id, "user", label)
+	}
+
+	a.runLoop(ctx, ch)
+}
+
+func (a *Agent) runLoop(ctx context.Context, ch chan<- Event) {
 	for turn := 0; turn < a.cfg.MaxTurns; turn++ {
 		if ctx.Err() != nil {
 			return

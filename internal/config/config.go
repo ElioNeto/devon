@@ -142,6 +142,9 @@ type Config struct {
 
 	// Cache de respostas
 	Cache CacheConfig
+
+	// Attachments
+	MaxImageSizeMB int
 }
 
 // Load carrega a configuração.
@@ -176,6 +179,7 @@ func Load(envFile string) (*Config, error) {
 		DBPath:            getEnvDefault("DEVON_DB_PATH", ".devon/state.db"),
 		ContextWindowSize: getEnvInt("DEVON_CONTEXT_WINDOW_SIZE", 20),
 		Agents:            []AgentConfig{},
+		MaxImageSizeMB:    10,
 	}
 
 	// Carrega devon.toml e aplica sandbox + index
@@ -193,6 +197,9 @@ func Load(envFile string) (*Config, error) {
 			cfg.Cache = *tc.Cache
 		} else {
 			cfg.Cache.Enabled = true // zero-config: cache ativo por padrao
+		}
+		if tc.Attachments != nil {
+			cfg.MaxImageSizeMB = tc.Attachments.MaxSizeMB
 		}
 	}
 

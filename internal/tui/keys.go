@@ -31,6 +31,10 @@ const (
 	// avoid conflicts with free-text input (issue #27).
 	KeyHelp   = "?"
 	KeyEscape = "esc"
+
+	// Attachments
+	KeyAttachImage   = "ctrl+i"
+	KeyRemoveAttach  = "ctrl+r"
 	KeyExpand = "ctrl+e"
 	KeyCtxCmd = "!"
 
@@ -64,5 +68,7 @@ func AllHints() []KeyHint {
 		{"PgUp/Down", "scroll"},
 		{"?", "ajuda completa"},
 		{"Esc", "fechar menu"},
+		{"Ctrl+I", "anexar imagem"},
+		{"Ctrl+R", "remover attachment"},
 	}
 }

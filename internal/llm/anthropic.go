@@ -50,9 +50,20 @@ func NewAnthropicProvider(cfg ProviderConfig) *AnthropicProvider {
 func (p *AnthropicProvider) Name() string    { return p.info.Name }
 func (p *AnthropicProvider) Info() ModelInfo { return p.info }
 
+// anthropicContentBlock is a content block in an Anthropic message.
+type anthropicContentBlock struct {
+	Type   string `json:"type"`
+	Text   string `json:"text,omitempty"`
+	Source *struct {
+		Type      string `json:"type"`
+		MediaType string `json:"media_type"`
+		Data      string `json:"data"`
+	} `json:"source,omitempty"`
+}
+
 type anthropicMsg struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string          `json:"role"`
+	Content json.RawMessage `json:"content"` // string or []anthropicContentBlock
 }
 
 type anthropicTool struct {
@@ -115,25 +126,42 @@ func (p *AnthropicProvider) buildBody(messages []Message, tools []ToolDef) ([]by
 	var userMessages []anthropicMsg
 
 	for _, m := range messages {
-		content := ""
-		if m.Content != nil {
-			content = *m.Content
-		}
 		switch m.Role {
 		case RoleSystem:
+			text := ""
+			if m.Content != nil {
+				text = *m.Content
+			}
 			if systemMsg != "" {
 				systemMsg += "\n"
 			}
-			systemMsg += content
+			systemMsg += text
 		case RoleUser:
-			userMessages = append(userMessages, anthropicMsg{Role: "user", Content: content})
+			am, err := m.toAnthropicMsg("user")
+			if err != nil {
+				return nil, err
+			}
+			userMessages = append(userMessages, am)
 		case RoleAssistant:
-			userMessages = append(userMessages, anthropicMsg{Role: "assistant", Content: content})
+			am, err := m.toAnthropicMsg("assistant")
+			if err != nil {
+				return nil, err
+			}
+			userMessages = append(userMessages, am)
 		case RoleTool:
-			userMessages = append(userMessages, anthropicMsg{
-				Role:    "user",
-				Content: fmt.Sprintf("[tool_result id=%s] %s", m.ToolCallID, content),
-			})
+			am, err := m.toAnthropicMsg("user")
+			if err != nil {
+				return nil, err
+			}
+			// Wrap tool result content
+			if len(m.ContentParts) == 0 && m.Content != nil {
+				content := fmt.Sprintf("[tool_result id=%s] %s", m.ToolCallID, *m.Content)
+				am = anthropicMsg{
+					Role:    "user",
+					Content: mustRawMessage(json.Marshal(content)),
+				}
+			}
+			userMessages = append(userMessages, am)
 		}
 	}
 
@@ -166,6 +194,87 @@ func errorFromResponse(resp *http.Response) error {
 	bodyBytes, _ := io.ReadAll(limited)
 	msg := extractErrorMessage(bodyBytes)
 	return fmt.Errorf("anthropic: HTTP %d: %s", resp.StatusCode, msg)
+}
+
+// toAnthropicMsg converts a Message to an anthropicMsg, handling both
+// legacy string content and multimodal ContentParts (images).
+func (m Message) toAnthropicMsg(role string) (anthropicMsg, error) {
+	am := anthropicMsg{Role: role}
+
+	if len(m.ContentParts) > 0 {
+		// Multimodal: build content blocks
+		var blocks []anthropicContentBlock
+		for _, part := range m.ContentParts {
+			switch part.Type {
+			case TypeText:
+				blocks = append(blocks, anthropicContentBlock{Type: "text", Text: part.Text})
+			case TypeImageURL:
+				if part.ImageURL != nil {
+					mediaType, data := parseDataURI(part.ImageURL.URL)
+					blocks = append(blocks, anthropicContentBlock{
+						Type: "image",
+						Source: &struct {
+							Type      string `json:"type"`
+							MediaType string `json:"media_type"`
+							Data      string `json:"data"`
+						}{
+							Type:      "base64",
+							MediaType: mediaType,
+							Data:      data,
+						},
+					})
+				}
+			}
+		}
+		raw, err := json.Marshal(blocks)
+		if err != nil {
+			return am, fmt.Errorf("anthropic: failed to marshal content blocks: %w", err)
+		}
+		am.Content = raw
+	} else if m.Content != nil {
+		// Legacy string content
+		am.Content = mustRawMessage(json.Marshal(*m.Content))
+	} else {
+		// Empty content
+		am.Content = mustRawMessage(json.Marshal(""))
+	}
+
+	return am, nil
+}
+
+// parseDataURI extracts media_type and base64 data from a data URI.
+// Expected format: "data:image/png;base64,<base64data>"
+func parseDataURI(uri string) (mediaType, data string) {
+	if len(uri) < 5 || uri[:5] != "data:" {
+		return "image/png", uri // fallback
+	}
+	rest := uri[5:]
+	commaIdx := -1
+	for i, c := range rest {
+		if c == ',' {
+			commaIdx = i
+			break
+		}
+	}
+	if commaIdx < 0 {
+		return "image/png", uri
+	}
+	mediaPart := rest[:commaIdx]
+	data = rest[commaIdx+1:]
+	// Extract media_type from ";base64" prefix
+	// Format: "image/png;base64"
+	parts := strings.SplitN(mediaPart, ";", 2)
+	mediaType = parts[0]
+	return mediaType, data
+}
+
+// mustRawMessage wraps the result of json.Marshal into a json.RawMessage.
+func mustRawMessage(b []byte, err error) json.RawMessage {
+	if err != nil {
+		// This should never happen in practice for the simple types we marshal.
+		panic(err)
+	}
+	return json.RawMessage(b)
 }
 
 func (p *AnthropicProvider) parseSSE(ctx context.Context, body io.ReadCloser, deltaCh chan<- Delta) {

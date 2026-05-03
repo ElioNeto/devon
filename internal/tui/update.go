@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/ElioNeto/devon/internal/agent"
@@ -33,9 +34,34 @@ func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.layout = calcLayout(msg.Width, msg.Height)
+		if m.showFilePicker {
+			var cmd tea.Cmd
+			m.fp, cmd = m.fp.Update(msg)
+			return m, cmd
+		}
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.showFilePicker {
+			// Forward key events to file picker
+			var cmd tea.Cmd
+			m.fp, cmd = m.fp.Update(msg)
+			// Check if a file was selected
+			if selected, path := m.fp.DidSelectFile(msg); selected && path != "" {
+				if err := m.attachFile(path); err != nil {
+					m.appendLog("warn", "Erro ao anexar imagem: "+err.Error(), "")
+				} else {
+					att := m.attachments[len(m.attachments)-1]
+					m.appendLog("agent", "Imagem anexada: "+att.Filename, fmt.Sprintf("%dKB", att.SizeKB))
+				}
+				m.showFilePicker = false
+			}
+			if selected, path := m.fp.DidSelectDisabledFile(msg); selected && path != "" {
+				m.appendLog("warn", "Tipo de arquivo não suportado: "+filepath.Base(path), "permitidos: png, jpg, jpeg, gif, webp")
+				m.showFilePicker = false
+			}
+			return m, cmd
+		}
 		if m.confirm.visible {
 			return m.handleConfirmKey(msg)
 		}
@@ -277,7 +303,29 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showHelp = true
 		return m, nil
 
+	case KeyAttachImage:
+		if m.running {
+			return m, nil
+		}
+		m.showFilePicker = true
+		fp := m.fp
+		cmd := fp.Init()
+		m.fp = fp
+		return m, cmd
+
+	case KeyRemoveAttach:
+		if len(m.attachments) > 0 {
+			last := len(m.attachments) - 1
+			m.attachments[last].Data = nil
+			m.attachments = m.attachments[:last]
+		}
+		return m, nil
+
 	case "esc":
+		if m.showFilePicker {
+			m.showFilePicker = false
+			return m, nil
+		}
 		m.showMenu = false
 		m.popup = ""
 		m.showHelp = false
