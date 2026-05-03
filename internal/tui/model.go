@@ -22,6 +22,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// AgentRouter alias for TUI access.
+type AgentRouter = llm.AgentRouter
+
 // appModel é o modelo principal do Bubble Tea.
 type appModel struct {
 	width  int
@@ -126,6 +129,9 @@ type appModel struct {
 
 	// Session picker overlay
 	picker sessionPickerState
+
+	// Agent router for task-type-based model selection
+	router *llm.AgentRouter
 }
 
 type chatMessage struct {
@@ -173,7 +179,7 @@ type pendingTask struct {
 
 // ── Initialization ────────────────────────────────────────────────────────────
 
-func newModel(cfg *config.Config, registry *tools.Registry, resumeSessionID string) appModel {
+func newModel(cfg *config.Config, registry *tools.Registry, resumeSessionID string, router ...*llm.AgentRouter) appModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(colorPrimary)
@@ -195,7 +201,15 @@ func newModel(cfg *config.Config, registry *tools.Registry, resumeSessionID stri
 
 	client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
 	mem := memory.New(nil, cfg.WorkDir) // nil store para memória em memória apenas
-	agt := agent.New(cfg, client, registry, store, "", mem, cfg.WorkDir)
+
+	var r *llm.AgentRouter
+	if len(router) > 0 {
+		r = router[0]
+	}
+	agt := agent.New(cfg, client, registry, store, "", mem, cfg.WorkDir, r)
+	if cfg.ForcedTaskType != "" {
+		agt.SetForcedTaskType(cfg.ForcedTaskType)
+	}
 	tracker := cost.NewSession(cfg.Model)
 
 	maxCtx := 32000
@@ -222,6 +236,7 @@ func newModel(cfg *config.Config, registry *tools.Registry, resumeSessionID stri
 	m := appModel{
 		cfg:              cfg,
 		agent:            agt,
+		router:           r,
 		session:          session,
 		tracker:          tracker,
 		spinner:          s,

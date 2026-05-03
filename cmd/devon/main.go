@@ -82,6 +82,7 @@ func newRootCommand() *cobra.Command {
 	root.PersistentFlags().StringP("profile", "p", "", "Perfil de provider definido em devon.toml")
 	root.PersistentFlags().Bool("index", false, "Ativa indexação semântica do codebase")
 	root.PersistentFlags().Bool("no-index", false, "Desativa indexação semântica (força contexto completo)")
+	root.PersistentFlags().String("task-type", "", "Força o tipo de tarefa: explore | plan | code (desativa classificação automática)")
 
 	// Subcomando doctor
 	doctor := &cobra.Command{
@@ -228,7 +229,15 @@ func runAgent(cmd *cobra.Command, _ []string) error {
 	// Initialize MCP servers and get registry with all tools
 	registry := initMCPTools(cmd.Context(), cfg, slog.Default())
 
-	return tui.Run(cfg, registry, "")
+	// Build agent router for task-type-based model selection
+	router := buildAgentRouter(cfg)
+
+	// Force task type if --task-type flag is set
+	if tt, forced := forceTaskType(cmd); forced {
+		cfg.ForcedTaskType = tt
+	}
+
+	return tui.Run(cfg, registry, "", router)
 }
 
 func runTask(cmd *cobra.Command, args []string) error {
@@ -263,6 +272,11 @@ func runTask(cmd *cobra.Command, args []string) error {
 	}
 	if v, _ := cmd.Flags().GetBool("no-index"); v {
 		cfg.Index.Enabled = false
+	}
+
+	// Apply forced task type if --task-type flag is set on parent command
+	if tt, forced := forceTaskType(cmd.Parent()); forced {
+		cfg.ForcedTaskType = tt
 	}
 
 	noCache, _ := cmd.Flags().GetBool("no-cache")
@@ -324,9 +338,15 @@ func runOneShot(ctx context.Context, cfg *config.Config, task string, noCache bo
 	// Initialize MCP servers and get registry with all tools
 	registry := initMCPTools(ctx, cfg, slog.Default())
 
+	// Build agent router for task-type-based model selection
+	router := buildAgentRouter(cfg)
+
 	// Create a simple in-memory store for run-only mode
 	fakeDB := &fakeDB{}
-	agent := agentpkg.New(cfg, client, registry, fakeDB, "default-agent", nil, "")
+	agent := agentpkg.New(cfg, client, registry, fakeDB, "default-agent", nil, "", router)
+	if cfg.ForcedTaskType != "" {
+		agent.SetForcedTaskType(cfg.ForcedTaskType)
+	}
 
 	events := agent.Run(ctx, task)
 
@@ -370,6 +390,37 @@ func openSQLite(dbPath string) (*sql.DB, error) {
 	}
 	dsn := dbPath + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
 	return sql.Open("sqlite", dsn)
+}
+
+// buildAgentRouter creates an AgentRouter from the [agent_routing] section in devon.toml.
+// Returns nil when no routing is configured (passthrough mode).
+func buildAgentRouter(cfg *config.Config) *llm.AgentRouter {
+	tc, err := config.LoadToml()
+	if err != nil || tc == nil || tc.AgentRouting == nil {
+		return nil
+	}
+
+	routing, err := config.ResolveAgentRouting(tc)
+	if err != nil {
+		slog.Warn("agent_routing: erro ao resolver perfis, usando configuração padrão", "err", err)
+		return nil
+	}
+
+	if len(routing) == 0 {
+		return nil
+	}
+
+	defaultClient := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
+	return llm.NewAgentRouter(routing, defaultClient)
+}
+
+// forceTaskType returns the forced task type when --task-type is set, or zero value if not forced.
+func forceTaskType(cmd *cobra.Command) (config.TaskType, bool) {
+	v, _ := cmd.Flags().GetString("task-type")
+	if v == "" {
+		return "", false
+	}
+	return config.ParseTaskType(v), true
 }
 
 // initMCPTools initializes MCP servers and registers their tools.

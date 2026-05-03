@@ -54,18 +54,64 @@ type AttachmentsConfig struct {
 	MaxSizeMB int `toml:"max_size_mb"`
 }
 
+// TaskType categorizes the user prompt for agent routing.
+type TaskType string
+
+const (
+	TaskTypeExplore TaskType = "explore"
+	TaskTypePlan    TaskType = "plan"
+	TaskTypeCode    TaskType = "code"
+)
+
+// AgentRoutingConfig maps task types to profile names in devon.toml.
+type AgentRoutingConfig struct {
+	ExploreProfile string `toml:"explore_profile"`
+	PlanProfile    string `toml:"plan_profile"`
+	CodeProfile    string `toml:"code_profile"`
+}
+
 // TomlConfig represents the structure of devon.toml.
 type TomlConfig struct {
 	Defaults struct {
 		Profile string `toml:"profile"`
 		Mode    string `toml:"mode"`
 	} `toml:"defaults"`
-	Profiles []Profile      `toml:"profiles"`
-	Sandbox  *SandboxConfig `toml:"sandbox"`
-	Index    *IndexConfig   `toml:"index"`
-	Cache    *CacheConfig   `toml:"cache"`
-	Attachments *AttachmentsConfig `toml:"attachments"`
-	MCPServers []MCPServerConfig `toml:"mcp_servers"`
+	Profiles      []Profile           `toml:"profiles"`
+	Sandbox       *SandboxConfig      `toml:"sandbox"`
+	Index         *IndexConfig        `toml:"index"`
+	Cache         *CacheConfig        `toml:"cache"`
+	Attachments   *AttachmentsConfig  `toml:"attachments"`
+	MCPServers    []MCPServerConfig   `toml:"mcp_servers"`
+	AgentRouting  *AgentRoutingConfig `toml:"agent_routing"`
+}
+
+// ResolveAgentRouting resolves profile names in AgentRoutingConfig to actual Profiles.
+// Returns a map of TaskType → Profile, and nil if no routing is configured.
+// Returns an error if a referenced profile does not exist.
+func ResolveAgentRouting(tc *TomlConfig) (map[TaskType]*Profile, error) {
+	if tc == nil || tc.AgentRouting == nil {
+		return nil, nil
+	}
+
+	routing := make(map[TaskType]*Profile)
+	entries := map[TaskType]string{
+		TaskTypeExplore: tc.AgentRouting.ExploreProfile,
+		TaskTypePlan:    tc.AgentRouting.PlanProfile,
+		TaskTypeCode:    tc.AgentRouting.CodeProfile,
+	}
+
+	for tt, profileName := range entries {
+		if profileName == "" {
+			continue
+		}
+		p, err := ResolveProfile(tc, profileName)
+		if err != nil {
+			return nil, fmt.Errorf("agent_routing: perfil %q referenced by %q: %w", profileName, tt, err)
+		}
+		routing[tt] = p
+	}
+
+	return routing, nil
 }
 
 // LoadToml carrega devon.toml do diretório atual ou home (~/.devon.toml).

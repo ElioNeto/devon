@@ -157,7 +157,19 @@ func renderInputLine(m *appModel) string {
 func buildStatusRight(m *appModel) string {
 	s := m.styles
 
-	model := s.keyStyle.Render("modelo: ") + s.statusVal.Render(m.cfg.Model)
+	// Show routing info when agent router is available
+	var model string
+	if m.router != nil {
+		activeType := m.agent.ActiveTaskType()
+		activeModel := m.agent.ActiveModel()
+		if activeModel == "" {
+			activeModel = m.cfg.Model
+		}
+		model = s.keyStyle.Render("tarefa: ") + s.statusVal.Render(string(activeType)) +
+			s.statusSep.Render(" ") + s.keyStyle.Render("modelo: ") + s.statusVal.Render(activeModel)
+	} else {
+		model = s.keyStyle.Render("modelo: ") + s.statusVal.Render(m.cfg.Model)
+	}
 
 	if m.tracker == nil {
 		return model

@@ -3,6 +3,9 @@ package llm
 import (
 	"context"
 	"sync"
+	"time"
+
+	"github.com/ElioNeto/devon/internal/config"
 )
 
 // RouterStrategy defines how the Router selects providers.
@@ -90,4 +93,65 @@ func (r *Router) Stream(ctx context.Context, messages []Message, tools []ToolDef
 	}
 
 	return nil, lastErr
+}
+
+// ── AgentRouter ────────────────────────────────────────────────────────────────
+
+// AgentRouter maps task types to Streamer clients for agent routing.
+// When no mapping exists for a task type, it falls back to the default client.
+type AgentRouter struct {
+	clients map[config.TaskType]Streamer
+	defaultClient Streamer
+}
+
+// NewAgentRouter creates an AgentRouter from a routing map and a default client.
+// The routing map associates task types with resolved profiles. For each profile,
+// a new Streamer client is created. When no routing is provided (nil map), the
+// router simply returns the default client for all task types — a no-op passthrough.
+func NewAgentRouter(routing map[config.TaskType]*config.Profile, defaultClient Streamer) *AgentRouter {
+	clients := make(map[config.TaskType]Streamer, len(routing))
+
+	for tt, profile := range routing {
+		if profile == nil {
+			continue
+		}
+		clients[tt] = New(
+			profile.ResolveAPIKey(),
+			profile.BaseURL,
+			profile.Model,
+			30*time.Second, // default timeout for routed clients
+		)
+	}
+
+	return &AgentRouter{
+		clients:       clients,
+		defaultClient: defaultClient,
+	}
+}
+
+// ClientFor returns the Streamer client appropriate for the given task type.
+// If no specific client is mapped, the default client is returned.
+func (r *AgentRouter) ClientFor(tt config.TaskType) Streamer {
+	if r == nil {
+		return nil
+	}
+	if c, ok := r.clients[tt]; ok {
+		return c
+	}
+	return r.defaultClient
+}
+
+// ModelFor returns the model name configured for the given task type.
+// Returns the default client's model name when no specific routing exists.
+func (r *AgentRouter) ModelFor(tt config.TaskType) string {
+	if r == nil {
+		return ""
+	}
+	if _, ok := r.clients[tt]; ok {
+		return r.clients[tt].Info().Name
+	}
+	if r.defaultClient != nil {
+		return r.defaultClient.Info().Name
+	}
+	return ""
 }

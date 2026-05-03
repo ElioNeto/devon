@@ -145,6 +145,9 @@ type Config struct {
 
 	// Attachments
 	MaxImageSizeMB int
+
+	// ForcedTaskType overrides automatic classification when non-empty.
+	ForcedTaskType TaskType
 }
 
 // Load carrega a configuração.
@@ -305,4 +308,18 @@ func isLocalURL(u string) bool {
 	return strings.Contains(u, "localhost") ||
 		strings.Contains(u, "127.0.0.1") ||
 		strings.Contains(u, "10.0.0.")
+}
+
+// ParseTaskType parses a task type string, returning TaskTypeCode for unknown values.
+func ParseTaskType(s string) TaskType {
+	switch strings.ToLower(s) {
+	case "explore":
+		return TaskTypeExplore
+	case "plan":
+		return TaskTypePlan
+	case "code":
+		return TaskTypeCode
+	default:
+		return TaskTypeCode
+	}
 }

@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/ElioNeto/devon/internal/config"
 )
 
 // mockStreamProvider returns a pre-built error delta or text delta.
@@ -250,3 +252,146 @@ func TestRouter_ConcurrentSafety(t *testing.T) {
 		t.Errorf("total calls = %d, want 10", p1.called.Load()+p2.called.Load())
 	}
 }
+
+// ── AgentRouter tests ─────────────────────────────────────────────────────────
+
+// mockStreamer implements Streamer for AgentRouter tests.
+type mockStreamer struct {
+	name string
+}
+
+func (m *mockStreamer) Stream(ctx context.Context, msgs []Message, tools []ToolDef) (<-chan StreamEvent, error) {
+	ch := make(chan StreamEvent, 1)
+	ch <- StreamEvent{Type: "done"}
+	close(ch)
+	return ch, nil
+}
+
+func (m *mockStreamer) Info() ModelInfo {
+	return ModelInfo{Name: m.name}
+}
+
+func TestAgentRouter_ClientFor_MappedType(t *testing.T) {
+	routing := map[config.TaskType]*config.Profile{
+		config.TaskTypeExplore: {Name: "fast", BaseURL: "http://localhost:11434/v1", Model: "explore-model"},
+		config.TaskTypeCode:    {Name: "fast", BaseURL: "http://localhost:11434/v1", Model: "code-model"},
+	}
+	defaultClient := &mockStreamer{name: "default"}
+	router := NewAgentRouter(routing, defaultClient)
+
+	exploreClient := router.ClientFor(config.TaskTypeExplore)
+	if exploreClient == nil {
+		t.Fatal("ClientFor(explore) returned nil")
+	}
+	if exploreClient.Info().Name != "explore-model" {
+		t.Errorf("explore client model = %q, want %q", exploreClient.Info().Name, "explore-model")
+	}
+
+	codeClient := router.ClientFor(config.TaskTypeCode)
+	if codeClient == nil {
+		t.Fatal("ClientFor(code) returned nil")
+	}
+	if codeClient.Info().Name != "code-model" {
+		t.Errorf("code client model = %q, want %q", codeClient.Info().Name, "code-model")
+	}
+}
+
+func TestAgentRouter_ClientFor_UnmappedType(t *testing.T) {
+	routing := map[config.TaskType]*config.Profile{
+		config.TaskTypeExplore: {Name: "fast", BaseURL: "http://localhost:11434/v1", Model: "explore-model"},
+	}
+	defaultClient := &mockStreamer{name: "default"}
+	router := NewAgentRouter(routing, defaultClient)
+
+	// Plan is not in the routing map
+	planClient := router.ClientFor(config.TaskTypePlan)
+	if planClient == nil {
+		t.Fatal("ClientFor(plan) returned nil")
+	}
+	if planClient.Info().Name != "default" {
+		t.Errorf("plan client model = %q, want %q", planClient.Info().Name, "default")
+	}
+}
+
+func TestAgentRouter_ClientFor_NilRouting(t *testing.T) {
+	defaultClient := &mockStreamer{name: "default"}
+	router := NewAgentRouter(nil, defaultClient)
+
+	// Nil routing should always return default
+	for _, tt := range []config.TaskType{config.TaskTypeExplore, config.TaskTypePlan, config.TaskTypeCode} {
+		client := router.ClientFor(tt)
+		if client == nil {
+			t.Fatalf("ClientFor(%v) returned nil", tt)
+		}
+		if client.Info().Name != "default" {
+			t.Errorf("ClientFor(%v) model = %q, want %q", tt, client.Info().Name, "default")
+		}
+	}
+}
+
+func TestAgentRouter_ClientFor_EmptyRouting(t *testing.T) {
+	defaultClient := &mockStreamer{name: "default"}
+	router := NewAgentRouter(map[config.TaskType]*config.Profile{}, defaultClient)
+
+	// Empty routing should return default for all types
+	for _, tt := range []config.TaskType{config.TaskTypeExplore, config.TaskTypePlan, config.TaskTypeCode} {
+		client := router.ClientFor(tt)
+		if client == nil {
+			t.Fatalf("ClientFor(%v) returned nil", tt)
+		}
+		if client.Info().Name != "default" {
+			t.Errorf("ClientFor(%v) model = %q, want %q", tt, client.Info().Name, "default")
+		}
+	}
+}
+
+func TestAgentRouter_NilRouter(t *testing.T) {
+	var router *AgentRouter
+	client := router.ClientFor(config.TaskTypeCode)
+	if client != nil {
+		t.Error("ClientFor on nil router should return nil")
+	}
+}
+
+func TestAgentRouter_ModelFor_Mapped(t *testing.T) {
+	routing := map[config.TaskType]*config.Profile{
+		config.TaskTypeExplore: {Name: "fast", BaseURL: "http://localhost:11434/v1", Model: "explore-model"},
+	}
+	defaultClient := &mockStreamer{name: "default"}
+	router := NewAgentRouter(routing, defaultClient)
+
+	model := router.ModelFor(config.TaskTypeExplore)
+	if model != "explore-model" {
+		t.Errorf("ModelFor(explore) = %q, want %q", model, "explore-model")
+	}
+
+	// Unmapped type returns default model
+	model = router.ModelFor(config.TaskTypePlan)
+	if model != "default" {
+		t.Errorf("ModelFor(plan) = %q, want %q", model, "default")
+	}
+}
+
+func TestAgentRouter_ModelFor_NilRouter(t *testing.T) {
+	var router *AgentRouter
+	model := router.ModelFor(config.TaskTypeCode)
+	if model != "" {
+		t.Errorf("ModelFor on nil router = %q, want empty", model)
+	}
+}
+
+func TestAgentRouter_NewAgentRouter_NilProfile(t *testing.T) {
+	routing := map[config.TaskType]*config.Profile{
+		config.TaskTypeExplore: nil, // should be skipped
+	}
+	defaultClient := &mockStreamer{name: "default"}
+	router := NewAgentRouter(routing, defaultClient)
+
+	client := router.ClientFor(config.TaskTypeExplore)
+	if client != defaultClient {
+		t.Error("nil profile should result in default client")
+	}
+}
+
+// config alias for tests — avoid import cycle by using the real import in test
+// Since this is a _test.go file in the llm package, the import is fine.
