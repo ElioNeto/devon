@@ -109,9 +109,11 @@ func (s *Server) Serve() error {
 	if s.ln == nil {
 		return fmt.Errorf("headless: Serve called before Listen")
 	}
+	s.mu.Lock()
 	s.server = &http.Server{
 		Handler: s.handler(),
 	}
+	s.mu.Unlock()
 	return s.server.Serve(s.ln)
 }
 
