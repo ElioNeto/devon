@@ -228,7 +228,7 @@ func runAgent(cmd *cobra.Command, _ []string) error {
 	// Initialize MCP servers and get registry with all tools
 	registry := initMCPTools(cmd.Context(), cfg, slog.Default())
 
-	return tui.Run(cfg, registry)
+	return tui.Run(cfg, registry, "")
 }
 
 func runTask(cmd *cobra.Command, args []string) error {
@@ -545,6 +545,7 @@ Exemplos:
 				fmt.Fprintf(os.Stdout, "    Mensagens: %d | Tools: %d | Custo: $%.4f\n",
 					s.MessageCount, s.ToolCallCount, s.TotalCost)
 				fmt.Fprintf(os.Stdout, "    Ultima atividade: %s\n", s.LastActivity.Format("2006-01-02 15:04:05"))
+				fmt.Fprintf(os.Stdout, "    Duracao: %d ms\n", s.Duration)
 				fmt.Fprintln(os.Stdout)
 			}
 			return nil
@@ -577,9 +578,11 @@ Exemplos:
 				return fmt.Errorf("sessao %q nao encontrada", args[0])
 			}
 
-			fmt.Fprintf(os.Stdout, "Sessao %s encontrada. Use 'devon' sem argumentos para inicia-la na TUI.\n", s.ID)
-			fmt.Fprintf(os.Stdout, "Task: %s | Modelo: %s | Status: %s\n", s.Task, s.Model, s.Status)
-			return nil
+			slog.Info("sessao encontrada, iniciando TUI com sessao", "id", s.ID, "task", s.Task, "model", s.Model, "status", s.Status)
+
+			// Initialize MCP tools and start the TUI with the resumed session
+			registry := initMCPTools(cmd.Context(), cfg, slog.Default())
+			return tui.Run(cfg, registry, s.ID)
 		},
 	})
 
@@ -775,7 +778,8 @@ func newCacheCommand() *cobra.Command {
 // fakeDB is a simple no-op store for one-shot mode
 type fakeDB struct{}
 
-func (f *fakeDB) CreateSession(ctx context.Context, id string) error            { return nil }
+func (f *fakeDB) CreateSession(ctx context.Context, id string) error                       { return nil }
+func (f *fakeDB) CreateSessionWithMeta(ctx context.Context, id, task, model, status string) error { return nil }
 func (f *fakeDB) GetSession(ctx context.Context, id string) (bool, error)       { return false, nil }
 func (f *fakeDB) ListSessions(ctx context.Context, limit int) ([]string, error) { return nil, nil }
 func (f *fakeDB) GetSessionDetail(ctx context.Context, id string) (*db.SessionDetail, error) {

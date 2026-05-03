@@ -163,6 +163,9 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.appendLog("system", "Agente interrompido.", "")
 			return m, nil
 		}
+		if m.dbStore != nil {
+			m.dbStore.Close()
+		}
 		return m, tea.Quit
 
 	case "ctrl+l":

@@ -42,7 +42,7 @@ func (m *Manager) Get(ctx context.Context, id string) (*db.SessionDetail, error)
 
 // Create creates a new session with the given id, task, and model.
 func (m *Manager) Create(ctx context.Context, id, task, model string) error {
-	return m.store.CreateSession(ctx, id)
+	return m.store.CreateSessionWithMeta(ctx, id, task, model, "active")
 }
 
 // Update updates a session's task, model, and/or status. Empty fields are not changed.
@@ -87,6 +87,3 @@ func (m *Manager) Touch(ctx context.Context, id string) error {
 	return m.store.UpdateSession(ctx, id, "", "", "")
 }
 
-// openSessions is a helper to track recently accessed sessions.
-// Not persisted; used for TUI session picker ordering.
-var openSessions []string

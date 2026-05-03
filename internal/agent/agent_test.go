@@ -742,6 +742,7 @@ func (e *mockError) Error() string { return e.msg }
 type fakeDBStore struct{}
 
 func (f *fakeDBStore) CreateSession(ctx context.Context, id string) error                                         { return nil }
+func (f *fakeDBStore) CreateSessionWithMeta(ctx context.Context, id, task, model, status string) error            { return nil }
 func (f *fakeDBStore) GetSession(ctx context.Context, id string) (bool, error)                                 { return false, nil }
 func (f *fakeDBStore) ListSessions(ctx context.Context, limit int) ([]string, error)                          { return nil, nil }
 func (f *fakeDBStore) GetSessionDetail(ctx context.Context, id string) (*db.SessionDetail, error)             { return nil, nil }

@@ -30,7 +30,7 @@ func testRegistry() *tools.Registry {
 }
 
 func TestNewModel(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	if m.cfg.Model != "test-model" {
 		t.Errorf("expected model test-model, got %q", m.cfg.Model)
 	}
@@ -40,7 +40,7 @@ func TestNewModel(t *testing.T) {
 }
 
 func TestModel_Init(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	cmd := m.Init()
 	if cmd == nil {
 		t.Error("Init should return a cmd")
@@ -48,7 +48,7 @@ func TestModel_Init(t *testing.T) {
 }
 
 func TestModel_UpdateWindowSize(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m = updateApp(m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	if m.width != 80 || m.height != 24 {
 		t.Errorf("expected size 80x24, got %dx%d", m.width, m.height)
@@ -56,7 +56,7 @@ func TestModel_UpdateWindowSize(t *testing.T) {
 }
 
 func TestModel_UpdateTypeText(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -72,7 +72,7 @@ func TestModel_UpdateTypeText(t *testing.T) {
 }
 
 func TestModel_UpdateDeleteWord(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -89,7 +89,7 @@ func TestModel_UpdateDeleteWord(t *testing.T) {
 }
 
 func TestModel_UpdateClearInput(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -101,7 +101,7 @@ func TestModel_UpdateClearInput(t *testing.T) {
 }
 
 func TestModel_UpdateCursor(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -127,7 +127,7 @@ func TestModel_UpdateCursor(t *testing.T) {
 }
 
 func TestModel_UpdateAgentResult(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 	m.running = true
@@ -146,7 +146,7 @@ func TestModel_UpdateAgentResult(t *testing.T) {
 }
 
 func TestModel_UpdateClearChat(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.messages = append(m.messages, chatMessage{Sender: "devon", Content: "hello"})
 	m.scroll = 5
 
@@ -160,7 +160,7 @@ func TestModel_UpdateClearChat(t *testing.T) {
 }
 
 func TestModel_UpdateNewSession(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.messages = append(m.messages, chatMessage{Sender: "devon", Content: "old"})
 	m.tracker.TotalInputTokens = 100
 
@@ -174,7 +174,7 @@ func TestModel_UpdateNewSession(t *testing.T) {
 }
 
 func TestModel_UpdateHelp(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -187,7 +187,7 @@ func TestModel_UpdateHelp(t *testing.T) {
 // ── Issue #27: shortcut keys must not conflict with text input ─────────────
 
 func TestModel_ShortcutsDontConflictWithInput(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -224,7 +224,7 @@ func TestModel_ShortcutsDontConflictWithInput(t *testing.T) {
 }
 
 func TestModel_CtrlShortcutsWork(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -267,7 +267,7 @@ func TestModel_CtrlShortcutsWork(t *testing.T) {
 }
 
 func TestModel_HelpShowsNewBindings(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 40
 
@@ -292,7 +292,7 @@ func TestModel_HelpShowsNewBindings(t *testing.T) {
 }
 
 func TestModel_UpdateCtrlC(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -393,7 +393,7 @@ func TestProcessAgentEventSystem(t *testing.T) {
 }
 
 func TestModel_View_ZeroSize(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	v := m.View()
 	if v != "Iniciando Devon..." {
 		t.Errorf("expected placeholder, got %q", v)
@@ -401,7 +401,7 @@ func TestModel_View_ZeroSize(t *testing.T) {
 }
 
 func TestModel_View_Basic(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -419,7 +419,7 @@ func TestModel_View_Basic(t *testing.T) {
 }
 
 func TestModel_ViewRunning(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 	m.running = true
@@ -435,7 +435,7 @@ func TestModel_ViewRunning(t *testing.T) {
 }
 
 func TestModel_ViewWithToolRuns(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 	m.toolRuns = []toolRun{
@@ -449,7 +449,7 @@ func TestModel_ViewWithToolRuns(t *testing.T) {
 }
 
 func TestModel_ViewHelp(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 40
 	m.showHelp = true
@@ -524,7 +524,7 @@ func TestFormatTokens(t *testing.T) {
 }
 
 func TestInputEditMiddle(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -575,7 +575,7 @@ func (e testErr) Error() string { return e.msg }
 // ── Attachment tests ──────────────────────────────────────────────────────────
 
 func TestFilePickerInitializedInModel(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -592,7 +592,7 @@ func TestFilePickerInitializedInModel(t *testing.T) {
 }
 
 func TestRemoveAttachment_CtrlRRemovesLast(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -616,7 +616,7 @@ func TestRemoveAttachment_CtrlRRemovesLast(t *testing.T) {
 }
 
 func TestRemoveAttachment_CtrlREmptyDoesNotPanic(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -658,7 +658,7 @@ func TestDataURIFormat(t *testing.T) {
 }
 
 func TestAttachmentBadgesInInputBar(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -679,7 +679,7 @@ func TestAttachmentBadgesInInputBar(t *testing.T) {
 }
 
 func TestAttachmentsClearedAfterSend(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -700,7 +700,7 @@ func TestAttachmentsClearedAfterSend(t *testing.T) {
 }
 
 func TestOversizedAttachmentRejected(t *testing.T) {
-	m := newModel(testConfig(), testRegistry())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 

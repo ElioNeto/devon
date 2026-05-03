@@ -3,6 +3,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 
 	"path/filepath"
 
@@ -172,7 +173,7 @@ type pendingTask struct {
 
 // ── Initialization ────────────────────────────────────────────────────────────
 
-func newModel(cfg *config.Config, registry *tools.Registry) appModel {
+func newModel(cfg *config.Config, registry *tools.Registry, resumeSessionID string) appModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(colorPrimary)
@@ -199,9 +200,16 @@ func newModel(cfg *config.Config, registry *tools.Registry) appModel {
 
 	maxCtx := 32000
 
-	session, err := history.LoadLastSession(cfg.WorkDir)
-	if err != nil {
-		session = nil
+	var session *history.Session
+	if resumeSessionID != "" && store != nil {
+		// Load the specific session from the DB store
+		session = &history.Session{ID: resumeSessionID}
+	} else {
+		var err error
+		session, err = history.LoadLastSession(cfg.WorkDir)
+		if err != nil {
+			session = nil
+		}
 	}
 
 	// Initialize file picker
@@ -233,14 +241,92 @@ func newModel(cfg *config.Config, registry *tools.Registry) appModel {
 	if store != nil {
 		mgr := sessionpkg.NewManager(store)
 		m.sessionMgr = mgr
-		m.initSessionPicker(mgr)
-		// Show picker on startup if there are sessions
-		if len(m.picker.sessions) > 0 {
-			m.picker.visible = true
+
+		// If resuming, load messages and tool calls from DB
+		if resumeSessionID != "" {
+			m.loadSessionFromDB(context.Background(), resumeSessionID)
+		} else {
+			m.initSessionPicker(mgr)
+			// Show picker on startup if there are sessions
+			if len(m.picker.sessions) > 0 {
+				m.picker.visible = true
+			}
 		}
 	}
 
 	return m
+}
+
+// loadSessionFromDB loads messages, tool calls, and agent state from the DB store
+// for the given sessionID and populates the model state.
+func (m *appModel) loadSessionFromDB(ctx context.Context, sessionID string) {
+	if m.dbStore == nil {
+		return
+	}
+
+	// Load messages
+	msgs, msgErr := m.dbStore.GetMessages(ctx, "tui", sessionID, 1000)
+	if msgErr == nil && len(msgs) > 0 {
+		m.messages = nil
+		for i := len(msgs) - 1; i >= 0; i-- {
+			msg := msgs[i]
+			cm := chatMessage{
+				Content: msg.Content,
+			}
+			switch msg.Role {
+			case "user":
+				cm.Sender = "user"
+			case "assistant":
+				cm.Sender = "devon"
+			case "tool":
+				cm.Sender = "devon"
+				cm.IsError = true
+			default:
+				cm.Sender = "system"
+			}
+			m.messages = append(m.messages, cm)
+		}
+	}
+
+	// Load tool calls
+	calls, tcErr := m.dbStore.GetToolCalls(ctx, sessionID)
+	if tcErr == nil && len(calls) > 0 {
+		m.toolRuns = nil
+		for _, tc := range calls {
+			tr := toolRun{
+				Name:   tc.ToolName,
+				Args:   tc.Arguments,
+				Result: tc.Result,
+				Status: tc.Status,
+			}
+			if tc.Error != "" {
+				tr.Status = "error"
+			}
+			m.toolRuns = append(m.toolRuns, tr)
+		}
+	}
+
+	msgCount := len(msgs)
+
+	// Load agent state
+	state, err := m.dbStore.GetAgentState(ctx, "tui")
+	if err == nil && state != nil {
+		m.session = &history.Session{
+			ID: state.SessionID,
+		}
+	}
+
+	// Set session ID
+	if m.session == nil {
+		m.session = &history.Session{ID: sessionID}
+	} else {
+		m.session.ID = sessionID
+	}
+
+	m.messages = append(m.messages, chatMessage{
+		Sender:  "system",
+		Content: "Sessão " + sessionID + " carregada (" + fmt.Sprintf("%d mensagens", msgCount) + ").",
+	})
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

@@ -5,84 +5,84 @@
       "id": "1",
       "title": "Extend sessions DB table schema with task, model, duration, last_activity columns and add migration",
       "files": ["internal/db/schema.go"],
-      "done": false,
+      "done": true,
       "dep": "-"
     },
     {
       "id": "2",
       "title": "Add GetSessionDetail, ListSessionsDetail, UpdateSession, DeleteSession to Store interface",
       "files": ["internal/db/store.go"],
-      "done": false,
+      "done": true,
       "dep": "1"
     },
     {
       "id": "3",
       "title": "Implement GetSessionDetail, ListSessionsDetail, UpdateSession, DeleteSession in SQLiteStore",
       "files": ["internal/db/store.go"],
-      "done": false,
+      "done": true,
       "dep": "2"
     },
     {
       "id": "4",
       "title": "Create internal/session/session.go with Session domain struct and UUIDv4 short ID (8-char) generator",
       "files": ["internal/session/session.go"],
-      "done": false,
+      "done": true,
       "dep": "-"
     },
     {
       "id": "5",
       "title": "Create internal/session/manager.go with Manager wrapping db.Store — List, Get, Create, Update, Delete, Stats",
       "files": ["internal/session/manager.go"],
-      "done": false,
+      "done": true,
       "dep": "3,4"
     },
     {
       "id": "6",
       "title": "Create internal/session/export.go with ExportMarkdown and ExportJSON functions including messages, tool calls, file access, cost, tokens",
       "files": ["internal/session/export.go"],
-      "done": false,
+      "done": true,
       "dep": "5"
     },
     {
       "id": "7",
       "title": "Add cobra 'devon sessions' command group with list, resume <id>, export <id>, delete <id>, stats subcommands in cmd/devon/main.go",
       "files": ["cmd/devon/main.go"],
-      "done": false,
+      "done": true,
       "dep": "5,6"
     },
     {
       "id": "8",
       "title": "Create internal/tui/sessionpicker.go with Bubble Tea model for keyboard-navigable session picker overlay",
       "files": ["internal/tui/sessionpicker.go"],
-      "done": false,
+      "done": true,
       "dep": "5"
     },
     {
       "id": "9",
       "title": "Wire session picker into TUI Run flow — show picker on startup before main chat model",
       "files": ["internal/tui/tui.go", "internal/tui/model.go", "internal/tui/update.go"],
-      "done": false,
+      "done": true,
       "dep": "8"
     },
     {
       "id": "10",
       "title": "Persist current session (messages, tool calls, cost) to DB during agent run for crash recovery",
       "files": ["internal/tui/commands.go", "internal/agent/agent.go"],
-      "done": false,
+      "done": true,
       "dep": "5"
     },
     {
       "id": "11",
       "title": "Write tests for internal/session/ — Manager CRUD, Export formats, edge cases",
       "files": ["internal/session/manager_test.go", "internal/session/export_test.go"],
-      "done": false,
+      "done": true,
       "dep": "5,6"
     },
     {
       "id": "12",
       "title": "Run full build, test, vet, and lint suite until green",
       "files": ["Makefile"],
-      "done": false,
+      "done": true,
       "dep": "7,9,10,11"
     }
   ]

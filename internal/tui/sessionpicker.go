@@ -159,16 +159,20 @@ func (m *appModel) handleSessionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			_ = m.sessionMgr.Touch(context.Background(), selected.ID)
 		}
 
-		// Set session info
-		if m.session != nil {
-			m.session.ID = selected.ID
+		// Set session info and load history from DB
+		if m.dbStore != nil {
+			m.loadSessionFromDB(context.Background(), selected.ID)
+		} else {
+			if m.session != nil {
+				m.session.ID = selected.ID
+			}
+			m.messages = append(m.messages, chatMessage{
+				Sender:  "system",
+				Content: "Sessão " + selected.ID + " carregada.",
+			})
 		}
 		m.picker.visible = false
 		m.picker.done = true
-		m.messages = append(m.messages, chatMessage{
-			Sender:  "system",
-			Content: "Sessão " + selected.ID + " carregada.",
-		})
 		return m, nil
 	}
 

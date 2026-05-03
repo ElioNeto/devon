@@ -117,6 +117,7 @@ type FactRow struct {
 type Store interface {
 	// Sessions
 	CreateSession(ctx context.Context, id string) error
+	CreateSessionWithMeta(ctx context.Context, id, task, model, status string) error
 	GetSession(ctx context.Context, id string) (bool, error)
 	ListSessions(ctx context.Context, limit int) ([]string, error)
 	GetSessionDetail(ctx context.Context, id string) (*SessionDetail, error)
@@ -356,11 +357,12 @@ func (s *SQLiteStore) GetSessionDetail(ctx context.Context, id string) (*Session
 		SELECT s.id, s.task, s.model, s.status, s.duration, s.last_activity, s.created_at,
 			COALESCE(msg.cnt, 0) AS message_count,
 			COALESCE(tc.cnt, 0) AS tool_call_count,
-			COALESCE(cs.total_cost, 0) AS total_cost
+			COALESCE(cs.total_cost, 0) AS total_cost,
+			COALESCE(json_extract(cs.token_usage, '$.total_tokens'), 0) AS total_tokens
 		FROM sessions s
 		LEFT JOIN (SELECT session_id, COUNT(*) AS cnt FROM messages GROUP BY session_id) msg ON msg.session_id = s.id
 		LEFT JOIN (SELECT session_id, COUNT(*) AS cnt FROM tool_calls GROUP BY session_id) tc ON tc.session_id = s.id
-		LEFT JOIN (SELECT session_id, total_cost FROM cost_summary) cs ON cs.session_id = s.id
+		LEFT JOIN (SELECT session_id, total_cost, token_usage FROM cost_summary) cs ON cs.session_id = s.id
 		WHERE s.id = ?`
 
 	var sd SessionDetail
@@ -368,7 +370,7 @@ func (s *SQLiteStore) GetSessionDetail(ctx context.Context, id string) (*Session
 	err := s.db.QueryRowContext(ctx, query, id).Scan(
 		&sd.ID, &sd.Task, &sd.Model, &sd.Status, &sd.Duration,
 		&lastActivity, &createdAt,
-		&sd.MessageCount, &sd.ToolCallCount, &sd.TotalCost,
+		&sd.MessageCount, &sd.ToolCallCount, &sd.TotalCost, &sd.TotalTokens,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -386,11 +388,12 @@ func (s *SQLiteStore) ListSessionsDetail(ctx context.Context, limit int) ([]Sess
 		SELECT s.id, s.task, s.model, s.status, s.duration, s.last_activity, s.created_at,
 			COALESCE(msg.cnt, 0) AS message_count,
 			COALESCE(tc.cnt, 0) AS tool_call_count,
-			COALESCE(cs.total_cost, 0) AS total_cost
+			COALESCE(cs.total_cost, 0) AS total_cost,
+			COALESCE(json_extract(cs.token_usage, '$.total_tokens'), 0) AS total_tokens
 		FROM sessions s
 		LEFT JOIN (SELECT session_id, COUNT(*) AS cnt FROM messages GROUP BY session_id) msg ON msg.session_id = s.id
 		LEFT JOIN (SELECT session_id, COUNT(*) AS cnt FROM tool_calls GROUP BY session_id) tc ON tc.session_id = s.id
-		LEFT JOIN (SELECT session_id, total_cost FROM cost_summary) cs ON cs.session_id = s.id
+		LEFT JOIN (SELECT session_id, total_cost, token_usage FROM cost_summary) cs ON cs.session_id = s.id
 		ORDER BY s.last_activity DESC
 		LIMIT ?`
 
@@ -407,7 +410,7 @@ func (s *SQLiteStore) ListSessionsDetail(ctx context.Context, limit int) ([]Sess
 		if err := rows.Scan(
 			&sd.ID, &sd.Task, &sd.Model, &sd.Status, &sd.Duration,
 			&lastActivity, &createdAt,
-			&sd.MessageCount, &sd.ToolCallCount, &sd.TotalCost,
+			&sd.MessageCount, &sd.ToolCallCount, &sd.TotalCost, &sd.TotalTokens,
 		); err != nil {
 			return nil, err
 		}
