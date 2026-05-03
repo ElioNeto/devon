@@ -64,6 +64,56 @@ devon run "adicione testes para o pacote internal/db"
 echo "refatore auth.go" | devon run
 ```
 
+## MCP Servers
+
+O Devon suporta **MCP (Model Context Protocol)**, um protocolo aberto que padroniza a comunicação entre agentes de IA e ferramentas externas. Com MCP, você pode estender as capacidades do Devon conectando servidores que expõem APIs, executam comandos ou acessam serviços — tudo gerenciado via arquivo de configuração.
+
+### Transporte `stdio`
+
+Servidores MCP executados como processo filho via stdio:
+
+```toml
+[[mcp_servers]]
+id = "github"
+type = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+env = { GITHUB_TOKEN = "ghp_xxxxxxxxxxxx" }
+```
+
+| Campo     | Descrição                                         |
+|-----------|---------------------------------------------------|
+| `id`      | Identificador único do servidor MCP               |
+| `type`    | Tipo de transporte: `stdio` ou `http`             |
+| `command` | Caminho ou nome do comando para iniciar o servidor|
+| `args`    | Lista de argumentos passados ao comando           |
+| `env`     | Mapa de variáveis de ambiente injetadas no processo|
+
+### Transporte `http`
+
+Servidores MCP conectados via HTTP com Server-Sent Events (SSE):
+
+```toml
+[[mcp_servers]]
+id = "meu-servidor"
+type = "http"
+url = "http://localhost:8080/mcp"
+```
+
+| Campo  | Descrição                                       |
+|--------|-------------------------------------------------|
+| `id`   | Identificador único do servidor MCP             |
+| `type` | Tipo de transporte: `http`                      |
+| `url`  | Endpoint HTTP completo do servidor MCP          |
+
+### Comportamento
+
+As ferramentas expostas por servidores MCP aparecem na interface TUI com o prefixo `[mcp]` seguido do identificador do servidor — por exemplo `[mcp:github] create-issue`. Isso permite distinguir visualmente ferramentas MCP das ferramentas nativas do Devon.
+
+Se um servidor MCP falhar ao conectar (servidor off-line, URL inválida ou comando não encontrado), o Devon registra um aviso no log e continua a execução **sem** as ferramentas daquele servidor. As demais funcionalidades do agente permanecem intactas — degradação graciosa sem interromper o fluxo de trabalho.
+
+> Para mais detalhes sobre o protocolo, consulte a [especificação oficial do MCP](https://modelcontextprotocol.io/specification).
+
 ## Documentação
 
 - [Configuração Avançada](docs/advanced-setup.md) — múltiplos providers, perfis, fallback automático

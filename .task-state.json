@@ -1,173 +1,104 @@
 {
-  "task": "feat: atualizar protocolo extensão VSCode ↔ Devon após migração Go (issue #34)",
+  "task": "feat: servidor headless (HTTP/SSE) para integração com CI/CD e clientes externos (issue #49)",
   "todos": [
     {
       "id": "1",
-      "title": "Define JSON-RPC 2.0 types in internal/rpc/types.go — Request, Response, Event, SessionInfo structs",
+      "title": "Add Headless config fields (Enabled, Host, Port) to Config struct and TomlConfig — supports devon.toml [headless] section",
       "files": [
-        "internal/rpc/types.go"
+        "internal/config/config.go",
+        "internal/config/profiles.go"
       ],
-      "done": true,
+      "done": false,
       "dep": "-"
     },
     {
       "id": "2",
-      "title": "Implement Unix socket listener and server loop in internal/rpc/server.go — Serve(), Close(), socket path ~/.devon/rpc.sock",
+      "title": "Add --headless, --port, --host persistent flags to root cobra command and create headless subcommand skeleton",
       "files": [
-        "internal/rpc/server.go"
+        "cmd/devon/main.go"
       ],
-      "done": true,
+      "done": false,
       "dep": "1"
     },
     {
       "id": "3",
-      "title": "Implement method handlers in internal/rpc/handlers.go — sendPrompt, getSession, listSessions, interrupt, getStatus",
+      "title": "Create proto/devon.proto — reference gRPC service definition with DevonService, event types (text_delta, tool_start, tool_done, action_required, turn_done, error), and bidirectional streaming RPC",
       "files": [
-        "internal/rpc/handlers.go"
+        "proto/devon.proto"
       ],
-      "done": true,
-      "dep": "1,2"
-    },
-    {
-      "id": "4",
-      "title": "Implement event broadcaster in internal/rpc/stream.go — subscribe to agent.Event channel, fan-out JSON-SSE to connected clients",
-      "files": [
-        "internal/rpc/stream.go"
-      ],
-      "done": true,
-      "dep": "1,2,3"
-    },
-    {
-      "id": "5",
-      "title": "Write table-driven tests for internal/rpc/server_test.go — connect/disconnect, method dispatch, error responses, concurrent clients",
-      "files": [
-        "internal/rpc/server_test.go"
-      ],
-      "done": true,
-      "dep": "2"
-    },
-    {
-      "id": "6",
-      "title": "Write table-driven tests for internal/rpc/handlers_test.go — each RPC method with valid/invalid payloads, session not found, agent not running",
-      "files": [
-        "internal/rpc/handlers_test.go"
-      ],
-      "done": true,
-      "dep": "3"
-    },
-    {
-      "id": "7",
-      "title": "Wire RPC server into cmd/devon/main.go — add `devon rpc` subcommand that starts the RPC server, integrates with agent lifecycle and TUI",
-      "files": [
-        "cmd/devon/main.go"
-      ],
-      "done": true,
-      "dep": "4"
-    },
-    {
-      "id": "8",
-      "title": "Create vscode-extension/package.json — extension manifest with commands (Devon: Send Prompt, Interrupt, Resume Session) and activation events",
-      "files": [
-        "vscode-extension/package.json"
-      ],
-      "done": true,
+      "done": false,
       "dep": "-"
     },
     {
-      "id": "9",
-      "title": "Create vscode-extension/tsconfig.json and .vscodeignore — TypeScript compilation config and packaging ignore rules",
+      "id": "4",
+      "title": "Create internal/headless/types.go — public API types: PromptRequest, EventResponse (type + payload), ActionRequiredRequest, RespondRequest, SSE event constants, reusable Event type aliases",
       "files": [
-        "vscode-extension/tsconfig.json",
-        "vscode-extension/.vscodeignore"
+        "internal/headless/types.go"
       ],
-      "done": true,
-      "dep": "8"
-    },
-    {
-      "id": "10",
-      "title": "Create vscode-extension/src/types.ts — shared interfaces for RPC request/response, session info, event types mirroring Go types",
-      "files": [
-        "vscode-extension/src/types.ts"
-      ],
-      "done": true,
+      "done": false,
       "dep": "1"
     },
     {
-      "id": "11",
-      "title": "Create vscode-extension/src/client.ts — JSON-RPC 2.0 client over Unix socket (net.connect) with connect, send, subscribe, disconnect methods",
+      "id": "5",
+      "title": "Create internal/headless/server.go — HTTP server struct with Listen/Serve/Close, SSE connection manager (per-client event queue, graceful close), integrates with agent.ReplyCh for action_required blocking",
       "files": [
-        "vscode-extension/src/client.ts"
+        "internal/headless/server.go"
       ],
-      "done": true,
-      "dep": "10"
+      "done": false,
+      "dep": "4"
     },
     {
-      "id": "12",
-      "title": "Create vscode-extension/src/commands.ts — command palette handlers: Devon: Send Prompt (quick input → client.sendPrompt), Devon: Interrupt, Devon: Resume Session",
+      "id": "6",
+      "title": "Create internal/headless/handler.go — HTTP handlers: POST /api/prompt (accepts prompt → returns SSE stream), POST /api/respond (unblocks action_required), GET /api/health, GET /api/status. Maps agent.Event types to SSE events, handles confirm_request → action_required flow",
       "files": [
-        "vscode-extension/src/commands.ts"
+        "internal/headless/handler.go"
       ],
-      "done": true,
-      "dep": "11"
+      "done": false,
+      "dep": "5"
     },
     {
-      "id": "13",
-      "title": "Create vscode-extension/src/events.ts — event streaming handler that subscribes to client events and dispatches to webview panels (tool calls, turn_done, error)",
+      "id": "7",
+      "title": "Create internal/headless/server_test.go — tests with mock agent: SSE stream receives text_delta/tool_start/tool_done/turn_done, action_required blocks until /api/respond, health endpoint returns 200, concurrent clients",
       "files": [
-        "vscode-extension/src/events.ts"
+        "internal/headless/server_test.go"
       ],
-      "done": true,
-      "dep": "11"
+      "done": false,
+      "dep": "6"
     },
     {
-      "id": "14",
-      "title": "Create vscode-extension/src/indicators.ts — gutter decorations tracking file_change events from stream, adding M/A/D gutter indicators in editor",
+      "id": "8",
+      "title": "Implement runHeadless function in cmd/devon/main.go — init agent, create headless server, wire agent events to SSE stream, handle action_required via HTTP endpoint, serve until SIGINT. Wire into --headless flag and headless subcommand",
       "files": [
-        "vscode-extension/src/indicators.ts"
+        "cmd/devon/main.go"
       ],
-      "done": true,
-      "dep": "13"
+      "done": false,
+      "dep": "2,6"
     },
     {
-      "id": "15",
-      "title": "Create vscode-extension/src/extension.ts — activate() that instantiates client, registers commands, starts event stream, creates status bar item",
+      "id": "9",
+      "title": "Add [headless] sample config section to devon.toml — host, port, enabled fields with documentation comments",
       "files": [
-        "vscode-extension/src/extension.ts"
+        "devon.toml"
       ],
-      "done": true,
-      "dep": "11,12,13,14"
+      "done": false,
+      "dep": "1"
     },
     {
-      "id": "16",
-      "title": "Write tests for vscode-extension/src/test/suite/client.test.ts — mock socket, verify JSON-RPC framing, reconnect behavior",
+      "id": "10",
+      "title": "Verify build, lint, and tests pass — go build ./..., go test ./..., go vet ./..., golangci-lint run across all packages",
       "files": [
-        "vscode-extension/src/test/suite/client.test.ts"
+        "internal/headless/server.go",
+        "internal/headless/handler.go",
+        "internal/headless/types.go",
+        "internal/headless/server_test.go",
+        "cmd/devon/main.go",
+        "internal/config/config.go",
+        "internal/config/profiles.go",
+        "proto/devon.proto",
+        "devon.toml"
       ],
-      "done": true,
-      "dep": "11"
-    },
-    {
-      "id": "17",
-      "title": "Write tests for vscode-extension/src/test/suite/extension.test.ts — activation, command registration, indicator lifecycle, event dispatch",
-      "files": [
-        "vscode-extension/src/test/suite/extension.test.ts"
-      ],
-      "done": true,
-      "dep": "15"
-    },
-    {
-      "id": "18",
-      "title": "Run go build ./... + go test ./... + go vet ./... until green for all internal/rpc/ changes",
-      "files": [
-        "internal/rpc/types.go",
-        "internal/rpc/server.go",
-        "internal/rpc/handlers.go",
-        "internal/rpc/stream.go",
-        "internal/rpc/server_test.go",
-        "internal/rpc/handlers_test.go"
-      ],
-      "done": true,
-      "dep": "5,6,7"
+      "done": false,
+      "dep": "3,7,8,9"
     }
   ]
 }

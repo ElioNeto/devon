@@ -90,6 +90,7 @@ type TomlConfig struct {
 	Web           *WebConfig          `toml:"web"`
 	MCPServers    []MCPServerConfig   `toml:"mcp_servers"`
 	AgentRouting  *AgentRoutingConfig `toml:"agent_routing"`
+	Headless      *HeadlessConfig     `toml:"headless"`
 }
 
 // ResolveAgentRouting resolves profile names in AgentRoutingConfig to actual Profiles.

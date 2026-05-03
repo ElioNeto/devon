@@ -106,6 +106,13 @@ type SandboxConfig struct {
 	Timeouts      []CommandTimeout `toml:"timeouts"`
 }
 
+// HeadlessConfig configura o servidor HTTP/SSE headless.
+type HeadlessConfig struct {
+	Enabled bool   `toml:"enabled"`
+	Host    string `toml:"host"`
+	Port    int    `toml:"port"`
+}
+
 // Config contém toda a configuração de runtime do Devon.
 type Config struct {
 	// Provider
@@ -151,6 +158,9 @@ type Config struct {
 
 	// ForcedTaskType overrides automatic classification when non-empty.
 	ForcedTaskType TaskType
+
+	// Headless HTTP/SSE server configuration
+	Headless HeadlessConfig
 }
 
 // Load carrega a configuração.
@@ -209,6 +219,9 @@ func Load(envFile string) (*Config, error) {
 		}
 		if tc.Web != nil {
 			cfg.Web = *tc.Web
+		}
+		if tc.Headless != nil {
+			cfg.Headless = *tc.Headless
 		}
 	}
 
