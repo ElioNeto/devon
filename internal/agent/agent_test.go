@@ -9,7 +9,6 @@ import (
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/db"
 	"github.com/ElioNeto/devon/internal/llm"
-	"github.com/ElioNeto/devon/internal/memory"
 	"github.com/ElioNeto/devon/internal/tools"
 )
 
@@ -101,7 +100,7 @@ func TestAgent_Run_SimpleResponse(t *testing.T) {
 	cfg := newTestConfig()
 	r := tools.NewRegistry()
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{Text: "I can help!"},
 		},
 	}
@@ -128,7 +127,7 @@ func TestAgent_Run_SingleToolCall(t *testing.T) {
 
 	r := tools.NewRegistry()
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{
 				ToolCalls: []llm.ToolCall{
 					{
@@ -173,7 +172,7 @@ func TestAgent_Run_MultipleToolCalls(t *testing.T) {
 
 	r := tools.NewRegistry()
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{
 				ToolCalls: []llm.ToolCall{
 					{
@@ -187,7 +186,7 @@ func TestAgent_Run_MultipleToolCalls(t *testing.T) {
 				},
 			},
 			{
-				ToolCalls: []llm.MockResponse{
+				ToolCalls: []llm.ToolCall{
 					{
 						ID:   "t2",
 						Type: "function",
@@ -242,7 +241,7 @@ func TestAgent_Run_ToolCall_Error(t *testing.T) {
 
 	r := tools.NewRegistry()
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{
 				ToolCalls: []llm.ToolCall{
 					{
@@ -271,7 +270,7 @@ func TestAgent_Run_ToolCall_Error(t *testing.T) {
 func TestAgent_Run_UnknownTool(t *testing.T) {
 	r := tools.NewRegistry()
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{
 				ToolCalls: []llm.ToolCall{
 					{
@@ -306,7 +305,7 @@ func TestAgent_Run_ContextCancelled(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{Text: "thinking..."},
 		},
 	}
@@ -332,7 +331,7 @@ func TestAgent_Run_ContextCancelled_BeforeCall(t *testing.T) {
 	cancel()
 
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{Text: "should not be reached"},
 		},
 	}
@@ -371,7 +370,7 @@ func TestAgent_Run_MaxTurnsLimit(t *testing.T) {
 	}
 
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			toolCallResp("t1"),
 			toolCallResp("t2"),
 			toolCallResp("t3"),
@@ -397,7 +396,7 @@ func TestAgent_Run_LLMStreamError(t *testing.T) {
 	cfg := newTestConfig()
 	r := tools.NewRegistry()
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{Err: &mockError{msg: "connection timeout"}},
 		},
 	}
@@ -415,7 +414,7 @@ func TestAgent_Run_UserMessageInHistory(t *testing.T) {
 	cfg := newTestConfig()
 	r := tools.NewRegistry()
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{Text: "Got it"},
 		},
 	}
@@ -464,7 +463,7 @@ func TestAgent_ExecuteTool_UnknownTool(t *testing.T) {
 func TestAgent_Run_NoToolCalls(t *testing.T) {
 	r := tools.NewRegistry()
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{Text: "Just a plain answer"},
 		},
 	}
@@ -508,7 +507,7 @@ func TestAgent_Run_ParallelToolCalls(t *testing.T) {
 
 	r := tools.NewRegistry()
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{
 				ToolCalls: []llm.ToolCall{
 					{
@@ -564,7 +563,7 @@ func TestAgent_Run_EventOrder(t *testing.T) {
 
 	r := tools.NewRegistry()
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{
 				ToolCalls: []llm.ToolCall{
 					{
@@ -617,7 +616,7 @@ func TestAgent_TurnDelay_Respected(t *testing.T) {
 
 	r := tools.NewRegistry()
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{
 				ToolCalls: []llm.ToolCall{
 					{
@@ -672,7 +671,7 @@ func TestAgent_TurnDelay_CancelOnContext(t *testing.T) {
 
 	r := tools.NewRegistry()
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{
 				ToolCalls: []llm.ToolCall{
 					{
@@ -710,7 +709,7 @@ func TestAgent_Run_RateLimited_Event(t *testing.T) {
 	cfg := newTestConfig()
 	r := tools.NewRegistry()
 	mc := &llm.MockClient{
-		Responses: []llm.MockResponse{
+		Responses: []llm.ToolCall{
 			{Err: fmt.Errorf("llm: provedor retornou HTTP 429: rate limited")},
 		},
 	}

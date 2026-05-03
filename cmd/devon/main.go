@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -15,7 +16,9 @@ import (
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/db"
 	"github.com/ElioNeto/devon/internal/index"
+	initpkg "github.com/ElioNeto/devon/internal/init"
 	"github.com/ElioNeto/devon/internal/llm"
+	"github.com/ElioNeto/devon/internal/mcp"
 	"github.com/ElioNeto/devon/internal/memory"
 	"github.com/ElioNeto/devon/internal/tools"
 	"github.com/ElioNeto/devon/internal/tui"
@@ -214,7 +217,10 @@ func runAgent(cmd *cobra.Command, _ []string) error {
 		cfg.Index.Enabled = false
 	}
 
-	return tui.Run(cfg)
+	// Initialize MCP servers and get registry with all tools
+	registry := initMCPTools(cmd.Context(), cfg, slog.Default())
+
+	return tui.Run(cfg, registry)
 }
 
 func runTask(cmd *cobra.Command, args []string) error {
@@ -272,7 +278,9 @@ func hasStdinPipe() bool {
 
 func runOneShot(ctx context.Context, cfg *config.Config, task string) (string, error) {
 	client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
-	registry := tools.NewRegistry()
+
+	// Initialize MCP servers and get registry with all tools
+	registry := initMCPTools(ctx, cfg, slog.Default())
 
 	// Create a simple in-memory store for run-only mode
 	fakeDB := &fakeDB{}
@@ -296,6 +304,23 @@ func runOneShot(ctx context.Context, cfg *config.Config, task string) (string, e
 		}
 	}
 	return strings.TrimSpace(text.String()), nil
+}
+
+// initMCPTools initializes MCP servers and registers their tools.
+// Returns a registry with all tools (built-in + MCP) registered.
+// Used by both TUI mode (via tui.Run) and one-shot mode.
+func initMCPTools(ctx context.Context, cfg *config.Config, logger *slog.Logger) *tools.Registry {
+	registry := tools.NewRegistry()
+
+	tc, err := config.LoadToml()
+	if err != nil || tc == nil || len(tc.MCPServers) == 0 {
+		return registry
+	}
+
+	mcpHelper := mcp.NewRegistryHelper(logger)
+	mcpHelper.InitMCPServersFromConfig(ctx, tc.MCPServers, registry)
+
+	return registry
 }
 
 func runDoctor(cmd *cobra.Command, _ []string) error {

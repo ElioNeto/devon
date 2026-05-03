@@ -1,0 +1,155 @@
+{
+  "total": 9,
+  "by_priority": {
+    "critical": 0,
+    "high": 3,
+    "medium": 4,
+    "low": 2
+  },
+  "issues": [
+    {
+      "number": 51,
+      "priority": "medium",
+      "title": "feat: ferramenta WebSearch com DuckDuckGo como fallback gratuito e Firecrawl opcional",
+      "status": "open",
+      "depends_on": [1, 16],
+      "blocks": [],
+      "acceptance_summary": [
+        "web_search retorna resultados com título, URL e snippet",
+        "web_fetch retorna conteúdo da URL como Markdown",
+        "Backend DuckDuckGo funciona sem configuração",
+        "Backend Firecrawl ativado automaticamente com DEVON_FIRECRAWL_KEY",
+        "Falha de conexão não derruba o agente"
+      ],
+      "fetched_body": false
+    },
+    {
+      "number": 50,
+      "priority": "medium",
+      "title": "feat: roteamento de agentes por tipo de tarefa — mapear Explore/Plan/Code para modelos distintos",
+      "status": "open",
+      "depends_on": [9],
+      "blocks": [26],
+      "acceptance_summary": [
+        "devon.toml aceita [agent_routing] com mapeamento task → model ID",
+        "Classificação automática de tarefa por keywords do prompt",
+        "Flag --task-type força o tipo explícito",
+        "TUI exibe o modelo ativo por turno na statusbar",
+        "Sem [agent_routing], comportamento atual é preservado"
+      ],
+      "fetched_body": false
+    },
+    {
+      "number": 49,
+      "priority": "low",
+      "title": "feat: servidor headless (gRPC ou HTTP/SSE) para integração com CI/CD e clientes externos",
+      "status": "open",
+      "depends_on": [32, 34],
+      "blocks": [],
+      "acceptance_summary": [
+        "devon --headless inicia sem TUI e aceita conexões",
+        "Prompt enviado via cliente retorna stream de eventos em tempo real",
+        "Evento action_required bloqueia execução até cliente responder",
+        "proto/devon.proto publicado para geração de clientes",
+        "Funciona em Linux e macOS"
+      ],
+      "fetched_body": false
+    },
+    {
+      "number": 34,
+      "priority": "low",
+      "title": "feat: atualizar protocolo extensão VSCode ↔ Devon após migração Go",
+      "status": "open",
+      "depends_on": [29],
+      "blocks": [],
+      "acceptance_summary": [
+        "Extensão conecta ao Devon Go via Unix socket sem erros",
+        "Prompt enviado da extensão aparece no TUI e vice-versa",
+        "Eventos de tool call aparecem no painel lateral em tempo real",
+        "Arquivos modificados mostram gutter indicators no editor",
+        "Funciona em Linux, macOS e Windows"
+      ],
+      "fetched_body": false
+    },
+    {
+      "number": 33,
+      "priority": "medium",
+      "title": "feat: gerenciamento de sessões — listar, retomar e exportar histórico",
+      "status": "open",
+      "depends_on": [26],
+      "blocks": [],
+      "acceptance_summary": [
+        "devon sessions list exibe sessões com ID, task, duração e custo",
+        "devon sessions resume <id> carrega contexto do DB e retoma conversa",
+        "Exportação Markdown e JSON funcionais",
+        "Session picker na TUI navegável com teclado",
+        "Sessão atual sempre persistida no DB"
+      ],
+      "fetched_body": false
+    },
+    {
+      "number": 32,
+      "priority": "high",
+      "title": "feat: MCP (Model Context Protocol) — suporte a servidores externos de ferramentas",
+      "status": "open",
+      "depends_on": [],
+      "blocks": [49],
+      "acceptance_summary": [
+        "Servidor MCP stdio conecta, lista e executa ferramentas corretamente",
+        "Servidor MCP http/sse idem",
+        "Ferramentas MCP aparecem no registry sem mudanças no core",
+        "Falha de conexão com servidor MCP não quebra o agente",
+        "Testes com mock de servidor MCP"
+      ],
+      "fetched_body": false
+    },
+    {
+      "number": 28,
+      "priority": "medium",
+      "title": "feat: multimodal input — anexar imagens ao prompt via TUI",
+      "status": "open",
+      "depends_on": [22],
+      "blocks": [],
+      "acceptance_summary": [
+        "Ctrl+I abre file picker navegável dentro da TUI",
+        "Arquivo selecionado aparece como badge no input bar",
+        "Prompt + imagem enviados corretamente para modelo com visão",
+        "Imagem não fica na RAM após o envio",
+        "Arquivo maior que max_image_size_mb é rejeitado"
+      ],
+      "fetched_body": false
+    },
+    {
+      "number": 24,
+      "priority": "high",
+      "title": "feat: cache de respostas por hash de contexto — zero tokens para prompts repetidos",
+      "status": "open",
+      "depends_on": [1, 17, 22],
+      "blocks": [],
+      "acceptance_summary": [
+        "Hash determinístico implementado e testado",
+        "Cache consulta e salva via SQLite",
+        "Ativado por padrão apenas no modo one-shot",
+        "Invalidação por TTL e por modificação de arquivo",
+        "devon cache stats exibe tokens economizados"
+      ],
+      "fetched_body": false
+    },
+    {
+      "number": 20,
+      "priority": "high",
+      "title": "feat: devon init — wizard para criar DEVON.md do projeto",
+      "status": "open",
+      "depends_on": [1],
+      "blocks": [],
+      "acceptance_summary": [
+        "Detecção automática de linguagem e build commands",
+        "Wizard interativo funciona em TTY",
+        "Flag --yes funciona sem TTY (modo CI)",
+        "Não sobrescreve DEVON.md existente sem --force",
+        "Template gerado é válido e útil como contexto"
+      ],
+      "fetched_body": false
+    }
+  ]
+}

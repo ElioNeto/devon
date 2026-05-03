@@ -9,6 +9,19 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// MCPServerConfig represents the configuration for an MCP server.
+type MCPServerConfig struct {
+	Name        string            `toml:"name"`
+	Type        string            `toml:"type"` // "stdio" or "http"
+	Command     string            `toml:"command,omitempty"`
+	Args        []string          `toml:"args,omitempty"`
+	Env         map[string]string `toml:"env,omitempty"`
+	URL         string            `toml:"url,omitempty"`
+	Headers     map[string]string `toml:"headers,omitempty"`
+	Enabled     bool              `toml:"enabled"`
+	Description string            `toml:"description,omitempty"`
+}
+
 // Profile defines a named provider configuration.
 type Profile struct {
 	Name      string   `toml:"name"`
@@ -37,6 +50,7 @@ type TomlConfig struct {
 	Profiles []Profile      `toml:"profiles"`
 	Sandbox  *SandboxConfig `toml:"sandbox"`
 	Index    *IndexConfig   `toml:"index"`
+	MCPServers []MCPServerConfig `toml:"mcp_servers"`
 }
 
 // LoadToml carrega devon.toml do diretório atual ou home (~/.devon.toml).

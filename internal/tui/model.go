@@ -155,12 +155,16 @@ type pendingTask struct {
 
 // ── Initialization ────────────────────────────────────────────────────────────
 
-func newModel(cfg *config.Config) appModel {
+func newModel(cfg *config.Config, registry *tools.Registry) appModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(colorPrimary)
 
-	registry := tools.NewRegistry()
+	// If registry is nil, create a new one (fallback)
+	if registry == nil {
+		registry = tools.NewRegistry()
+	}
+
 	client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
 	mem := memory.New(nil, cfg.WorkDir) // nil store para memória em memória apenas
 	agt := agent.New(cfg, client, registry, nil, "", mem, cfg.WorkDir)
