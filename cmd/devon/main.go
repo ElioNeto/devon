@@ -336,6 +336,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 	yesFlag, _ := cmd.Flags().GetBool("yes")
 	forceFlag, _ := cmd.Flags().GetBool("force")
 
+	// --yes implies --force (skip all prompts)
+	if yesFlag {
+		forceFlag = true
+	}
+
 	// Get current working directory
 	worksDir, err1 := os.Getwd()
 	if err1 != nil {
@@ -358,7 +363,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if yesFlag {
 		// Non-interactive mode (CI)
 		fmt.Fprintf(os.Stdout, "Modo não-interativo (--yes)\n")
-		info, err1 = wizard.RunNonInteractive()
+		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		info, err1 = wizard.RunNonInteractive(ctx)
 	} else {
 		// Interactive mode
 		info, err1 = wizard.Run()
