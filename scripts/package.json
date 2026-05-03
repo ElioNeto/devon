@@ -5,7 +5,8 @@
   "description": "Scripts de suporte ao delivery-loop do OpenCode",
   "scripts": {
     "workflow-agent": "tsx workflow-agent.ts",
-    "check-todos": "tsx check-todos.ts"
+    "check-todos": "tsx check-todos.ts",
+    "test-stage": "tsx stage-files.ts"
   },
   "dependencies": {
     "yaml": "^2.7.0"

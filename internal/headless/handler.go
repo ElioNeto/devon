@@ -63,6 +63,9 @@ func handlePrompt(s *Server, cfg *config.Config, registry *tools.Registry, route
 		return
 	}
 
+	// Limit request body to 1MB
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	var req PromptRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
@@ -73,9 +76,10 @@ func handlePrompt(s *Server, cfg *config.Config, registry *tools.Registry, route
 		return
 	}
 
-	// Apply mode override from request
+	// Create a copy of cfg to avoid data races when multiple requests mutate the shared config.
+	cfgCopy := *cfg
 	if req.Mode != "" {
-		cfg.Mode = config.ParseMode(req.Mode)
+		cfgCopy.Mode = config.ParseMode(req.Mode)
 	}
 
 	// Set SSE headers
@@ -95,8 +99,14 @@ func handlePrompt(s *Server, cfg *config.Config, registry *tools.Registry, route
 
 	eventsCh := make(chan agentEvent, 64)
 
-	// Start agent in background
-	go agentRun(ctx, cfg, registry, router, req.Prompt, eventsCh)
+	// Update agent status before starting the run
+	agentStatus.running.Store(true)
+	agentStatus.sessionID.Store(req.SessionID)
+	agentStatus.model.Store(cfgCopy.Model)
+	agentStatus.taskType.Store(string(cfgCopy.ForcedTaskType))
+
+	// Start agent in background (use cfgCopy to avoid data race on cfg.Mode)
+	go agentRun(ctx, &cfgCopy, registry, router, req.Prompt, eventsCh)
 
 	// Stream events via SSE
 	for ev := range eventsCh {
@@ -174,6 +184,9 @@ func handlePrompt(s *Server, cfg *config.Config, registry *tools.Registry, route
 			})
 		}
 	}
+
+	// Agent run finished
+	agentStatus.running.Store(false)
 }
 
 // handleRespond handles POST /api/respond — unblocks an action_required event.
@@ -182,6 +195,9 @@ func handleRespond(s *Server, w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
+
+	// Limit request body to 1MB
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
 	var req ActionRequiredRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

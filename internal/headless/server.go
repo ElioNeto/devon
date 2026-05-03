@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -28,6 +29,7 @@ type Server struct {
 type agentRegistry struct {
 	mu          sync.RWMutex
 	pendingReqs map[string]chan int // requestID → channel to send confirm level
+	reqCounter  atomic.Int64        // monotonic counter for unique request IDs
 }
 
 func newAgentRegistry() *agentRegistry {
@@ -37,11 +39,11 @@ func newAgentRegistry() *agentRegistry {
 }
 
 // RegisterPendingRequest stores a channel for a pending action_required request.
-// Returns the generated requestID.
+// Returns the generated requestID using a monotonic counter to avoid collisions.
 func (ar *agentRegistry) RegisterPendingRequest(ch chan int) string {
 	ar.mu.Lock()
 	defer ar.mu.Unlock()
-	id := fmt.Sprintf("req-%d", len(ar.pendingReqs)+1)
+	id := fmt.Sprintf("req-%d", ar.reqCounter.Add(1))
 	ar.pendingReqs[id] = ch
 	return id
 }
