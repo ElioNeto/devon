@@ -57,8 +57,16 @@ func TestBuildProjectContext_GitBranch(t *testing.T) {
 
 	ctx := BuildProjectContext(repoRoot)
 
-	// Should contain "Branch do Git" since this is a git repo
-	if !strings.Contains(ctx, "Branch do Git") {
-		t.Errorf("expected 'Branch do Git' in repo context, got:\n%s", ctx)
+	// Should contain "Diretório de trabalho" since this is a git repo
+	if !strings.Contains(ctx, "Diretório de trabalho") {
+		t.Errorf("expected project context, got:\n%s", ctx)
+	}
+
+	// The branch info depends on HEAD state; in CI (detached HEAD) it may not appear
+	branch := gitBranch(repoRoot)
+	if branch != "HEAD" {
+		if !strings.Contains(ctx, "Branch do Git") {
+			t.Errorf("expected 'Branch do Git' in repo context, got:\n%s", ctx)
+		}
 	}
 }

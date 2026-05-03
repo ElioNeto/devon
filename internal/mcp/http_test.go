@@ -150,7 +150,11 @@ func TestHTTPTransport_Headers(t *testing.T) {
 		Method:  "test",
 		ID:      1,
 	}
-	
+
+	if err := transport.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect failed: %v", err)
+	}
+
 	_, err := transport.Send(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
