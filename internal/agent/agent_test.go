@@ -9,6 +9,7 @@ import (
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/db"
 	"github.com/ElioNeto/devon/internal/llm"
+	"github.com/ElioNeto/devon/internal/memory"
 	"github.com/ElioNeto/devon/internal/tools"
 )
 
@@ -186,7 +187,7 @@ func TestAgent_Run_MultipleToolCalls(t *testing.T) {
 				},
 			},
 			{
-				ToolCalls: []llm.ToolCall{
+				ToolCalls: []llm.MockResponse{
 					{
 						ID:   "t2",
 						Type: "function",

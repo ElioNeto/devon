@@ -103,12 +103,10 @@ writeTestFileT(t, tmpDir+"/auth.go", `package auth
 
 import "context"
 
-// Authentication module for user credentials
 func Authenticate(ctx context.Context, username, password string) (bool, error) {
 	return checkCredentials(username, password)
 }
 
-// checkCredentials validates user credentials
 func checkCredentials(user, pass string) bool {
 	return len(user) > 0 && len(pass) > 0
 }`)
@@ -126,19 +124,8 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 		t.Fatalf("Rebuild failed: %v", err)
 	}
 
-	stats := idx.GetStats()
-	t.Logf("Index stats: %d docs, %d terms", stats.TotalDocs, stats.TermCount)
-
 	t.Run("search finds relevant files", func(t *testing.T) {
 		results := idx.Search("authenticate", 5)
-
-		// Debug: log all paths found and terms
-		terms := idx.GetIndex().GetTerms()
-		t.Logf("All terms in index: %v", terms)
-		t.Logf("Search results for 'authenticate': %d", len(results))
-		for _, r := range results {
-			t.Logf("  Found: path=%q score=%.4f", r.Path, r.Score)
-		}
 
 		if len(results) == 0 {
 			t.Error("expected results for 'authenticate' query")
@@ -157,8 +144,8 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 	})
 
 	t.Run("search is case insensitive", func(t *testing.T) {
-		results1 := idx.Search("auth", 5)
-		results2 := idx.Search("AUTH", 5)
+		results1 := idx.Search("authenticate", 5)
+		results2 := idx.Search("AUTHENTICATE", 5)
 
 		if len(results1) != len(results2) {
 			t.Errorf("case insensitive search mismatch: %d vs %d",

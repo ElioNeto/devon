@@ -87,7 +87,6 @@ CREATE TABLE IF NOT EXISTS facts (
 
 CREATE INDEX IF NOT EXISTS idx_facts_project ON facts(project_id);
 CREATE INDEX IF NOT EXISTS idx_facts_category ON facts(category);
-
 CREATE TABLE IF NOT EXISTS file_access (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
@@ -99,7 +98,6 @@ CREATE TABLE IF NOT EXISTS file_access (
 
 CREATE INDEX IF NOT EXISTS idx_file_access_session ON file_access(session_id);
 CREATE INDEX IF NOT EXISTS idx_file_access_path ON file_access(file_path);
-
 CREATE TABLE IF NOT EXISTS error_patterns (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id TEXT NOT NULL,
