@@ -8,11 +8,8 @@ import (
 )
 
 func TestBuildProjectContext_NoGit(t *testing.T) {
-	// Create a temp directory with no git
 	tmpDir := t.TempDir()
-
 	ctx := BuildProjectContext(tmpDir)
-
 	if strings.Contains(ctx, "Branch do Git") {
 		t.Error("should not contain 'Branch do Git' in non-git directory")
 	}
@@ -23,13 +20,9 @@ func TestBuildProjectContext_NoGit(t *testing.T) {
 
 func TestBuildProjectContext_DetectsLanguages(t *testing.T) {
 	tmpDir := t.TempDir()
-
-	// Create .go and .py files
 	os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main"), 0o644)
 	os.WriteFile(filepath.Join(tmpDir, "app.py"), []byte("print('hello')"), 0o644)
-
 	ctx := BuildProjectContext(tmpDir)
-
 	if !strings.Contains(ctx, "Go") || !strings.Contains(ctx, "Python") {
 		t.Errorf("expected 'Go, Python' in context, got:\n%s", ctx)
 	}
@@ -51,22 +44,17 @@ func findRepoRoot(t *testing.T, start string) string {
 }
 
 func TestBuildProjectContext_GitBranch(t *testing.T) {
-	// Use the actual repo directory
 	cwd, _ := os.Getwd()
 	repoRoot := findRepoRoot(t, cwd)
-
 	ctx := BuildProjectContext(repoRoot)
-
-	// Should contain "Diretório de trabalho" since this is a git repo
 	if !strings.Contains(ctx, "Diretório de trabalho") {
 		t.Errorf("expected project context, got:\n%s", ctx)
 	}
-
-	// The branch info depends on HEAD state; in CI (detached HEAD) it may not appear
 	branch := gitBranch(repoRoot)
-	if branch != "HEAD" {
-		if !strings.Contains(ctx, "Branch do Git") {
-			t.Errorf("expected 'Branch do Git' in repo context, got:\n%s", ctx)
-		}
+	if branch == "" || branch == "HEAD" {
+		t.Skipf("no git branch available (detached HEAD or no git): %q", branch)
+	}
+	if !strings.Contains(ctx, "Branch do Git") {
+		t.Errorf("expected 'Branch do Git' in repo context, got:\n%s", ctx)
 	}
 }
