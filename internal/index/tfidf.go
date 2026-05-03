@@ -205,6 +205,8 @@ func (i *Index) Index(doc *Document) {
 		i.termFreqs[docID] = make(map[string]int)
 	}
 
+	// Track which terms we've already counted for doc frequency
+	seenTerms := make(map[string]bool)
 	for _, tok := range doc.Tokens {
 		if i.isStopword(tok.Text) {
 			continue
@@ -212,10 +214,13 @@ func (i *Index) Index(doc *Document) {
 
 		i.termFreqs[docID][tok.Text]++
 
-		if _, exists := i.docFreqs[tok.Text]; !exists {
-			i.docFreqs[tok.Text] = 0
+		if !seenTerms[tok.Text] {
+			seenTerms[tok.Text] = true
+			if _, exists := i.docFreqs[tok.Text]; !exists {
+				i.docFreqs[tok.Text] = 0
+			}
+			i.docFreqs[tok.Text]++
 		}
-		i.docFreqs[tok.Text]++
 	}
 
 	i.totalDocs++
@@ -286,7 +291,11 @@ func (i *Index) Search(query string, topK int) []DocumentWithScore {
 			continue
 		}
 
-		for docID, tf := range i.termFreqs[term] {
+		for docID, freqs := range i.termFreqs {
+			tf, exists := freqs[term]
+			if !exists || tf == 0 {
+				continue
+			}
 			score := bm25.ScoreTerm(
 				float64(tf),
 				float64(docFreq),

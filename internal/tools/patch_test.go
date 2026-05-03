@@ -287,9 +287,7 @@ func TestPatchTool_PatchDiffSimple(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.txt")
 
-	content := `func Main() {
-    const SECRET = 'hardcoded'
-}`
+	content := "func Main() {\n    const SECRET = 'hardcoded'\n}\n"
 
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
@@ -297,13 +295,7 @@ func TestPatchTool_PatchDiffSimple(t *testing.T) {
 
 	tool := &PatchTool{Dir: dir}
 
-	diff := `--- test.txt
-+++ test.txt
-@@ -1,3 +1,3 @@
- func Main() {
--    const SECRET = 'hardcoded'
-+    const SECRET = process.env.JWT_SECRET
- }`
+	diff := "--- test.txt\n+++ test.txt\n@@ -1,3 +1,3 @@\n func Main() {\n-    const SECRET = 'hardcoded'\n+    const SECRET = process.env.JWT_SECRET\n }\n"
 
 	params := mustJSON(t, patchParams{
 		Path: "test.txt",
@@ -316,9 +308,7 @@ func TestPatchTool_PatchDiffSimple(t *testing.T) {
 	}
 
 	newContent, _ := os.ReadFile(path)
-	expected := `func Main() {
-    const SECRET = process.env.JWT_SECRET
-}`
+	expected := "func Main() {\n    const SECRET = process.env.JWT_SECRET\n}\n"
 
 	if string(newContent) != expected {
 		t.Fatalf("conteudo inesperado\ngot:  %q\nwant: %q", string(newContent), expected)
@@ -401,8 +391,20 @@ func TestPatchTool_Modes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Cria arquivo temporário
 			dir := t.TempDir()
+
+			// Create file for cases that expect success
+			if !tt.expectError {
+				filePath := filepath.Join(dir, tt.params.Path)
+				content := "some initial line\n"
+				if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				// Update params for replace mode to match existing content
+				if tt.params.OldStr == "test" && tt.params.NewStr == "new" {
+					tt.params.OldStr = "initial"
+				}
+			}
 
 			tool := &PatchTool{Dir: dir}
 			params := mustJSON(t, tt.params)

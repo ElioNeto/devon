@@ -206,6 +206,14 @@ async function runJob(
     'sleep', 'infinity',
   ];
 
+  // Start the persistent container before any exec calls
+  try {
+    execSync(`docker ${runArgs.join(' ')}`, { stdio: 'ignore', timeout: 30000 });
+  } catch {
+    emit({ type: 'job_finished', job: jobId, status: 'failed', failedStep: 'container_start' });
+    return 1;
+  }
+
   // Install missing tools in the shared container
   const missingTools: string[] = [];
   if (hasGoStep) {
@@ -222,7 +230,6 @@ async function runJob(
       emit({ type: 'job_finished', job: jobId, status: 'failed', failedStep: `Install missing tools: ${missingTools.join(', ')}` });
       return 1;
     }
-  }
   }
 
   let jobFailed = false;

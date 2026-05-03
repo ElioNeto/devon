@@ -82,6 +82,8 @@ func TestRegistryHelper_InitMCPServersFromConfig_MultipleServers(t *testing.T) {
 	defer ts1.Close()
 	
 	server2 := newMockMCPServer()
+	// Clear default tools to avoid duplicate registration with server1
+	server2.tools = nil
 	server2.addTool(Tool{
 		Name:        "another_tool",
 		Description: "Another test tool",

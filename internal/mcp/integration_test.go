@@ -60,6 +60,8 @@ func TestIntegration_MultipleServers(t *testing.T) {
 	defer ts1.Close()
 	
 	server2 := newMockMCPServer()
+	// Clear default tools to avoid duplicate registration with server1
+	server2.tools = nil
 	server2.addTool(Tool{
 		Name:        "tool_from_server2",
 		Description: "Tool from second server",
