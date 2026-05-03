@@ -32,9 +32,32 @@ func isRateLimited(err error) bool {
 	return strings.Contains(s, "429") || strings.Contains(s, "rate")
 }
 
-// Event é emitido pelo agente para a TUI.
+// fileModifyingTools contains the names of tools that modify files and
+// should emit file_change events so the VS Code extension can show gutter indicators.
+var fileModifyingTools = map[string]bool{
+	"write":      true,
+	"edit":       true,
+	"patch_file": true,
+}
+
+// toolPathParams is used to extract the "path" field from tool call arguments.
+type toolPathParams struct {
+	Path string `json:"path"`
+}
+
+// extractFilePath tries to extract a file path from tool call arguments JSON.
+// Returns empty string if the path cannot be determined.
+func extractFilePath(args string) string {
+	var p toolPathParams
+	if err := json.Unmarshal([]byte(args), &p); err != nil {
+		return ""
+	}
+	return p.Path
+}
+
+// Event é emitido pelo agente para a TUI e retransmitido via RPC para a extensão VS Code.
 type Event struct {
-	Type   string // "text" | "tool_start" | "tool_done" | "tool_error" | "rate_limited" | "turn_done" | "error" | "confirm_request"
+	Type   string // "text" | "tool_start" | "tool_done" | "tool_error" | "file_change" | "rate_limited" | "turn_done" | "error" | "confirm_request"
 	Text   string
 	Tool   string
 	Args   string
@@ -330,6 +353,20 @@ func (a *Agent) runLoop(ctx context.Context, ch chan<- Event) {
 				result = fmt.Sprintf("error: %v", toolErr)
 			} else {
 				ch <- Event{Type: "tool_done", Tool: tc.Function.Name, Result: result}
+
+				// file_change: notify VS Code extension about file modifications
+				// so gutter indicators (A/M/D) can be rendered.
+				if fileModifyingTools[tc.Function.Name] {
+					if path := extractFilePath(tc.Function.Arguments); path != "" {
+						ch <- Event{
+							Type:   "file_change",
+							Tool:   tc.Function.Name,
+							Args:   path,
+							Text:   path,
+							Result: "modified",
+						}
+					}
+				}
 			}
 
 			a.history = append(a.history, llm.Message{
