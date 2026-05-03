@@ -41,6 +41,9 @@ func (w *Wizard) Run() (ProjectInfo, error) {
 		return w.info, fmt.Errorf("falha ao detectar projeto: %w", err)
 	}
 
+	// Greeting with language detection
+	fmt.Fprintf(os.Stderr, "Linguagem detectada: %s\n", w.info.Language.Name)
+
 	// Step 1: Project name
 	w.info.ProjectName, err = w.askString("Nome do projeto:", w.info.ProjectName, nil)
 	if err != nil {

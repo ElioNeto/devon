@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
 // ProjectInfo holds detected project information.
@@ -24,6 +26,8 @@ type ProjectInfo struct {
 	PackageManager string
 	Commands       map[string]string
 	Conventions   []string // Exported to allow template access
+	HasCI         bool     // Whether CI configuration (.github/workflows) was detected
+	HasDocker     bool     // Whether Docker configuration (docker-compose.yml) was detected
 }
 
 // Language represents a detected programming language.
@@ -87,6 +91,18 @@ func (d *Detector) Detect(ctx context.Context) (ProjectInfo, error) {
 	// Detect commands
 	d.detectCommands()
 
+	// Detect CI configuration
+	d.detectCI()
+
+	// Detect Docker configuration
+	d.detectDocker()
+
+	// Detect dev dependencies and add to conventions
+	deps := d.detectDevDependencies()
+	for _, dep := range deps {
+		d.info.Conventions = append(d.info.Conventions, "Ferramenta detectada: "+dep)
+	}
+
 	return d.info, nil
 }
 
@@ -147,7 +163,7 @@ func (d *Detector) detectGoVersion(ctx context.Context) (string, error) {
 	match := re.FindStringSubmatch(string(content))
 
 	if len(match) > 1 {
-		return "1." + match[1], nil
+		return match[1], nil
 	}
 
 	return "1.x", nil
@@ -356,7 +372,7 @@ func fileExists(path string) bool {
 
 // filepathExistsGlob checks if any file matches the glob pattern.
 func filepathExistsGlob(root, pattern string) bool {
-	matches, _ := filepath.Glob(filepath.Join(root, "**", pattern))
+	matches, _ := doublestar.Glob(os.DirFS(root), pattern)
 	return len(matches) > 0
 }
 
@@ -371,4 +387,17 @@ func (d *Detector) detectDevDependencies() []string {
 	}
 
 	return deps
+}
+
+// detectCI checks for CI configuration in .github/workflows.
+func (d *Detector) detectCI() {
+	ciDir := filepath.Join(d.workDir, ".github", "workflows")
+	info, err := os.Stat(ciDir)
+	d.info.HasCI = err == nil && info.IsDir()
+}
+
+// detectDocker checks for Docker configuration.
+func (d *Detector) detectDocker() {
+	dockerFile := filepath.Join(d.workDir, "docker-compose.yml")
+	d.info.HasDocker = fileExists(dockerFile)
 }

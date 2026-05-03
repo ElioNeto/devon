@@ -139,6 +139,9 @@ type Config struct {
 
 	// Sandbox
 	Sandbox SandboxConfig `toml:"sandbox"`
+
+	// Cache de respostas
+	Cache CacheConfig
 }
 
 // Load carrega a configuração.
@@ -185,6 +188,11 @@ func Load(envFile string) (*Config, error) {
 		}
 		if tc.Index != nil {
 			cfg.Index = *tc.Index
+		}
+		if tc.Cache != nil {
+			cfg.Cache = *tc.Cache
+		} else {
+			cfg.Cache.Enabled = true // zero-config: cache ativo por padrao
 		}
 	}
 

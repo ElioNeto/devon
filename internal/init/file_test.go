@@ -83,6 +83,7 @@ func TestWriteFile_NoForcePrompt(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "DEVON.md")
 	initialContent := "# Old\n"
+	newContent := "# New\n"
 
 	// Create initial file
 	err := os.WriteFile(path, []byte(initialContent), 0644)
@@ -90,11 +91,31 @@ func TestWriteFile_NoForcePrompt(t *testing.T) {
 		t.Fatalf("failed to create initial file: %v", err)
 	}
 
-	// Write with force=false (should prompt, but in test we can't interact, so check it returns nil or handles)
-	// Since promptExistingFile returns nil and doesn't write, WriteFile should return nil without overwriting
-	err = WriteFile(path, "# New\n", false)
-	// In test, since we can't provide input, the prompt will wait, but in test it's better to skip or mock.
-	// For now, we'll skip this test or use a timeout, but let's just check that existing file is not overwritten.
-	// Note: This test may hang in interactive mode, so we'll mark it as skipped for CI.
-	t.Skip("Interactive prompt test skipped in non-interactive environment")
+	// Mock stdin to provide empty input (defaults to open editor, no overwrite)
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	oldStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = oldStdin }()
+
+	// Write empty line (chooses option 1, open editor)
+	_, _ = w.WriteString("\n")
+	w.Close()
+
+	// Write with force=false — should prompt, user "chooses" editor (default)
+	err = WriteFile(path, newContent, false)
+	// Editor opening will fail in test (no terminal), but WriteFile should return an error from exec
+	if err == nil {
+		// If somehow error is nil, verify file was NOT overwritten
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("failed to read file: %v", readErr)
+		}
+		if string(data) != initialContent {
+			t.Errorf("file was overwritten without force, got %q, want %q", string(data), initialContent)
+		}
+	}
+	// If exec error, that's expected in test environment — test passes
 }

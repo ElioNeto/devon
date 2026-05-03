@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -21,7 +22,13 @@ func WriteFile(path, content string, force bool) error {
 	// Check if file exists
 	if Exists(path) {
 		if !force {
-			return promptExistingFile(path, &force)
+			if err := promptExistingFile(path, &force); err != nil {
+				return err
+			}
+			// If user chose to open the editor, don't write
+			if !force {
+				return nil
+			}
 		}
 	}
 
@@ -75,7 +82,9 @@ func promptExistingFile(path string, force *bool) error {
 		editor = "nano"
 	}
 	fmt.Fprintf(os.Stderr, "Abrindo %s no editor...\n", path)
-	// Note: Actual editor opening is not implemented here, as it requires exec.
-	// For CI mode, this path is not taken (force is true or non-interactive).
-	return nil
+	editorCmd := exec.Command(editor, path)
+	editorCmd.Stdin = os.Stdin
+	editorCmd.Stdout = os.Stdout
+	editorCmd.Stderr = os.Stderr
+	return editorCmd.Run()
 }

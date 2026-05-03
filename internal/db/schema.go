@@ -116,4 +116,18 @@ CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_agent ON messages(agent_id);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session_id);
+
+-- TABELA DE CACHE DE RESPOSTAS (response cache)
+
+CREATE TABLE IF NOT EXISTS cache_entries (
+    hash_key TEXT PRIMARY KEY,
+    model TEXT NOT NULL,
+    response TEXT NOT NULL,
+    tokens_saved INTEGER DEFAULT 0,
+    file_hashes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_cache_entries_expires ON cache_entries(expires_at);
 `

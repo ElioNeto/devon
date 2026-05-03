@@ -41,6 +41,14 @@ type IndexConfig struct {
 	TopK          int      `toml:"top_k"`
 }
 
+// CacheConfig configura o cache de respostas do LLM.
+type CacheConfig struct {
+	Enabled     bool   `toml:"enabled"`
+	TTL         string `toml:"ttl"`
+	MaxSizeMB   int    `toml:"max_size_mb"`
+	OnlyOneShot bool   `toml:"only_one_shot"`
+}
+
 // TomlConfig represents the structure of devon.toml.
 type TomlConfig struct {
 	Defaults struct {
@@ -50,6 +58,7 @@ type TomlConfig struct {
 	Profiles []Profile      `toml:"profiles"`
 	Sandbox  *SandboxConfig `toml:"sandbox"`
 	Index    *IndexConfig   `toml:"index"`
+	Cache    *CacheConfig   `toml:"cache"`
 	MCPServers []MCPServerConfig `toml:"mcp_servers"`
 }
 

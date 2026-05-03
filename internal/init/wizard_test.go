@@ -104,8 +104,10 @@ func TestWizard_Run(t *testing.T) {
 	if info.TestCommand != "go test ./..." {
 		t.Errorf("TestCommand = %q, want %q", info.TestCommand, "go test ./...")
 	}
-	if len(info.Conventions) != 1 || info.Conventions[0] != "Convention 1" {
-		t.Errorf("conventions = %v, want [Convention 1]", info.Conventions)
+	if len(info.Conventions) < 1 {
+		t.Errorf("conventions = %v, want at least [Convention 1]", info.Conventions)
+	} else if info.Conventions[len(info.Conventions)-1] != "Convention 1" {
+		t.Errorf("conventions = %v, want last element 'Convention 1'", info.Conventions)
 	}
 }
 

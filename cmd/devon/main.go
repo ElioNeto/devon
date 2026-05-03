@@ -1,18 +1,18 @@
 package main
 
 import (
-	"bufio"
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
 
 	agentpkg "github.com/ElioNeto/devon/internal/agent"
+	cachepkg "github.com/ElioNeto/devon/internal/cache"
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/db"
 	"github.com/ElioNeto/devon/internal/index"
@@ -113,6 +113,7 @@ Exit codes:
 		RunE: runTask,
 	}
 	runCmd.Flags().String("mode", "auto", "Modo de permissão: auto | safe | yolo")
+	runCmd.Flags().Bool("no-cache", false, "Ignora o cache de respostas do LLM")
 	root.AddCommand(runCmd)
 
 	// Subcomando index
@@ -193,6 +194,9 @@ Exemplos:
 	memoryCmd.AddCommand(memoryClearCmd)
 	root.AddCommand(memoryCmd)
 
+	// Subcomando cache
+	root.AddCommand(newCacheCommand())
+
 	return root
 }
 
@@ -257,10 +261,12 @@ func runTask(cmd *cobra.Command, args []string) error {
 		cfg.Index.Enabled = false
 	}
 
+	noCache, _ := cmd.Flags().GetBool("no-cache")
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	result, err := runOneShot(ctx, cfg, task)
+	result, err := runOneShot(ctx, cfg, task, noCache)
 	if err != nil {
 		return exitError(err)
 	}
@@ -276,7 +282,39 @@ func hasStdinPipe() bool {
 	return info.Mode()&os.ModeNamedPipe != 0 || info.Size() > 0
 }
 
-func runOneShot(ctx context.Context, cfg *config.Config, task string) (string, error) {
+func runOneShot(ctx context.Context, cfg *config.Config, task string, noCache bool) (string, error) {
+	// Integracao com cache de respostas
+	useCache := !noCache && cfg.Cache.Enabled
+
+	var cacheInst *cachepkg.Cache
+	if useCache {
+		dbPath := filepath.Join(cfg.WorkDir, cfg.DBPath)
+		sqlDB, err := openSQLite(dbPath)
+		if err != nil {
+			slog.Warn("cache: nao foi possivel abrir banco, cache desabilitado", "err", err)
+			useCache = false
+		} else {
+			defer sqlDB.Close()
+			cacheInst, err = cachepkg.New(sqlDB, cfg.Cache)
+			if err != nil {
+				slog.Warn("cache: falha ao inicializar, cache desabilitado", "err", err)
+				useCache = false
+			}
+		}
+	}
+
+	if useCache && cacheInst != nil {
+		// Tenta cache antes de criar o agente
+		msg := cachepkg.MessageForTask(task)
+		result, err := cacheInst.Get(ctx, cfg.Model, msg, nil)
+		if err != nil {
+			slog.Warn("cache: erro ao consultar cache", "err", err)
+		} else if result.Hit {
+			slog.Info("cache: HIT para a tarefa", "tokens_saved", result.TokensSaved)
+			return result.Response, nil
+		}
+	}
+
 	client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
 
 	// Initialize MCP servers and get registry with all tools
@@ -303,7 +341,31 @@ func runOneShot(ctx context.Context, cfg *config.Config, task string) (string, e
 			return "", fmt.Errorf("agente: %w", ev.Err)
 		}
 	}
-	return strings.TrimSpace(text.String()), nil
+
+	response := strings.TrimSpace(text.String())
+
+	// Salva no cache apos resposta bem-sucedida
+	if useCache && cacheInst != nil && response != "" {
+		msg := cachepkg.MessageForTask(task)
+		tokensSaved := len(task)/4 + len(response)/4 // estimativa simples (~4 chars/token)
+		if err := cacheInst.Set(ctx, cfg.Model, msg, response, tokensSaved, nil); err != nil {
+			slog.Warn("cache: erro ao salvar resposta", "err", err)
+		} else {
+			slog.Info("cache: resposta salva no cache")
+		}
+	}
+
+	return response, nil
+}
+
+// openSQLite abre um banco SQLite e retorna a conexao.
+func openSQLite(dbPath string) (*sql.DB, error) {
+	dir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("falha ao criar diretorio do banco: %w", err)
+	}
+	dsn := dbPath + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+	return sql.Open("sqlite", dsn)
 }
 
 // initMCPTools initializes MCP servers and registers their tools.
@@ -386,65 +448,17 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Get output path
 	devonPath := filepath.Join(worksDir, "DEVON.md")
 
-	// Ask to open in editor if file exists and --force not set
-	if !forceFlag {
-		if _, err2 := os.Stat(devonPath); err2 == nil {
-			fmt.Fprintf(os.Stderr, "\n%s já existe. Abrir no editor ou sobrescrever?\n", devonPath)
-			fmt.Fprintf(os.Stderr, "  [1] Abrir no $EDITOR (padrão)\n")
-			fmt.Fprintf(os.Stderr, "  [2] Sobrescrever\n")
-			fmt.Print("  Escolha: ")
-
-			reader := bufio.NewReader(os.Stdin)
-			input, _ := reader.ReadString('\n')
-			input = strings.TrimSpace(input)
-
-			if input != "1" && input != "" {
-				forceFlag = true
-			}
-		}
+	// Write DEVON.md using initpkg.WriteFile (handles prompts, editor, and atomic write)
+	if err4 := initpkg.WriteFile(devonPath, devonContent, forceFlag); err4 != nil {
+		return fmt.Errorf("falha ao escrever DEVON.md: %w", err4)
 	}
 
-	if !forceFlag {
-		// Ask to open in editor
-		editor := os.Getenv("EDITOR")
-		if editor == "" {
-			editor = "nano"
-		}
-		fmt.Fprintf(os.Stderr, "Abrindo %s no editor...\n", devonPath)
-		editorCmd := exec.Command(editor, devonPath)
-		editorCmd.Stdin = os.Stdin
-		editorCmd.Stdout = os.Stdout
-		editorCmd.Stderr = os.Stderr
-		return editorCmd.Run()
+	// Print success only if the file was actually written (has our content)
+	if data, err4 := os.ReadFile(devonPath); err4 == nil && string(data) == devonContent {
+		fmt.Fprintf(os.Stdout, "Criando DEVON.md... ✔\n")
+		fmt.Fprintf(os.Stdout, "Arquivo: %s\n", devonPath)
+		fmt.Fprintf(os.Stdout, "Tamanho: %d bytes\n", len(devonContent))
 	}
-
-	// Atomic write
-	tmpFile, err4 := os.CreateTemp(worksDir, ".tmp-devon-")
-	if err4 != nil {
-		return fmt.Errorf("criar arquivo temporário: %w", err4)
-	}
-	tmpPath := tmpFile.Name()
-
-	_, err4 = tmpFile.WriteString(devonContent)
-	if err4 != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
-		return fmt.Errorf("escrever arquivo temporário: %w", err4)
-	}
-
-	if err4 := tmpFile.Close(); err4 != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("fechar arquivo temporário: %w", err4)
-	}
-
-	if err4 := os.Rename(tmpPath, devonPath); err4 != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("renomear para destino: %w", err4)
-	}
-
-	fmt.Fprintf(os.Stdout, "Criando DEVON.md... ✔\n")
-	fmt.Fprintf(os.Stdout, "Arquivo: %s\n", devonPath)
-	fmt.Fprintf(os.Stdout, "Tamanho: %d bytes\n", len(devonContent))
 
 	return nil
 }
@@ -472,6 +486,84 @@ func runMemoryClear(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(os.Stdout, "Memória do projeto limpa (WorkDir: %s)\n", cfg.WorkDir)
 	return nil
+}
+
+// newCacheCommand cria o subcomando devon cache com stats e clear.
+func newCacheCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cache",
+		Short: "Gerencia o cache de respostas do LLM",
+	}
+
+	statsCmd := &cobra.Command{
+		Use:   "stats",
+		Short: "Exibe estatisticas do cache de respostas",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			envFile, _ := cmd.Flags().GetString("env")
+			cfg, err := config.Load(envFile)
+			if err != nil {
+				return fmt.Errorf("falha ao carregar configuracao: %w", err)
+			}
+
+			dbPath := filepath.Join(cfg.WorkDir, cfg.DBPath)
+			sqlDB, err := openSQLite(dbPath)
+			if err != nil {
+				return fmt.Errorf("falha ao abrir banco: %w", err)
+			}
+			defer sqlDB.Close()
+
+			cacheInst, err := cachepkg.New(sqlDB, cfg.Cache)
+			if err != nil {
+				return fmt.Errorf("falha ao inicializar cache: %w", err)
+			}
+
+			stats, err := cacheInst.Stats(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("falha ao obter estatisticas: %w", err)
+			}
+
+			fmt.Fprintf(os.Stdout, "Cache de respostas:\n")
+			fmt.Fprintf(os.Stdout, "  Entradas:      %d\n", stats.TotalEntries)
+			fmt.Fprintf(os.Stdout, "  Expiradas:     %d\n", stats.ExpiredCount)
+			fmt.Fprintf(os.Stdout, "  Tokens salvos: %d\n", stats.TotalTokens)
+			return nil
+		},
+	}
+
+	clearCmd := &cobra.Command{
+		Use:   "clear",
+		Short: "Limpa todas as entradas do cache de respostas",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			envFile, _ := cmd.Flags().GetString("env")
+			cfg, err := config.Load(envFile)
+			if err != nil {
+				return fmt.Errorf("falha ao carregar configuracao: %w", err)
+			}
+
+			dbPath := filepath.Join(cfg.WorkDir, cfg.DBPath)
+			sqlDB, err := openSQLite(dbPath)
+			if err != nil {
+				return fmt.Errorf("falha ao abrir banco: %w", err)
+			}
+			defer sqlDB.Close()
+
+			cacheInst, err := cachepkg.New(sqlDB, cfg.Cache)
+			if err != nil {
+				return fmt.Errorf("falha ao inicializar cache: %w", err)
+			}
+
+			if err := cacheInst.Clear(cmd.Context()); err != nil {
+				return fmt.Errorf("falha ao limpar cache: %w", err)
+			}
+
+			fmt.Fprintf(os.Stdout, "Cache de respostas limpo.\n")
+			return nil
+		},
+	}
+
+	cmd.AddCommand(statsCmd)
+	cmd.AddCommand(clearCmd)
+	return cmd
 }
 
 // fakeDB is a simple in-memory store for one-shot mode

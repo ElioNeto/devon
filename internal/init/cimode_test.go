@@ -89,17 +89,31 @@ func TestRunCI_NoYesExistingFile(t *testing.T) {
 		t.Fatalf("failed to create go.mod: %v", err)
 	}
 
-	// Run CI with yes=false (should prompt, but in test we skip interactive)
-	// Since we can't interact, this will call promptExistingFile which returns nil but doesn't write
-	// So DEVON.md should remain unchanged
+	// Mock stdin to provide "2\n" (choose overwrite)
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	oldStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = oldStdin }()
+
+	_, _ = w.WriteString("2\n")
+	w.Close()
+
+	// Run CI with yes=false (should prompt, user chooses overwrite)
 	err = RunCI(context.Background(), tmpDir, outputPath, false)
-	// In test, promptExistingFile will not overwrite, so file remains initial
+	if err != nil {
+		t.Fatalf("RunCI() failed: %v", err)
+	}
+
+	// File should now be overwritten with new content
 	content, err := os.ReadFile(outputPath)
 	if err != nil {
 		t.Fatalf("failed to read DEVON.md: %v", err)
 	}
-	if string(content) != initialContent {
-		t.Errorf("DEVON.md changed without yes flag, got %q, want %q", string(content), initialContent)
+	if string(content) == initialContent {
+		t.Error("DEVON.md should have been overwritten when user chose option 2")
 	}
 }
 
