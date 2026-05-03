@@ -403,7 +403,6 @@ func TestPatchTool_Modes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Cria arquivo temporário
 			dir := t.TempDir()
-		path := filepath.Join(dir, tt.params.Path)
 
 			tool := &PatchTool{Dir: dir}
 			params := mustJSON(t, tt.params)

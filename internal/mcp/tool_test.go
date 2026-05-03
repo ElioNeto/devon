@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"github.com/ElioNeto/devon/internal/permissions"
 )
 
 func TestMCPTool_Name(t *testing.T) {
@@ -115,9 +116,10 @@ func TestMCPTool_Permission(t *testing.T) {
 	perm := tool.Permission()
 	// Permission() returns permissions.PermissionLevel, not a pointer
 	// Just verify it's not the zero value
-	if perm == "" {
-		t.Error("expected permission level")
+	if perm != permissions.PermWrite {
+		t.Errorf("expected PermWrite, got %v", perm)
 	}
+
 }
 
 func TestMCPTool_ToToolDef(t *testing.T) {
