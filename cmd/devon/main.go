@@ -20,6 +20,7 @@ import (
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/mcp"
 	"github.com/ElioNeto/devon/internal/memory"
+	rpcpkg "github.com/ElioNeto/devon/internal/rpc"
 	"github.com/ElioNeto/devon/internal/session"
 	"github.com/ElioNeto/devon/internal/tools"
 	"github.com/ElioNeto/devon/internal/tui"
@@ -201,6 +202,25 @@ Exemplos:
 
 	// Subcomando sessions
 	root.AddCommand(newSessionsCommand())
+
+	// Subcomando rpc
+	rpcCmd := &cobra.Command{
+		Use:   "rpc",
+		Short: "Inicia o servidor RPC sobre Unix socket para extensão VSCode",
+		Long: `Inicia o servidor JSON-RPC 2.0 sobre Unix socket que permite à extensão
+VSCode se comunicar com o agente Devon.
+
+O servidor cria um socket Unix em <workdir>/.devon/rpc.sock e fica
+escutando por conexões. Enquanto o servidor estiver rodando, a TUI
+também é iniciada para interação local.
+
+Exemplos:
+  devon rpc
+  devon rpc --mode yolo`,
+		RunE: runRPCServer,
+	}
+	rpcCmd.Flags().String("mode", "auto", "Modo de permissao: auto | safe | yolo")
+	root.AddCommand(rpcCmd)
 
 	return root
 }
@@ -516,6 +536,80 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+func runRPCServer(cmd *cobra.Command, _ []string) error {
+	envFile, _ := cmd.Flags().GetString("env")
+	cfg, err := config.Load(envFile)
+	if err != nil {
+		return fmt.Errorf("falha ao carregar configuração: %w", err)
+	}
+
+	if err := applyProfileFlags(cmd, cfg); err != nil {
+		return err
+	}
+
+	mode, _ := cmd.Flags().GetString("mode")
+	cfg.Mode = config.ParseMode(mode)
+
+	// Initialize MCP servers and get registry
+	registry := initMCPTools(cmd.Context(), cfg, slog.Default())
+
+	// Build agent router
+	router := buildAgentRouter(cfg)
+
+	// Create the RPC server
+	srv := rpcpkg.NewServer()
+	if err := srv.Listen(cfg.WorkDir); err != nil {
+		return fmt.Errorf("falha ao iniciar servidor RPC: %w", err)
+	}
+
+	// Create DB store for session management
+	dbPath := cfg.DBPath
+	if !filepath.IsAbs(dbPath) {
+		dbPath = filepath.Join(cfg.WorkDir, dbPath)
+	}
+	store, err := db.New(dbPath)
+	if err != nil {
+		slog.Warn("rpc: nao foi possivel abrir banco, usando armazenamento em memoria", "err", err)
+		store = &fakeDB{}
+	}
+	if store != nil {
+		defer store.Close()
+	}
+
+	// Create agent
+	client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
+	agentID := session.ShortID()
+	agent := agentpkg.New(cfg, client, registry, store, agentID, nil, cfg.WorkDir, router)
+	if cfg.ForcedTaskType != "" {
+		agent.SetForcedTaskType(cfg.ForcedTaskType)
+	}
+
+	// Register handlers and start stream manager
+	hm := rpcpkg.NewHandlerManager(agent, store, srv)
+	hm.RegisterAll()
+
+	sm := rpcpkg.NewStreamManager(srv, store)
+	if err := sm.Start(); err != nil {
+		slog.Warn("rpc: nao foi possivel iniciar stream manager", "err", err)
+	}
+	defer sm.Stop()
+
+	// Start serving in background
+	go func() {
+		slog.Info("rpc: servidor iniciado", "socket", srv.SocketPath())
+		if err := srv.Serve(); err != nil {
+			slog.Error("rpc: servidor encerrou com erro", "err", err)
+		}
+	}()
+	defer srv.Close()
+
+	// Also start the TUI for local interaction
+	fmt.Fprintf(os.Stdout, "Servidor RPC rodando em %s\n", srv.SocketPath())
+	fmt.Fprintf(os.Stdout, "Pressione Ctrl+C para encerrar.\n")
+
+	return tui.Run(cfg, registry, "", router)
 }
 
 func runMemoryClear(cmd *cobra.Command, args []string) error {
