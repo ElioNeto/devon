@@ -5,6 +5,7 @@ import (
 
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/memory"
+	"github.com/ElioNeto/devon/internal/tools/web"
 )
 
 // RegisterBuiltin registra todas as ferramentas nativas no registry.
@@ -23,6 +24,14 @@ func RegisterBuiltin(r *Registry, dir string, timeout time.Duration, sandbox con
 func RegisterMemoryTools(r *Registry, mem *memory.Manager, projectID string) {
 	r.Register(&memory.RememberTool{Manager: mem, ProjectID: projectID})
 	r.Register(&memory.RecallTool{Manager: mem, ProjectID: projectID})
+}
+
+// RegisterWebTools registra as ferramentas web_search e web_fetch se habilitadas.
+func RegisterWebTools(r *Registry, cfg *config.WebConfig) {
+	if cfg != nil && cfg.Enabled {
+		r.Register(&web.SearchTool{Config: cfg})
+		r.Register(&web.FetchTool{Config: cfg})
+	}
 }
 
 // RegisterBuiltinWithConfig oferece controle granular sobre cada tool.

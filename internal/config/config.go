@@ -143,6 +143,9 @@ type Config struct {
 	// Cache de respostas
 	Cache CacheConfig
 
+	// Web tools
+	Web WebConfig
+
 	// Attachments
 	MaxImageSizeMB int
 
@@ -204,6 +207,9 @@ func Load(envFile string) (*Config, error) {
 		if tc.Attachments != nil {
 			cfg.MaxImageSizeMB = tc.Attachments.MaxSizeMB
 		}
+		if tc.Web != nil {
+			cfg.Web = *tc.Web
+		}
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -237,6 +243,13 @@ func (c *Config) Doctor(ctx context.Context) error {
 
 	if c.ContextDoc != "" {
 		fmt.Printf("  DEVON.md:        encontrado (%d bytes)\n", len(c.ContextDoc))
+	}
+
+	fmt.Printf("\n[Web]\n")
+	fmt.Printf("  Enabled:         %v\n", c.Web.Enabled)
+	if c.Web.Enabled {
+		fmt.Printf("  Backend:         %s\n", webBackendLabel(c.Web.Backend))
+		fmt.Printf("  Firecrawl Key:   %s\n", webKeyStatus())
 	}
 
 	fmt.Printf("\n[Index]\n")
@@ -302,6 +315,26 @@ func parseDuration(s string) time.Duration {
 		return v
 	}
 	return 0
+}
+
+// webBackendLabel returns a human-readable label for the web backend.
+func webBackendLabel(backend string) string {
+	if backend == "" || backend == "auto" {
+		return "auto (DuckDuckGo ou Firecrawl)"
+	}
+	return backend
+}
+
+// webKeyStatus returns a masked status of the Firecrawl API key.
+func webKeyStatus() string {
+	key := os.Getenv("DEVON_FIRECRAWL_KEY")
+	if key == "" {
+		return "não configurada"
+	}
+	if len(key) > 8 {
+		return key[:4] + "****" + key[len(key)-4:]
+	}
+	return "****"
 }
 
 func isLocalURL(u string) bool {

@@ -30,6 +30,17 @@ model       = "claude-sonnet-4-5"
 fallback    = ["fast"]
 
 # =============================================================================
+# WEB — Ferramentas de busca e fetch na web
+# =============================================================================
+# [web]
+# enabled = true               # habilita web_search e web_fetch
+# backend = "auto"             # auto | duckduckgo | firecrawl
+#
+# Firecrawl requer a env var DEVON_FIRECRAWL_KEY
+# Quando backend = "auto", Firecrawl é usado se a chave estiver presente;
+# caso contrário, DuckDuckGo Lite (gratuito, sem chave) é usado.
+
+# =============================================================================
 # SANDBOX — Restrições de execução de comandos shell
 # =============================================================================
 # Blocklist: comandos sempre bloqueados (combina padrões internos + entradas do usuário)

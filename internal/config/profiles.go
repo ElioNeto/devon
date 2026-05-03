@@ -70,6 +70,12 @@ type AgentRoutingConfig struct {
 	CodeProfile    string `toml:"code_profile"`
 }
 
+// WebConfig configura as ferramentas de busca e fetch na web.
+type WebConfig struct {
+	Enabled bool   `toml:"enabled"`
+	Backend string `toml:"backend"`
+}
+
 // TomlConfig represents the structure of devon.toml.
 type TomlConfig struct {
 	Defaults struct {
@@ -81,6 +87,7 @@ type TomlConfig struct {
 	Index         *IndexConfig        `toml:"index"`
 	Cache         *CacheConfig        `toml:"cache"`
 	Attachments   *AttachmentsConfig  `toml:"attachments"`
+	Web           *WebConfig          `toml:"web"`
 	MCPServers    []MCPServerConfig   `toml:"mcp_servers"`
 	AgentRouting  *AgentRoutingConfig `toml:"agent_routing"`
 }

@@ -72,6 +72,7 @@ type Agent struct {
 func New(cfg *config.Config, client llm.Streamer, registry *tools.Registry, db db.Store, agentID string, mem *memory.Manager, projectID string, router ...*llm.AgentRouter) *Agent {
 	tools.RegisterBuiltin(registry, cfg.WorkDir, cfg.Timeout, cfg.Sandbox)
 	tools.RegisterMemoryTools(registry, mem, projectID)
+	tools.RegisterWebTools(registry, &cfg.Web)
 
 	blocklist := permissions.DefaultBlocklist
 

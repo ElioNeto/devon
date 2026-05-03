@@ -1,75 +1,137 @@
 {
-  "task": "feat: roteamento de agentes por tipo de tarefa — mapear Explore/Plan/Code para modelos distintos (issue #50)",
+  "task": "feat: ferramenta WebSearch com DuckDuckGo como fallback gratuito e Firecrawl opcional (issue #51)",
   "todos": [
     {
       "id": "1",
-      "title": "Add TaskType type, AgentRoutingConfig struct, and [agent_routing] TOML parsing in config package",
-      "files": ["internal/config/profiles.go"],
-      "done": true,
+      "title": "Add WebConfig struct, parse [web] section in devon.toml, wire into Config.Load(), update .devon.toml.example",
+      "files": [
+        "internal/config/config.go",
+        "internal/config/profiles.go",
+        ".devon.toml.example"
+      ],
+      "done": false,
       "dep": "-"
     },
     {
       "id": "2",
-      "title": "Implement ClassifyTask(prompt string) TaskType in new internal/llm/classify.go with keyword-based classification",
-      "files": ["internal/llm/classify.go"],
-      "done": true,
-      "dep": "1"
+      "title": "Implement html2md converter in internal/tools/web/ with Go module dependency for HTML-to-Markdown",
+      "files": [
+        "internal/tools/web/html2md.go",
+        "go.mod",
+        "go.sum"
+      ],
+      "done": false,
+      "dep": "-"
     },
     {
       "id": "3",
-      "title": "Implement AgentRouter struct in internal/llm/router.go with NewAgentRouter factory and ClientFor(taskType) Streamer method",
-      "files": ["internal/llm/router.go"],
-      "done": true,
+      "title": "Implement DuckDuckGo backend — scrape https://lite.duckduckgo.com/lite/ for search + HTTP GET for fetch",
+      "files": [
+        "internal/tools/web/duckduckgo.go"
+      ],
+      "done": false,
       "dep": "1"
     },
     {
       "id": "4",
-      "title": "Wire AgentRouter into Agent loop — classify prompt on Run(), select model via ClientFor, pass active model info back",
-      "files": ["internal/agent/agent.go"],
-      "done": true,
-      "dep": "2,3"
-    },
-    {
-      "id": "5",
-      "title": "Add --task-type persistent flag to root command and force-explicit-type logic bypassing automatic classification",
-      "files": ["cmd/devon/main.go"],
-      "done": true,
-      "dep": "4"
-    },
-    {
-      "id": "6",
-      "title": "Display active model per task type in TUI statusbar (right side, alongside or replacing current model label)",
-      "files": ["internal/tui/statusbar.go", "internal/tui/model.go"],
-      "done": true,
-      "dep": "4"
-    },
-    {
-      "id": "7",
-      "title": "Update devon profiles test to validate connectivity of all models listed in [agent_routing] section",
-      "files": ["cmd/devon/profiles.go"],
-      "done": true,
+      "title": "Implement Firecrawl backend — search and fetch via Firecrawl API when DEVON_FIRECRAWL_KEY is set",
+      "files": [
+        "internal/tools/web/firecrawl.go"
+      ],
+      "done": false,
       "dep": "1"
     },
     {
+      "id": "5",
+      "title": "Implement web_search Tool with backend selection (auto → Firecrawl if key present else DuckDuckGo)",
+      "files": [
+        "internal/tools/web/search.go"
+      ],
+      "done": false,
+      "dep": "1,3,4"
+    },
+    {
+      "id": "6",
+      "title": "Implement web_fetch Tool with backend selection and html2md conversion",
+      "files": [
+        "internal/tools/web/fetch.go"
+      ],
+      "done": false,
+      "dep": "1,2,3,4"
+    },
+    {
+      "id": "7",
+      "title": "Add RegisterWebTools function in builtin.go and call it from agent.New() when web.enabled is true",
+      "files": [
+        "internal/tools/builtin.go",
+        "internal/agent/agent.go"
+      ],
+      "done": false,
+      "dep": "5,6"
+    },
+    {
       "id": "8",
-      "title": "Write table-driven tests for ClassifyTask covering all task types and edge cases (empty, unknown, mixed)",
-      "files": ["internal/llm/classify_test.go"],
-      "done": true,
-      "dep": "2"
+      "title": "Extend Config.Doctor() to print active web backend and connectivity status",
+      "files": [
+        "internal/config/config.go"
+      ],
+      "done": false,
+      "dep": "1"
     },
     {
       "id": "9",
-      "title": "Write tests for AgentRouter.ClientFor covering mapped types, unmapped types, nil routing, and default fallback",
-      "files": ["internal/llm/router_test.go"],
-      "done": true,
-      "dep": "3"
+      "title": "Write table-driven tests for html2md covering headings, links, lists, code blocks, and empty input",
+      "files": [
+        "internal/tools/web/html2md_test.go"
+      ],
+      "done": false,
+      "dep": "2"
     },
     {
       "id": "10",
-      "title": "Run full build, test, vet, lint suite until green — ensure zero breaking change when [agent_routing] absent",
-      "files": ["Makefile"],
-      "done": true,
-      "dep": "5,6,7,8,9"
+      "title": "Write tests for DuckDuckGo backend with mock HTTP server for search and fetch endpoints",
+      "files": [
+        "internal/tools/web/duckduckgo_test.go"
+      ],
+      "done": false,
+      "dep": "3"
+    },
+    {
+      "id": "11",
+      "title": "Write tests for Firecrawl backend with mock HTTP server simulating API responses",
+      "files": [
+        "internal/tools/web/firecrawl_test.go"
+      ],
+      "done": false,
+      "dep": "4"
+    },
+    {
+      "id": "12",
+      "title": "Write table-driven tests for web_search and web_fetch tools covering backend selection, timeout, errors",
+      "files": [
+        "internal/tools/web/search_test.go",
+        "internal/tools/web/fetch_test.go"
+      ],
+      "done": false,
+      "dep": "5,6"
+    },
+    {
+      "id": "13",
+      "title": "Create docs/advanced-setup.md with web configuration examples, backend selection, and env vars reference",
+      "files": [
+        "docs/advanced-setup.md"
+      ],
+      "done": false,
+      "dep": "1,7"
+    },
+    {
+      "id": "14",
+      "title": "Run full build, test, vet, lint suite until green — ensure zero breaking change when [web] section absent",
+      "files": [
+        "Makefile"
+      ],
+      "done": false,
+      "dep": "7,8,9,10,11,12,13"
     }
   ]
 }
