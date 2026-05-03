@@ -37,6 +37,7 @@ Evidência only. Sem editar. Sem aprovar sem prova.
 1. Para cada critério de aceite da issue: verificar com teste, lint, diff ou comportamento.
 2. `check-todos` → `workflow-agent` se ainda não rodados pelo implementer.
 3. Reprovar se: critério sem evidência | teste faltando para mudança crítica | lint/build/test falhou | implementação parcial.
+4. Se sucesso, chama o subagente @cleaner
 
 ## Saída
 
