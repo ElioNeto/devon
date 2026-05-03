@@ -42,6 +42,9 @@ func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.picker.visible && !m.picker.done {
+			return m.handleSessionPickerKey(msg)
+		}
 		if m.showFilePicker {
 			// Forward key events to file picker
 			var cmd tea.Cmd
@@ -587,6 +590,11 @@ func (m appModel) View() string {
 	if m.confirm.visible {
 		confirmView := renderConfirmOverlay(&m, m.width)
 		view = overlayCenter(view, confirmView, m.width, m.height)
+	}
+
+	if m.picker.visible && !m.picker.done {
+		pickerView := m.sessionPickerView(m.width)
+		view = overlayCenter(view, pickerView, m.width, m.height)
 	}
 
 	return view

@@ -281,7 +281,73 @@ func (m *appModel) finalizeTurn() {
 	if m.session != nil {
 		_ = history.SaveMessages(m.cfg.WorkDir, m.session.ID, m.agentMessages(), &m.session.Usage)
 	}
+
+	// Persist session state to DB for crash recovery
+	m.persistSessionToDB()
+
 	m.toolRuns = nil
+}
+
+// persistSessionToDB saves the current session data to the DB for crash recovery.
+func (m *appModel) persistSessionToDB() {
+	if m.dbStore == nil || m.sessionMgr == nil || m.session == nil {
+		return
+	}
+
+	sessionID := m.session.ID
+	if sessionID == "" {
+		return
+	}
+
+	ctx := context.Background()
+
+	// Ensure session exists in DB
+	_ = m.dbStore.CreateSession(ctx, sessionID)
+
+	// Update session metadata with task and model
+	task := ""
+	for _, msg := range m.messages {
+		if msg.Sender == "user" && task == "" {
+			task = truncate(msg.Content, 200)
+		}
+	}
+	_ = m.sessionMgr.Update(ctx, sessionID, task, m.cfg.Model, "active")
+
+	// Persist messages
+	for _, cm := range m.messages {
+		switch cm.Sender {
+		case "user":
+			_ = m.dbStore.PutMessage(ctx, "tui", sessionID, "user", cm.Content)
+		case "devon":
+			role := "assistant"
+			if cm.IsError {
+				role = "tool"
+			}
+			_ = m.dbStore.PutMessage(ctx, "tui", sessionID, role, cm.Content)
+		}
+	}
+
+	// Persist tool runs
+	for _, tr := range m.toolRuns {
+		status := tr.Status
+		result := tr.Result
+		var errStr string
+		if status == "error" {
+			errStr = result
+		}
+		_, _ = m.dbStore.PutToolCall(ctx, "tui", sessionID, tr.Name, tr.Args, status, result, errStr)
+	}
+
+	// Persist cost summary
+	if m.tracker != nil {
+		tokens := map[string]int{
+			"prompt_tokens":     m.tracker.TotalInputTokens,
+			"completion_tokens": m.tracker.TotalOutputTokens,
+			"total_tokens":      m.tracker.TotalInputTokens + m.tracker.TotalOutputTokens,
+			"requests":          m.tracker.TotalRequests,
+		}
+		_ = m.dbStore.UpdateCostSummary(ctx, sessionID, m.tracker.TotalCostUSD, tokens)
+	}
 }
 
 func (m *appModel) agentMessages() []llm.Message {

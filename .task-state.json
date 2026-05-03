@@ -1,60 +1,89 @@
 {
-  "task": "feat: multimodal input — anexar imagens ao prompt via TUI (issue #28)",
+  "task": "feat: gerenciamento de sessões — listar, retomar e exportar histórico (issue #33)",
   "todos": [
     {
       "id": "1",
-      "title": "Config: add MaxImageSizeMB field to Config and TomlConfig",
-      "done": true
+      "title": "Extend sessions DB table schema with task, model, duration, last_activity columns and add migration",
+      "files": ["internal/db/schema.go"],
+      "done": false,
+      "dep": "-"
     },
     {
       "id": "2",
-      "title": "LLM: create ContentPart types and update Message for multimodal support",
-      "done": true
+      "title": "Add GetSessionDetail, ListSessionsDetail, UpdateSession, DeleteSession to Store interface",
+      "files": ["internal/db/store.go"],
+      "done": false,
+      "dep": "1"
     },
     {
       "id": "3",
-      "title": "LLM: update Anthropic provider to serialize image content parts",
-      "done": true
+      "title": "Implement GetSessionDetail, ListSessionsDetail, UpdateSession, DeleteSession in SQLiteStore",
+      "files": ["internal/db/store.go"],
+      "done": false,
+      "dep": "2"
     },
     {
       "id": "4",
-      "title": "TUI: add Attachment type and file picker state to appModel",
-      "done": true
+      "title": "Create internal/session/session.go with Session domain struct and UUIDv4 short ID (8-char) generator",
+      "files": ["internal/session/session.go"],
+      "done": false,
+      "dep": "-"
     },
     {
       "id": "5",
-      "title": "TUI: add Ctrl+I and Ctrl+R key binding constants and help hints",
-      "done": true
+      "title": "Create internal/session/manager.go with Manager wrapping db.Store — List, Get, Create, Update, Delete, Stats",
+      "files": ["internal/session/manager.go"],
+      "done": false,
+      "dep": "3,4"
     },
     {
       "id": "6",
-      "title": "TUI: handle file picker lifecycle and attachment management in update loop",
-      "done": true
+      "title": "Create internal/session/export.go with ExportMarkdown and ExportJSON functions including messages, tool calls, file access, cost, tokens",
+      "files": ["internal/session/export.go"],
+      "done": false,
+      "dep": "5"
     },
     {
       "id": "7",
-      "title": "TUI: render attachment badges in input bar",
-      "done": true
+      "title": "Add cobra 'devon sessions' command group with list, resume <id>, export <id>, delete <id>, stats subcommands in cmd/devon/main.go",
+      "files": ["cmd/devon/main.go"],
+      "done": false,
+      "dep": "5,6"
     },
     {
       "id": "8",
-      "title": "TUI: build multimodal message on send and clear attachments from RAM",
-      "done": true
+      "title": "Create internal/tui/sessionpicker.go with Bubble Tea model for keyboard-navigable session picker overlay",
+      "files": ["internal/tui/sessionpicker.go"],
+      "done": false,
+      "dep": "5"
     },
     {
       "id": "9",
-      "title": "Agent: add RunWithMessage for multimodal input and vision-support check",
-      "done": true
+      "title": "Wire session picker into TUI Run flow — show picker on startup before main chat model",
+      "files": ["internal/tui/tui.go", "internal/tui/model.go", "internal/tui/update.go"],
+      "done": false,
+      "dep": "8"
     },
     {
       "id": "10",
-      "title": "Test: unit tests for attachment attach/remove/send flow",
-      "done": true
+      "title": "Persist current session (messages, tool calls, cost) to DB during agent run for crash recovery",
+      "files": ["internal/tui/commands.go", "internal/agent/agent.go"],
+      "done": false,
+      "dep": "5"
     },
     {
       "id": "11",
-      "title": "chore: run full build, test, vet, and lint suite until green",
-      "done": true
+      "title": "Write tests for internal/session/ — Manager CRUD, Export formats, edge cases",
+      "files": ["internal/session/manager_test.go", "internal/session/export_test.go"],
+      "done": false,
+      "dep": "5,6"
+    },
+    {
+      "id": "12",
+      "title": "Run full build, test, vet, and lint suite until green",
+      "files": ["Makefile"],
+      "done": false,
+      "dep": "7,9,10,11"
     }
   ]
 }

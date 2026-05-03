@@ -4,12 +4,16 @@ package tui
 import (
 	"context"
 
+	"path/filepath"
+
 	"github.com/ElioNeto/devon/internal/agent"
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/cost"
+	"github.com/ElioNeto/devon/internal/db"
 	"github.com/ElioNeto/devon/internal/history"
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/memory"
+	sessionpkg "github.com/ElioNeto/devon/internal/session"
 	"github.com/ElioNeto/devon/internal/tools"
 	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -114,6 +118,13 @@ type appModel struct {
 	attachments   []Attachment
 	showFilePicker bool
 	fp             filepicker.Model
+
+	// DB store and session manager (for persistence and picker)
+	dbStore   db.Store
+	sessionMgr *sessionpkg.Manager
+
+	// Session picker overlay
+	picker sessionPickerState
 }
 
 type chatMessage struct {
@@ -171,9 +182,19 @@ func newModel(cfg *config.Config, registry *tools.Registry) appModel {
 		registry = tools.NewRegistry()
 	}
 
+	// Open DB store for session persistence and picker
+	var store db.Store
+	if cfg.DBPath != "" {
+		dbPath := filepath.Join(cfg.WorkDir, cfg.DBPath)
+		s, err := db.New(dbPath)
+		if err == nil {
+			store = s
+		}
+	}
+
 	client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
 	mem := memory.New(nil, cfg.WorkDir) // nil store para memória em memória apenas
-	agt := agent.New(cfg, client, registry, nil, "", mem, cfg.WorkDir)
+	agt := agent.New(cfg, client, registry, store, "", mem, cfg.WorkDir)
 	tracker := cost.NewSession(cfg.Model)
 
 	maxCtx := 32000
@@ -190,7 +211,7 @@ func newModel(cfg *config.Config, registry *tools.Registry) appModel {
 	fp.FileAllowed = true
 	fp.DirAllowed = false
 
-	return appModel{
+	m := appModel{
 		cfg:              cfg,
 		agent:            agt,
 		session:          session,
@@ -206,7 +227,20 @@ func newModel(cfg *config.Config, registry *tools.Registry) appModel {
 		activeWorkspace:  0,
 		fp:               fp,
 		attachments:      []Attachment{},
+		dbStore:          store,
 	}
+
+	if store != nil {
+		mgr := sessionpkg.NewManager(store)
+		m.sessionMgr = mgr
+		m.initSessionPicker(mgr)
+		// Show picker on startup if there are sessions
+		if len(m.picker.sessions) > 0 {
+			m.picker.visible = true
+		}
+	}
+
+	return m
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

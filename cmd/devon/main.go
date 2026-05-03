@@ -20,6 +20,7 @@ import (
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/mcp"
 	"github.com/ElioNeto/devon/internal/memory"
+	"github.com/ElioNeto/devon/internal/session"
 	"github.com/ElioNeto/devon/internal/tools"
 	"github.com/ElioNeto/devon/internal/tui"
 	"github.com/spf13/cobra"
@@ -196,6 +197,9 @@ Exemplos:
 
 	// Subcomando cache
 	root.AddCommand(newCacheCommand())
+
+	// Subcomando sessions
+	root.AddCommand(newSessionsCommand())
 
 	return root
 }
@@ -488,6 +492,208 @@ func runMemoryClear(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// newSessionsCommand cria o subcomando devon sessions com list, resume, export, delete, stats.
+func newSessionsCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "sessions",
+		Short: "Gerencia sessoes de conversa",
+		Long: `Lista, exporta, retoma e gerencia sessoes de conversa do Devon.
+
+Exemplos:
+  devon sessions list
+  devon sessions resume <id>
+  devon sessions export <id> --format markdown
+  devon sessions delete <id>
+  devon sessions stats
+`,
+	}
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "Lista todas as sessoes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			envFile, _ := cmd.Flags().GetString("env")
+			cfg, err := config.Load(envFile)
+			if err != nil {
+				return fmt.Errorf("falha ao carregar configuracao: %w", err)
+			}
+
+			store, err := db.New(filepath.Join(cfg.WorkDir, cfg.DBPath))
+			if err != nil {
+				return fmt.Errorf("falha ao abrir banco: %w", err)
+			}
+			defer store.Close()
+
+			mgr := session.NewManager(store)
+			sessions, err := mgr.List(cmd.Context(), 50)
+			if err != nil {
+				return fmt.Errorf("falha ao listar sessoes: %w", err)
+			}
+
+			if len(sessions) == 0 {
+				fmt.Fprintf(os.Stdout, "Nenhuma sessao encontrada.\n")
+				return nil
+			}
+
+			fmt.Fprintf(os.Stdout, "Sessoes (%d):\n\n", len(sessions))
+			for _, s := range sessions {
+				fmt.Fprintf(os.Stdout, "  %s\n", s.ID)
+				if s.Task != "" {
+					fmt.Fprintf(os.Stdout, "    Tarefa: %s\n", s.Task)
+				}
+				fmt.Fprintf(os.Stdout, "    Status: %s | Modelo: %s\n", s.Status, s.Model)
+				fmt.Fprintf(os.Stdout, "    Mensagens: %d | Tools: %d | Custo: $%.4f\n",
+					s.MessageCount, s.ToolCallCount, s.TotalCost)
+				fmt.Fprintf(os.Stdout, "    Ultima atividade: %s\n", s.LastActivity.Format("2006-01-02 15:04:05"))
+				fmt.Fprintln(os.Stdout)
+			}
+			return nil
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "resume <id>",
+		Short: "Retoma uma sessao anterior",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			envFile, _ := cmd.Flags().GetString("env")
+			cfg, err := config.Load(envFile)
+			if err != nil {
+				return fmt.Errorf("falha ao carregar configuracao: %w", err)
+			}
+
+			store, err := db.New(filepath.Join(cfg.WorkDir, cfg.DBPath))
+			if err != nil {
+				return fmt.Errorf("falha ao abrir banco: %w", err)
+			}
+			defer store.Close()
+
+			mgr := session.NewManager(store)
+			s, err := mgr.Get(cmd.Context(), args[0])
+			if err != nil {
+				return fmt.Errorf("falha ao buscar sessao: %w", err)
+			}
+			if s == nil {
+				return fmt.Errorf("sessao %q nao encontrada", args[0])
+			}
+
+			fmt.Fprintf(os.Stdout, "Sessao %s encontrada. Use 'devon' sem argumentos para inicia-la na TUI.\n", s.ID)
+			fmt.Fprintf(os.Stdout, "Task: %s | Modelo: %s | Status: %s\n", s.Task, s.Model, s.Status)
+			return nil
+		},
+	})
+
+	exportCmd := &cobra.Command{
+		Use:   "export <id>",
+		Short: "Exporta uma sessao como JSON ou Markdown",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			envFile, _ := cmd.Flags().GetString("env")
+			format, _ := cmd.Flags().GetString("format")
+			cfg, err := config.Load(envFile)
+			if err != nil {
+				return fmt.Errorf("falha ao carregar configuracao: %w", err)
+			}
+
+			store, err := db.New(filepath.Join(cfg.WorkDir, cfg.DBPath))
+			if err != nil {
+				return fmt.Errorf("falha ao abrir banco: %w", err)
+			}
+			defer store.Close()
+
+			mgr := session.NewManager(store)
+			s, err := mgr.Get(cmd.Context(), args[0])
+			if err != nil {
+				return fmt.Errorf("falha ao buscar sessao: %w", err)
+			}
+			if s == nil {
+				return fmt.Errorf("sessao %q nao encontrada", args[0])
+			}
+
+			data := &session.ExportData{
+				Session: *s,
+			}
+			if format == "json" {
+				out, err := session.ExportJSON(data)
+				if err != nil {
+					return fmt.Errorf("falha ao exportar JSON: %w", err)
+				}
+				fmt.Fprintln(os.Stdout, string(out))
+			} else {
+				out, err := session.ExportMarkdown(data)
+				if err != nil {
+					return fmt.Errorf("falha ao exportar Markdown: %w", err)
+				}
+				fmt.Fprintln(os.Stdout, out)
+			}
+			return nil
+		},
+	}
+	exportCmd.Flags().String("format", "markdown", "Formato de exportacao: markdown ou json")
+	cmd.AddCommand(exportCmd)
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "delete <id>",
+		Short: "Remove uma sessao do banco de dados",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			envFile, _ := cmd.Flags().GetString("env")
+			cfg, err := config.Load(envFile)
+			if err != nil {
+				return fmt.Errorf("falha ao carregar configuracao: %w", err)
+			}
+
+			store, err := db.New(filepath.Join(cfg.WorkDir, cfg.DBPath))
+			if err != nil {
+				return fmt.Errorf("falha ao abrir banco: %w", err)
+			}
+			defer store.Close()
+
+			mgr := session.NewManager(store)
+			if err := mgr.Delete(cmd.Context(), args[0]); err != nil {
+				return fmt.Errorf("falha ao deletar sessao: %w", err)
+			}
+			fmt.Fprintf(os.Stdout, "Sessao %s removida.\n", args[0])
+			return nil
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "stats",
+		Short: "Exibe estatisticas agregadas das sessoes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			envFile, _ := cmd.Flags().GetString("env")
+			cfg, err := config.Load(envFile)
+			if err != nil {
+				return fmt.Errorf("falha ao carregar configuracao: %w", err)
+			}
+
+			store, err := db.New(filepath.Join(cfg.WorkDir, cfg.DBPath))
+			if err != nil {
+				return fmt.Errorf("falha ao abrir banco: %w", err)
+			}
+			defer store.Close()
+
+			mgr := session.NewManager(store)
+			stats, err := mgr.Stats(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("falha ao obter estatisticas: %w", err)
+			}
+
+			fmt.Fprintf(os.Stdout, "Sessoes:\n")
+			fmt.Fprintf(os.Stdout, "  Total:     %d\n", stats.TotalSessions)
+			fmt.Fprintf(os.Stdout, "  Ativas:    %d\n", stats.ActiveSessions)
+			fmt.Fprintf(os.Stdout, "  Mensagens: %d\n", stats.TotalMessages)
+			fmt.Fprintf(os.Stdout, "  Tool Calls: %d\n", stats.TotalToolCalls)
+			fmt.Fprintf(os.Stdout, "  Custo:     $%.4f\n", stats.TotalCost)
+			fmt.Fprintf(os.Stdout, "  Duracao media: %d ms\n", stats.AvgDurationMs)
+			return nil
+		},
+	})
+
+	return cmd
+}
+
 // newCacheCommand cria o subcomando devon cache com stats e clear.
 func newCacheCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -566,12 +772,20 @@ func newCacheCommand() *cobra.Command {
 	return cmd
 }
 
-// fakeDB is a simple in-memory store for one-shot mode
+// fakeDB is a simple no-op store for one-shot mode
 type fakeDB struct{}
 
 func (f *fakeDB) CreateSession(ctx context.Context, id string) error            { return nil }
 func (f *fakeDB) GetSession(ctx context.Context, id string) (bool, error)       { return false, nil }
 func (f *fakeDB) ListSessions(ctx context.Context, limit int) ([]string, error) { return nil, nil }
+func (f *fakeDB) GetSessionDetail(ctx context.Context, id string) (*db.SessionDetail, error) {
+	return nil, nil
+}
+func (f *fakeDB) ListSessionsDetail(ctx context.Context, limit int) ([]db.SessionDetail, error) {
+	return nil, nil
+}
+func (f *fakeDB) UpdateSession(ctx context.Context, id, task, model, status string) error { return nil }
+func (f *fakeDB) DeleteSession(ctx context.Context, id string) error                       { return nil }
 func (f *fakeDB) PutMessage(ctx context.Context, agentID, sessionID, role, content string) error {
 	return nil
 }

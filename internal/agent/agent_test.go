@@ -744,6 +744,10 @@ type fakeDBStore struct{}
 func (f *fakeDBStore) CreateSession(ctx context.Context, id string) error                                         { return nil }
 func (f *fakeDBStore) GetSession(ctx context.Context, id string) (bool, error)                                 { return false, nil }
 func (f *fakeDBStore) ListSessions(ctx context.Context, limit int) ([]string, error)                          { return nil, nil }
+func (f *fakeDBStore) GetSessionDetail(ctx context.Context, id string) (*db.SessionDetail, error)             { return nil, nil }
+func (f *fakeDBStore) ListSessionsDetail(ctx context.Context, limit int) ([]db.SessionDetail, error)          { return nil, nil }
+func (f *fakeDBStore) UpdateSession(ctx context.Context, id, task, model, status string) error                { return nil }
+func (f *fakeDBStore) DeleteSession(ctx context.Context, id string) error                                     { return nil }
 func (f *fakeDBStore) PutMessage(ctx context.Context, agentID, sessionID, role, content string) error          { return nil }
 func (f *fakeDBStore) GetMessages(ctx context.Context, agentID, sessionID string, limit int) ([]db.Message, error) {
 	return nil, nil
