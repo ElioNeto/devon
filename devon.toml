@@ -31,6 +31,17 @@ model       = "claude-sonnet-4-5"
 fallback    = ["fast"]
 
 # =============================================================================
+# HEADLESS — Servidor HTTP/SSE para integração com CI/CD
+# =============================================================================
+# Inicie com: devon headless
+# Ou: devon --headless --port 9876
+#
+# [headless]
+# enabled = true
+# host = "127.0.0.1"
+# port = 9876
+
+# =============================================================================
 # SANDBOX — Restrições de execução de comandos shell
 # =============================================================================
 # Blocklist: comandos sempre bloqueados (padrão + extensões)

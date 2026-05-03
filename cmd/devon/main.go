@@ -15,6 +15,7 @@ import (
 	cachepkg "github.com/ElioNeto/devon/internal/cache"
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/db"
+	headlesspkg "github.com/ElioNeto/devon/internal/headless"
 	"github.com/ElioNeto/devon/internal/index"
 	initpkg "github.com/ElioNeto/devon/internal/init"
 	"github.com/ElioNeto/devon/internal/llm"
@@ -84,6 +85,39 @@ func newRootCommand() *cobra.Command {
 	root.PersistentFlags().Bool("index", false, "Ativa indexação semântica do codebase")
 	root.PersistentFlags().Bool("no-index", false, "Desativa indexação semântica (força contexto completo)")
 	root.PersistentFlags().String("task-type", "", "Força o tipo de tarefa: explore | plan | code (desativa classificação automática)")
+
+	// Headless server flags
+	root.PersistentFlags().Bool("headless", false, "Inicia o servidor HTTP/SSE headless")
+	root.PersistentFlags().String("host", headlesspkg.DefaultHost, "Host do servidor headless")
+	root.PersistentFlags().Int("port", headlesspkg.DefaultPort, "Porta do servidor headless")
+
+	// Subcomando headless
+	headlessCmd := &cobra.Command{
+		Use:   "headless",
+		Short: "Inicia o servidor HTTP/SSE para integração com CI/CD",
+		Long: `Inicia o servidor HTTP headless com eventos SSE (Server-Sent Events)
+para integração com CI/CD pipelines e clientes externos.
+
+Endpoints:
+  POST /api/prompt   → envia um prompt e recebe eventos SSE
+  POST /api/respond  → responde a uma solicitação de ação (action_required)
+  GET  /api/health   → verifica se o servidor está ativo
+  GET  /api/status   → retorna o estado atual do agente
+
+Flags:
+  --host    Host do servidor (default: 127.0.0.1)
+  --port    Porta do servidor (default: 9876)
+  --mode    Modo de permissão: auto | safe | yolo
+
+Exemplos:
+  devon headless
+  devon headless --port 8080 --host 0.0.0.0 --mode yolo
+  devon --headless --port 8080`,
+		RunE: runHeadless,
+	}
+	headlessCmd.Flags().String("mode", "auto", "Modo de permissão: auto | safe | yolo")
+	headlessCmd.Flags().Bool("no-cache", false, "Ignora o cache de respostas do LLM")
+	root.AddCommand(headlessCmd)
 
 	// Subcomando doctor
 	doctor := &cobra.Command{
@@ -225,7 +259,12 @@ Exemplos:
 	return root
 }
 
-func runAgent(cmd *cobra.Command, _ []string) error {
+func runAgent(cmd *cobra.Command, args []string) error {
+	// Redirect to headless mode when --headless flag is set
+	if v, _ := cmd.Flags().GetBool("headless"); v {
+		return runHeadless(cmd, args)
+	}
+
 	envFile, _ := cmd.Flags().GetString("env")
 	cfg, err := config.Load(envFile)
 	if err != nil {
@@ -610,6 +649,93 @@ func runRPCServer(cmd *cobra.Command, _ []string) error {
 	fmt.Fprintf(os.Stdout, "Pressione Ctrl+C para encerrar.\n")
 
 	return tui.Run(cfg, registry, "", router)
+}
+
+func runHeadless(cmd *cobra.Command, _ []string) error {
+	envFile, _ := cmd.Flags().GetString("env")
+	cfg, err := config.Load(envFile)
+	if err != nil {
+		return fmt.Errorf("falha ao carregar configuração: %w", err)
+	}
+
+	if err := applyProfileFlags(cmd, cfg); err != nil {
+		return err
+	}
+
+	mode, _ := cmd.Flags().GetString("mode")
+	cfg.Mode = config.ParseMode(mode)
+
+	// Apply headless-specific flags over config file
+	if v, _ := cmd.Flags().GetString("host"); v != headlesspkg.DefaultHost {
+		cfg.Headless.Host = v
+	}
+	if v, _ := cmd.Flags().GetInt("port"); v != headlesspkg.DefaultPort {
+		cfg.Headless.Port = v
+	}
+	cfg.Headless.Enabled = true
+
+	// If host/port are still defaults, they're already set by config.Load
+	if cfg.Headless.Host == "" {
+		cfg.Headless.Host = headlesspkg.DefaultHost
+	}
+	if cfg.Headless.Port == 0 {
+		cfg.Headless.Port = headlesspkg.DefaultPort
+	}
+
+	slog.Info("headless: starting server",
+		"host", cfg.Headless.Host,
+		"port", cfg.Headless.Port,
+		"mode", cfg.Mode,
+	)
+
+	// Initialize MCP servers and get registry
+	registry := initMCPTools(cmd.Context(), cfg, slog.Default())
+
+	// Build agent router
+	router := buildAgentRouter(cfg)
+
+	// Create headless server
+	srv := headlesspkg.NewServer(cfg.Headless.Host, cfg.Headless.Port)
+
+	// Register HTTP handlers
+	headlesspkg.RegisterHandlers(srv, cfg, registry, router)
+
+	// Listen
+	if err := srv.Listen(); err != nil {
+		return fmt.Errorf("headless: listen error: %w", err)
+	}
+
+	// Handle SIGINT for graceful shutdown
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	// Start serving in background
+	go func() {
+		slog.Info("headless: serving", "addr", srv.Addr())
+		if err := srv.Serve(); err != nil {
+			slog.Error("headless: serve error", "err", err)
+		}
+	}()
+
+	fmt.Fprintf(os.Stdout, "Servidor headless rodando em http://%s\n", srv.Addr())
+	fmt.Fprintf(os.Stdout, "Endpoints:\n")
+	fmt.Fprintf(os.Stdout, "  POST /api/prompt   → enviar prompt (SSE)\n")
+	fmt.Fprintf(os.Stdout, "  POST /api/respond  → responder action_required\n")
+	fmt.Fprintf(os.Stdout, "  GET  /api/health   → verificar saúde\n")
+	fmt.Fprintf(os.Stdout, "  GET  /api/status   → status do servidor\n")
+	fmt.Fprintf(os.Stdout, "Pressione Ctrl+C para encerrar.\n")
+
+	// Wait for SIGINT
+	<-ctx.Done()
+	slog.Info("headless: shutting down...")
+
+	// Graceful shutdown
+	if err := srv.Close(); err != nil {
+		slog.Error("headless: close error", "err", err)
+	}
+
+	slog.Info("headless: server stopped")
+	return nil
 }
 
 func runMemoryClear(cmd *cobra.Command, args []string) error {
