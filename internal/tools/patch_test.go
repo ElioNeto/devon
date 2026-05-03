@@ -297,7 +297,9 @@ func TestPatchTool_PatchDiffSimple(t *testing.T) {
 
 	tool := &PatchTool{Dir: dir}
 
-	diff := ` @@ -1,3 +1,3 @@
+	diff := `--- test.txt
++++ test.txt
+@@ -1,3 +1,3 @@
  func Main() {
 -    const SECRET = 'hardcoded'
 +    const SECRET = process.env.JWT_SECRET
@@ -401,7 +403,7 @@ func TestPatchTool_Modes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Cria arquivo temporário
 			dir := t.TempDir()
-			path := filepath.Join(dir, "test.txt")
+			path := filepath.Join(dir, tt.params.Path)
 			os.WriteFile(path, []byte("original\n"), 0o644)
 
 			tool := &PatchTool{Dir: dir}

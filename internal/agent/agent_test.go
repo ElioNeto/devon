@@ -9,7 +9,6 @@ import (
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/db"
 	"github.com/ElioNeto/devon/internal/llm"
-	"github.com/ElioNeto/devon/internal/memory"
 	"github.com/ElioNeto/devon/internal/tools"
 )
 
@@ -47,8 +46,8 @@ func TestAgent_NewWithAgentID(t *testing.T) {
 	r := tools.NewRegistry()
 
 	fakeDB := &fakeDBStore{}
-	mem := memory.New(nil, "/tmp/test-workdir")
-	a := New(cfg, &llm.MockClient{}, r, fakeDB, "test-agent-1", mem, "/tmp/test-workdir")
+	projectID := "/tmp/test-workdir"
+	a := New(cfg, &llm.MockClient{}, r, fakeDB, "test-agent-1", nil, projectID)
 
 	if a == nil {
 		t.Fatal("New() returned nil")
@@ -64,8 +63,7 @@ func TestAgent_New(t *testing.T) {
 	r := tools.NewRegistry()
 
 	fakeDB := &fakeDBStore{}
-	mem := memory.New(nil, "/tmp/test-workdir")
-	a := New(cfg, &llm.MockClient{}, r, fakeDB, "default-agent", mem, "/tmp/test-workdir")
+	a := New(cfg, &llm.MockClient{}, r, fakeDB, "default-agent", nil, "/tmp/test-workdir")
 
 	if a == nil {
 		t.Fatal("New() returned nil")
@@ -84,7 +82,7 @@ func TestAgent_BuildSystemMessages_WithContextDoc(t *testing.T) {
 	r := tools.NewRegistry()
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, &llm.MockClient{}, r, fakeDB, "test")
+	a := New(cfg, &llm.MockClient{}, r, fakeDB, "test", nil, "/tmp/test-workdir")
 
 	msgs := a.history
 	if len(msgs) != 1 {
@@ -108,7 +106,7 @@ func TestAgent_Run_SimpleResponse(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 	events := collectEvents(a.Run(context.Background(), "hello"))
 
 	if !hasEventType(events, "text") {
@@ -147,7 +145,7 @@ func TestAgent_Run_SingleToolCall(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 	events := collectEvents(a.Run(context.Background(), "create a file"))
 
 	if !hasEventType(events, "tool_start") {
@@ -204,7 +202,7 @@ func TestAgent_Run_MultipleToolCalls(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 	events := collectEvents(a.Run(context.Background(), "write and then read file"))
 
 	toolStarts := 0
@@ -261,7 +259,7 @@ func TestAgent_Run_ToolCall_Error(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 	events := collectEvents(a.Run(context.Background(), "read a nonexistent file"))
 
 	if !hasEventType(events, "tool_error") {
@@ -293,7 +291,7 @@ func TestAgent_Run_UnknownTool(t *testing.T) {
 	mc.Responses = append(mc.Responses, llm.MockResponse{Text: "I don't know that tool."})
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 	events := collectEvents(a.Run(context.Background(), "do something"))
 
 	if !hasEventType(events, "tool_error") {
@@ -313,7 +311,7 @@ func TestAgent_Run_ContextCancelled(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 
 	go func() {
 		time.Sleep(50 * time.Millisecond)
@@ -339,7 +337,7 @@ func TestAgent_Run_ContextCancelled_BeforeCall(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 
 	events := collectEvents(a.Run(ctx, "test"))
 	if len(events) > 0 {
@@ -380,7 +378,7 @@ func TestAgent_Run_MaxTurnsLimit(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 	events := collectEvents(a.Run(context.Background(), "keep doing things"))
 
 	if !hasEventType(events, "error") {
@@ -404,7 +402,7 @@ func TestAgent_Run_LLMStreamError(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 	events := collectEvents(a.Run(context.Background(), "test"))
 
 	if !hasEventType(events, "error") {
@@ -422,7 +420,7 @@ func TestAgent_Run_UserMessageInHistory(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 	events := collectEvents(a.Run(context.Background(), "my question"))
 
 	_ = events
@@ -444,7 +442,7 @@ func TestAgent_ExecuteTool_UnknownTool(t *testing.T) {
 	mc := &llm.MockClient{}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 
 	tc := llm.ToolCall{
 		ID:   "t1",
@@ -472,7 +470,7 @@ func TestAgent_Run_NoToolCalls(t *testing.T) {
 
 	cfg := newTestConfig()
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 	events := collectEvents(a.Run(context.Background(), "test"))
 
 	if !hasEventType(events, "text") {
@@ -490,7 +488,7 @@ func TestAgent_Checker_Blocklist(t *testing.T) {
 	mc := &llm.MockClient{}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 
 	if a.checker == nil {
 		t.Fatal("checker is nil")
@@ -535,7 +533,7 @@ func TestAgent_Run_ParallelToolCalls(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 	events := collectEvents(a.Run(context.Background(), "create two files"))
 
 	toolStarts := 0
@@ -583,7 +581,7 @@ func TestAgent_Run_EventOrder(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 	events := collectEvents(a.Run(context.Background(), "test order"))
 
 	toolStartIdx := -1
@@ -648,7 +646,7 @@ func TestAgent_TurnDelay_Respected(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 
 	start := time.Now()
 	events := collectEvents(a.Run(context.Background(), "test turn delay"))
@@ -691,7 +689,7 @@ func TestAgent_TurnDelay_CancelOnContext(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -717,7 +715,7 @@ func TestAgent_Run_RateLimited_Event(t *testing.T) {
 	}
 
 	fakeDB := &fakeDBStore{}
-	a := New(cfg, mc, r, fakeDB, "agent-1")
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
 	events := collectEvents(a.Run(context.Background(), "test"))
 
 	if !hasEventType(events, "rate_limited") {
@@ -783,5 +781,8 @@ func (f *fakeDBStore) GetFileAccess(ctx context.Context, sessionID string, limit
 func (f *fakeDBStore) PutErrorPattern(ctx context.Context, projectID, pattern, context string) error         { return nil }
 func (f *fakeDBStore) IncrementErrorPattern(ctx context.Context, projectID, pattern string) error           { return nil }
 func (f *fakeDBStore) GetErrorPatterns(ctx context.Context, projectID string, limit int) ([]db.ErrorPattern, error) {
+	return nil, nil
+}
+func (f *fakeDBStore) QueryFacts(ctx context.Context, projectID, keyword string, limit int) ([]db.FactRow, error) {
 	return nil, nil
 }

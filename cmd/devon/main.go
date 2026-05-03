@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	agentpkg "github.com/ElioNeto/devon/internal/agent"
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/db"
+	initpkg "github.com/ElioNeto/devon/internal/init"
 	"github.com/ElioNeto/devon/internal/index"
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/memory"
@@ -153,6 +156,28 @@ Exit codes:
 	indexCmd.AddCommand(indexRebuildCmd)
 	root.AddCommand(indexCmd)
 
+	// Subcomando init
+	initCmd := &cobra.Command{
+		Use:   "init",
+		Short: "Configura o projeto criando um DEVON.md",
+		Long: `O wizard detecta automaticamente a linguagem, framework e comandos do projeto,
+depois faz perguntas para montar um DEVON.md completo.
+
+Flags:
+  --yes    Aceita todos os valores detectados sem perguntar
+  --force  Sobrescreve DEVON.md existente sem confirmar
+
+Exemplos:
+  devon init                    → wizard interativo
+  devon init --yes              → modo não-interativo (CI)
+  devon init --force            → sobrescreve DEVON.md
+`,
+		RunE: runInit,
+	}
+	initCmd.Flags().Bool("yes", false, "Aceita padrões detectados sem perguntar (modo CI)")
+	initCmd.Flags().Bool("force", false, "Sobrescreve DEVON.md existente sem confirmar")
+	root.AddCommand(initCmd)
+
 	// Subcomando memory
 	memoryCmd := &cobra.Command{
 		Use:   "memory",
@@ -281,6 +306,114 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("falha ao carregar configuração: %w", err)
 	}
 	return cfg.Doctor(cmd.Context())
+}
+
+func runInit(cmd *cobra.Command, args []string) error {
+	yesFlag, _ := cmd.Flags().GetBool("yes")
+	forceFlag, _ := cmd.Flags().GetBool("force")
+
+	// Get current working directory
+	worksDir, err1 := os.Getwd()
+	if err1 != nil {
+		return fmt.Errorf("não foi possível obter diretório atual: %w", err1)
+	}
+
+	detector := initpkg.NewDetector(worksDir)
+	wizard := initpkg.NewWizard(detector)
+
+	// Try to detect project name from git remote
+	if devonName, err3 := initpkg.DetectFromGitRemote(worksDir); err3 == nil && devonName != "" {
+		fmt.Fprintf(os.Stdout, "Detetado git remote: %s\n", devonName)
+	}
+
+	fmt.Printf("\nDevon — configurar projeto\n")
+	fmt.Printf("\nDiretório: %s\n", worksDir)
+
+	var info initpkg.ProjectInfo
+
+	if yesFlag {
+		// Non-interactive mode (CI)
+		fmt.Fprintf(os.Stdout, "Modo não-interativo (--yes)\n")
+		info, err1 = wizard.RunNonInteractive()
+	} else {
+		// Interactive mode
+		info, err1 = wizard.Run()
+	}
+
+	if err1 != nil {
+		return fmt.Errorf("falha ao executar wizard: %w", err1)
+	}
+
+	// Print detected info summary
+	initpkg.PrintSummary(info)
+
+	// Generate DEVON.md content
+	devonContent := info.GenerateDEVONmd()
+
+	// Get output path
+	devonPath := filepath.Join(worksDir, "DEVON.md")
+
+	// Ask to open in editor if file exists and --force not set
+	if !forceFlag {
+		if _, err2 := os.Stat(devonPath); err2 == nil {
+			fmt.Fprintf(os.Stderr, "\n%s já existe. Abrir no editor ou sobrescrever?\n", devonPath)
+			fmt.Fprintf(os.Stderr, "  [1] Abrir no $EDITOR (padrão)\n")
+			fmt.Fprintf(os.Stderr, "  [2] Sobrescrever\n")
+			fmt.Print("  Escolha: ")
+
+			reader := bufio.NewReader(os.Stdin)
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(input)
+
+			if input != "1" && input != "" {
+				forceFlag = true
+			}
+		}
+	}
+
+	if !forceFlag {
+		// Ask to open in editor
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			editor = "nano"
+		}
+		fmt.Fprintf(os.Stderr, "Abrindo %s no editor...\n", devonPath)
+		editorCmd := exec.Command(editor, devonPath)
+		editorCmd.Stdin = os.Stdin
+		editorCmd.Stdout = os.Stdout
+		editorCmd.Stderr = os.Stderr
+		return editorCmd.Run()
+	}
+
+	// Atomic write
+	tmpFile, err4 := os.CreateTemp(worksDir, ".tmp-devon-")
+	if err4 != nil {
+		return fmt.Errorf("criar arquivo temporário: %w", err4)
+	}
+	tmpPath := tmpFile.Name()
+
+	_, err4 = tmpFile.WriteString(devonContent)
+	if err4 != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("escrever arquivo temporário: %w", err4)
+	}
+
+	if err4 := tmpFile.Close(); err4 != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("fechar arquivo temporário: %w", err4)
+	}
+
+	if err4 := os.Rename(tmpPath, devonPath); err4 != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("renomear para destino: %w", err4)
+	}
+
+	fmt.Fprintf(os.Stdout, "Criando DEVON.md... ✔\n")
+	fmt.Fprintf(os.Stdout, "Arquivo: %s\n", devonPath)
+	fmt.Fprintf(os.Stdout, "Tamanho: %d bytes\n", len(devonContent))
+
+	return nil
 }
 
 func runMemoryClear(cmd *cobra.Command, args []string) error {
