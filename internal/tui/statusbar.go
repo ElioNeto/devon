@@ -136,8 +136,21 @@ func renderInputBar(m *appModel, width int) string {
 	// Multi-line input: stack rows vertically.
 	rows := strings.Split(m.input, "\n")
 	multilineRows := len(rows)
+
+	// Cursor-based scroll offset: when input exceeds 6 lines, show a 6-line
+	// window that follows the cursor position so the cursor line is always visible.
+	offset := 0
 	if multilineRows > 6 {
 		multilineRows = 6
+		cl := cursorLine(m.input, m.cursor)
+		maxOffset := len(rows) - 6
+		offset = cl - 2 // keep cursor ~3rd visible line (0-indexed)
+		if offset < 0 {
+			offset = 0
+		}
+		if offset > maxOffset {
+			offset = maxOffset
+		}
 	}
 
 	var lines []string
@@ -148,10 +161,11 @@ func renderInputBar(m *appModel, width int) string {
 		} else {
 			prefix = s.inputPrompt.Render("  ")
 		}
-		lineContent := rows[i]
+		rowIdx := offset + i
+		lineContent := rows[rowIdx]
 		// Reconstruct cursor for this line if the cursor is on it.
-		lineStart := runeOffset(m.input, i)
-		lineEnd := lineStart + len([]rune(rows[i]))
+		lineStart := runeOffset(m.input, rowIdx)
+		lineEnd := lineStart + len([]rune(rows[rowIdx]))
 		isCursorLine := m.cursor >= lineStart && m.cursor <= lineEnd
 		if isCursorLine {
 			col := m.cursor - lineStart
@@ -167,6 +181,19 @@ func renderInputBar(m *appModel, width int) string {
 		content = badgeLine + content
 	}
 	return s.inputBar.Width(width).Render(content)
+}
+
+// cursorLine returns the 0-based line index containing the cursor position.
+// cursor is a rune index into s.
+func cursorLine(s string, cursor int) int {
+	ru := []rune(s)
+	line := 0
+	for i := 0; i < len(ru) && i < cursor; i++ {
+		if ru[i] == '\n' {
+			line++
+		}
+	}
+	return line
 }
 
 // runeOffset returns the rune index where line `lineIdx` starts in `s`.
