@@ -580,3 +580,70 @@ func (a *Agent) buildSystemMessages(userPrompt string) []llm.Message {
 		{Role: llm.RoleSystem, Content: llm.TextContent(system)},
 	}
 }
+
+// FormatPayload returns a formatted string showing what would be sent to the LLM
+// without making any HTTP requests. This is used for --dry-run and /dry-run.
+func (a *Agent) FormatPayload(ctx context.Context, userInput string) string {
+	sysMsgs := a.buildSystemMessages(userInput)
+
+	modelName := a.activeModel
+	if modelName == "" {
+		modelName = a.client.Info().Name
+	}
+
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("=== DRY RUN — payload que seria enviado ao %s ===\n\n", modelName))
+
+	sb.WriteString("[system]\n")
+	for _, msg := range sysMsgs {
+		if msg.Content != nil {
+			sb.WriteString(*msg.Content)
+			sb.WriteString("\n")
+		}
+	}
+
+	sb.WriteString("\n[user]\n")
+	sb.WriteString(userInput)
+	sb.WriteString("\n")
+
+	// Tool definitions
+	toolDefs := a.registry.Defs()
+	toolNames := make([]string, 0, len(toolDefs))
+	for _, def := range toolDefs {
+		toolNames = append(toolNames, def.Function.Name)
+	}
+
+	sb.WriteString(fmt.Sprintf("\n=== Tools disponíveis (%d) ===\n", len(toolNames)))
+	if len(toolNames) > 0 {
+		sb.WriteString(strings.Join(toolNames, ", "))
+		sb.WriteString("\n")
+	}
+
+	// Token estimation
+	totalText := ""
+	for _, msg := range sysMsgs {
+		if msg.Content != nil {
+			totalText += *msg.Content
+		}
+	}
+	totalText += userInput
+	textTokens := len(totalText) / 4
+
+	toolSchemaTokens := 0
+	for _, def := range toolDefs {
+		toolSchemaTokens += len(def.Function.Name)
+		toolSchemaTokens += len(def.Function.Description)
+		if len(def.Function.Parameters) > 0 {
+			toolSchemaTokens += len(def.Function.Parameters)
+		}
+	}
+	toolSchemaTokens = toolSchemaTokens / 4
+
+	estimatedTokens := textTokens + toolSchemaTokens
+
+	sb.WriteString(fmt.Sprintf("\n=== Tokens estimados: ~%d ===\n", estimatedTokens))
+	sb.WriteString("Nenhuma requisição enviada.\n")
+
+	return sb.String()
+}

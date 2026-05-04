@@ -41,6 +41,7 @@ func NewAgentWorker(
 	resultsCh chan<- WorkerResult,
 ) *AgentWorker {
 	childCtx, cancel := context.WithCancel(ctx)
+	// TODO(#74): childCtx is created but never used — should be passed to executeTask for cancellation support
 	_ = childCtx
 
 	w := &AgentWorker{
@@ -80,7 +81,7 @@ func (w *AgentWorker) executeTask(task Task) {
 		return
 	}
 
-	// Processar com LLM (placeholder)
+	// TODO(#74): placeholder — replace with real LLM execution like agent.go's runLoop
 	result.Output = fmt.Sprintf("Task %s completed by agent %s", task.ID, w.cfg.ID)
 	w.executed = append(w.executed, task)
 

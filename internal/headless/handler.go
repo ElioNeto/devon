@@ -99,6 +99,7 @@ func handlePrompt(s *Server, cfg *config.Config, registry *tools.Registry, route
 
 	// Update agent status before starting the run
 	s.status.running.Store(true)
+	defer s.status.running.Store(false)
 	s.status.sessionID.Store(req.SessionID)
 	s.status.model.Store(cfgCopy.Model)
 	s.status.taskType.Store(string(cfgCopy.ForcedTaskType))

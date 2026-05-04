@@ -80,6 +80,7 @@ func (o *Orchestrator) ProcessTask(userTask string, numWorkers int) (string, err
 	o.aggregator.Start(resultsCh, numWorkers)
 
 	// Dispatch tasks via scheduler
+	// TODO(#74): placeholder execution — no real LLM tool execution happens; tasks just get a canned response
 	o.scheduler.Execute(o.tasks, o.dispatchTask)
 
 	// Wait completion
@@ -110,6 +111,7 @@ func (o *Orchestrator) dispatchTask(task Task) {
 }
 
 func (o *Orchestrator) roleForTask(index int, plan *Plan) string {
+	// TODO(#74): PT-BR/EN mixed strings — unify to EN
 	roles := []string{
 		"Engineer - Implementação",
 		"Tester - Validação",
@@ -140,5 +142,6 @@ func (o *Orchestrator) Close() error {
 
 func generateSessionID() string {
 	// Simplificado - na prática usaria UUID
+	// TODO(#74): replace stub with real UUID generation
 	return "sess_"
 }

@@ -33,6 +33,9 @@ var cmdMenuActions = []cmdMenuAction{
 	{"Limpar chat [/clear]", func(m *appModel) {
 		m.handleSlashCommand("/clear")
 	}},
+	{"Dry-run [/dry-run]", func(m *appModel) {
+		m.handleSlashCommand("/dry-run")
+	}},
 }
 
 func (m *appModel) toggleCmdMenu() {

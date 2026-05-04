@@ -149,6 +149,7 @@ func buildRootCommand() *cobra.Command {
 		RunE:  runTask,
 	}
 	runCmd.Flags().String("mode", "auto", "Modo de permissao: auto | safe | yolo")
+	runCmd.Flags().Bool("dry-run", false, "Exibe o payload sem enviar ao LLM")
 	root.AddCommand(runCmd)
 
 	return root
@@ -292,6 +293,43 @@ func TestExitCoder(t *testing.T) {
 			t.Errorf("Error() = %q, want 'execution failed'", err.Error())
 		}
 	})
+}
+
+func TestRunCommand_DryRun_OutputsPayload(t *testing.T) {
+	dir := t.TempDir()
+	oldWd, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(oldWd)
+
+	t.Setenv("DEVON_MODEL", "test-model")
+	t.Setenv("DEVON_BASE_URL", "http://localhost:11434/v1")
+
+	root := buildRootCommand()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs([]string{"run", "--dry-run", "hello world"})
+
+	err := root.Execute()
+	if err != nil {
+		t.Fatalf("dry-run should not return error: %v", err)
+	}
+
+	output := out.String()
+	expectedSubstrings := []string{
+		"DRY RUN",
+		"[system]",
+		"[user]",
+		"hello world",
+		"Tools disponíveis",
+		"Tokens estimados",
+		"Nenhuma requisição enviada",
+	}
+	for _, s := range expectedSubstrings {
+		if !strings.Contains(output, s) {
+			t.Errorf("dry-run output should contain %q, got:\n%s", s, output)
+		}
+	}
 }
 
 func TestHasStdinPipe_NoPipe(t *testing.T) {

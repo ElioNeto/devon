@@ -63,9 +63,11 @@ func (a *Aggregator) Aggregate() string {
 	defer a.mu.RUnlock()
 
 	if len(a.results) == 0 {
+		// TODO(#74): PT-BR string — unify language to EN for consistency
 		return "Nenhum resultado."
 	}
 
+	// TODO(#74): PT-BR string "Resultados consolidados" — unify to EN
 	var output []string
 	for _, res := range a.results {
 		if res.Error != nil {

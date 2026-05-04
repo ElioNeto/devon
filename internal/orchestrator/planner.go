@@ -119,15 +119,10 @@ func parsePlan(text, userTask string) (*Plan, error) {
 	}
 
 	if len(plan.Tasks) == 0 || (len(plan.RootTasks) == 0 && len(plan.Tasks) > 0) {
-		// Se não tem rootTasks, calcula automaticamente
-		hasDep := make(map[string]bool)
+		// TODO(#74): root task calculation was incorrectly checking "no dependents" instead of "no dependencies"
+		// Se não tem rootTasks, calcula automaticamente (tasks sem dependências)
 		for _, t := range plan.Tasks {
-			for _, d := range t.DependsOn {
-				hasDep[d] = true
-			}
-		}
-		for _, t := range plan.Tasks {
-			if !hasDep[t.ID] {
+			if len(t.DependsOn) == 0 {
 				plan.RootTasks = append(plan.RootTasks, t)
 			}
 		}

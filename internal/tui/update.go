@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -529,10 +530,22 @@ func (m *appModel) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 		}
 		m.messages = append(m.messages, chatMessage{Sender: "system", Content: sb.String()})
 
+	case cmd == "/dry-run":
+		if m.agent == nil {
+			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Agente não inicializado."})
+			return m, nil
+		}
+		userText := m.currentTask
+		if userText == "" {
+			userText = "(nenhuma tarefa em execução)"
+		}
+		payload := m.agent.FormatPayload(context.Background(), userText)
+		m.messages = append(m.messages, chatMessage{Sender: "system", Content: payload})
+
 	default:
 		m.messages = append(m.messages, chatMessage{
 			Sender:  "system",
-			Content: "Comando desconhecido. Disponíveis: /history, /load <id>, /clear, /usage",
+			Content: "Comando desconhecido. Disponíveis: /history, /load <id>, /clear, /usage, /dry-run",
 		})
 	}
 

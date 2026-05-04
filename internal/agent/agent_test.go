@@ -1479,6 +1479,34 @@ func TestAgent_UsageStats_NilAgent(t *testing.T) {
 	}
 }
 
+func TestAgent_FormatPayload_ContainsExpectedSections(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.ContextDoc = "Projeto de teste."
+	r := tools.NewRegistry()
+	fakeDB := &fakeDBStore{}
+	a := New(cfg, &llm.MockClient{}, r, fakeDB, "agent-dryrun", nil, "/tmp/test-workdir")
+
+	payload := a.FormatPayload(context.Background(), "test task")
+
+	expectedSections := []string{
+		"=== DRY RUN",
+		"[system]",
+		"[user]",
+		"test task",
+		"Tools disponíveis",
+		"Tokens estimados",
+		"Nenhuma requisição enviada",
+	}
+	for _, section := range expectedSections {
+		if !strings.Contains(payload, section) {
+			t.Errorf("FormatPayload output should contain %q, got:\n%s", section, payload)
+		}
+	}
+	if !strings.Contains(payload, "mock") && !strings.Contains(payload, a.activeModel) {
+		t.Errorf("FormatPayload should contain model name, got:\n%s", payload)
+	}
+}
+
 func TestAgent_UsageStats_ZeroValues(t *testing.T) {
 	a := &Agent{}
 	stats := a.UsageStats()

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/permissions"
@@ -48,6 +49,16 @@ func (r *Registry) Register(t Tool) {
 func (r *Registry) Get(name string) (Tool, bool) {
 	t, ok := r.tools[name]
 	return t, ok
+}
+
+// List returns the names of all registered tools.
+func (r *Registry) List() []string {
+	names := make([]string, 0, len(r.tools))
+	for name := range r.tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // Defs retorna as definições no formato esperado pelo LLM.

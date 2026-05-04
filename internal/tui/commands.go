@@ -158,6 +158,18 @@ func (m *appModel) handleSlash(text string) {
 		} else {
 			m.appendLog("system", "Erro ao carregar sessão: "+err.Error(), "")
 		}
+	case text == "/dry-run":
+		if m.agent == nil {
+			m.appendLog("system", "Agente não inicializado.", "")
+			return
+		}
+		userText := m.currentTask
+		if userText == "" {
+			userText = "(nenhuma tarefa em execução)"
+		}
+		payload := m.agent.FormatPayload(context.Background(), userText)
+		m.appendLog("system", "DRY RUN - payload que seria enviado ao LLM", "")
+		m.popup = payload
 	default:
 		m.appendLog("system", "Comando desconhecido: "+text, "")
 	}
