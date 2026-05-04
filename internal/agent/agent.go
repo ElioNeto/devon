@@ -180,6 +180,20 @@ func (a *Agent) SetForcedTaskType(tt config.TaskType) {
 	a.forcedTaskType = tt
 }
 
+// SetConversation replaces the agent's internal history with the given messages.
+// A fresh system message is built from the current config and prepended.
+// The caller is responsible for ensuring msgs does not include the system role.
+func (a *Agent) SetConversation(msgs []llm.Message) {
+	sysMsgs := a.buildSystemMessages("")
+	a.history = append(sysMsgs, msgs...)
+}
+
+// ResetHistory resets the agent's history back to just the system message.
+// This is typically used when clearing the conversation (/clear command).
+func (a *Agent) ResetHistory() {
+	a.history = a.buildSystemMessages("")
+}
+
 // Run processa um turno do usuário (texto simples).
 func (a *Agent) Run(ctx context.Context, userInput string) <-chan Event {
 	a.mu = make(chan Event, 64)

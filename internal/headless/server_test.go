@@ -21,7 +21,7 @@ func newTestConfig() *config.Config {
 		WorkDir:  "/tmp/headless-test",
 		Model:    "test-model",
 		BaseURL:  "http://localhost:11434/v1",
-		MaxTurns: 5,
+		MaxAgentLoops: 5,
 		Timeout:  5 * time.Second,
 		Mode:     config.ModeYolo,
 		Headless: config.HeadlessConfig{

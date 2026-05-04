@@ -363,6 +363,11 @@ func (m *appModel) loadSessionFromDB(ctx context.Context, sessionID string) {
 		Sender:  "system",
 		Content: "Sessão " + sessionID + " carregada (" + fmt.Sprintf("%d mensagens", msgCount) + ").",
 	})
+
+	// Sync loaded messages into agent history
+	if msgs := m.agentMessages(); len(msgs) > 0 {
+		m.agent.SetConversation(msgs)
+	}
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

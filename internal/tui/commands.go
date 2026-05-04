@@ -58,6 +58,13 @@ func (m *appModel) sendInput() (tea.Model, tea.Cmd) {
 		m.rightView = viewLogs
 		m.appendLog("agent", "Iniciando tarefa com imagem(ns): "+truncate(text, 50), "")
 
+		// Inject conversation history into agent before Run
+		if msgs := m.agentMessages(); len(msgs) > 1 {
+			m.agent.SetConversation(msgs[:len(msgs)-1])
+		} else if len(msgs) == 1 {
+			m.agent.ResetHistory()
+		}
+
 		ctx, cancel := context.WithCancel(context.Background())
 		m.cancel = cancel
 		cmd := m.startAgentWithMessage(ctx, msg)
@@ -78,6 +85,13 @@ func (m *appModel) sendInput() (tea.Model, tea.Cmd) {
 	m.currentTask = text
 	m.rightView = viewLogs
 	m.appendLog("agent", "Iniciando tarefa: "+truncate(text, 50), "")
+
+	// Inject conversation history into agent before Run
+	if msgs := m.agentMessages(); len(msgs) > 1 {
+		m.agent.SetConversation(msgs[:len(msgs)-1])
+	} else if len(msgs) == 1 {
+		m.agent.ResetHistory()
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
@@ -115,6 +129,7 @@ func (m *appModel) handleSlash(text string) {
 		m.historyTurns = nil
 		m.logEvents = nil
 		m.fileChanges = nil
+		m.agent.ResetHistory()
 	case text == "/usage" || text == "/cost":
 		if m.tracker != nil {
 			m.popup = m.tracker.Format()

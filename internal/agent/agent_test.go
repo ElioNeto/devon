@@ -1064,6 +1064,65 @@ func TestAgent_RunWithMessage_RebuildsSystemMessage(t *testing.T) {
 	}
 }
 
+func TestAgent_SetConversation_ReplacesHistory(t *testing.T) {
+	cfg := newTestConfig()
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{}
+	fakeDB := &fakeDBStore{}
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
+
+	// Initial history should have at least the system message
+	if len(a.history) < 1 {
+		t.Fatal("expected at least 1 history entry (system) after New")
+	}
+
+	// Set conversation with some messages
+	msgs := []llm.Message{
+		{Role: llm.RoleUser, Content: llm.TextContent("hello")},
+		{Role: llm.RoleAssistant, Content: llm.TextContent("world")},
+	}
+	a.SetConversation(msgs)
+
+	// History should be system + the 2 messages
+	if len(a.history) != 3 {
+		t.Fatalf("expected 3 history entries (system+2), got %d", len(a.history))
+	}
+	if a.history[0].Role != llm.RoleSystem {
+		t.Errorf("a.history[0].Role = %q, want %q", a.history[0].Role, llm.RoleSystem)
+	}
+	if a.history[1].Role != llm.RoleUser || *a.history[1].Content != "hello" {
+		t.Errorf("a.history[1] = %+v, want {RoleUser, 'hello'}", a.history[1])
+	}
+	if a.history[2].Role != llm.RoleAssistant || *a.history[2].Content != "world" {
+		t.Errorf("a.history[2] = %+v, want {RoleAssistant, 'world'}", a.history[2])
+	}
+}
+
+func TestAgent_ResetHistory_ClearsToSystem(t *testing.T) {
+	cfg := newTestConfig()
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{}
+	fakeDB := &fakeDBStore{}
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, "/tmp/test-workdir")
+
+	// Add some conversation messages
+	a.history = append(a.history,
+		llm.Message{Role: llm.RoleUser, Content: llm.TextContent("hello")},
+		llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent("world")},
+	)
+
+	// Reset
+	a.ResetHistory()
+
+	// History should be just the system message
+	if len(a.history) != 1 {
+		t.Fatalf("expected 1 history entry after reset, got %d", len(a.history))
+	}
+	if a.history[0].Role != llm.RoleSystem {
+		t.Errorf("a.history[0].Role = %q, want %q", a.history[0].Role, llm.RoleSystem)
+	}
+}
+
 func eventTypeSlice(events []Event) []string {
 	types := make([]string, len(events))
 	for i, e := range events {
