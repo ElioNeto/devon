@@ -22,7 +22,7 @@ Este documento define a ordem de implementação das features, priorizando depen
 | [#35](https://github.com/ElioNeto/devon/issues/35) | Remoção e limpeza do código legado Python/Node |
 | [#36](https://github.com/ElioNeto/devon/issues/36) | Retry com backoff exponencial em HTTP 429/5xx |
 | [#37](https://github.com/ElioNeto/devon/issues/37) | `data: [DONE]` tratado corretamente no `parseSSE` |
-| [#38](https://github.com/ElioNeto/devon/issues/38) | `DEVON_MAX_TURNS` configurável via env |
+| [#38](https://github.com/ElioNeto/devon/issues/38) | `DEVON_MAX_LOOPS` configurável via env |
 | [#39](https://github.com/ElioNeto/devon/issues/39) | System prompt orientado à entrega de artefatos |
 | [#40](https://github.com/ElioNeto/devon/issues/40) | UX de permissões: confirm inline `[y/n/a]` + sumário de sessão |
 

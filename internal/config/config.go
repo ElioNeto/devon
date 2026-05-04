@@ -121,9 +121,8 @@ type Config struct {
 	Model   string
 
 	// Comportamento
-	Mode      Mode
-	MaxTurns  int
-	Timeout   time.Duration
+	Mode    Mode
+	Timeout time.Duration
 	TurnDelay time.Duration
 
 	// Multi-Agent
@@ -188,7 +187,6 @@ func Load(envFile string) (*Config, error) {
 		BaseURL:           getEnvDefault("DEVON_BASE_URL", "https://api.openai.com/v1"),
 		Model:             os.Getenv("DEVON_MODEL"),
 		Mode:              ParseMode(getEnvDefault("DEVON_MODE", "auto")),
-		MaxTurns:          getEnvInt("DEVON_MAX_TURNS", 50),
 		Timeout:           time.Duration(getEnvInt("DEVON_TIMEOUT", 30)) * time.Second,
 		TurnDelay:         parseDuration(getEnvDefault("DEVON_TURN_DELAY", "0")),
 		WorkDir:           wd,

@@ -288,7 +288,7 @@ func (a *Agent) runWithMessage(ctx context.Context, msg llm.Message, ch chan<- E
 
 func (a *Agent) runLoop(ctx context.Context, ch chan<- Event) {
 	a.hasExecutedTools = false
-	for turn := 0; turn < a.cfg.MaxTurns; turn++ {
+	for turn := 0; turn < a.cfg.MaxAgentLoops; turn++ {
 		if ctx.Err() != nil {
 			return
 		}
@@ -400,7 +400,7 @@ func (a *Agent) runLoop(ctx context.Context, ch chan<- Event) {
 		}
 	}
 
-	ch <- Event{Type: "error", Err: fmt.Errorf("agent: limite de %d turnos atingido", a.cfg.MaxTurns)}
+	ch <- Event{Type: "error", Err: fmt.Errorf("agent: limite de %d turnos atingido", a.cfg.MaxAgentLoops)}
 }
 
 func (a *Agent) executeToolWithPermission(ctx context.Context, tc llm.ToolCall, ch chan<- Event) (string, error) {

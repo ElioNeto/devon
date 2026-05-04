@@ -21,7 +21,7 @@ func newTestConfig() *config.Config {
 		WorkDir:  "/tmp/test-workdir",
 		Model:    "test-model",
 		BaseURL:  "http://localhost:11434/v1",
-		MaxTurns: 5,
+		MaxAgentLoops: 5,
 		Timeout:  5 * time.Second,
 		Mode:     config.ModeYolo,
 	}
@@ -126,7 +126,7 @@ func TestAgent_Run_SingleToolCall(t *testing.T) {
 
 	cfg := newTestConfig()
 	cfg.WorkDir = dir
-	cfg.MaxTurns = 5
+	cfg.MaxAgentLoops = 5
 	cfg.Mode = config.ModeYolo
 
 	r := tools.NewRegistry()
@@ -171,7 +171,7 @@ func TestAgent_Run_MultipleToolCalls(t *testing.T) {
 
 	cfg := newTestConfig()
 	cfg.WorkDir = dir
-	cfg.MaxTurns = 5
+	cfg.MaxAgentLoops = 5
 	cfg.Mode = config.ModeYolo
 
 	r := tools.NewRegistry()
@@ -291,7 +291,7 @@ func TestAgent_Run_UnknownTool(t *testing.T) {
 	}
 
 	cfg := newTestConfig()
-	cfg.MaxTurns = 1
+	cfg.MaxAgentLoops = 1
 	mc.Responses = append(mc.Responses, llm.MockResponse{Text: "I don't know that tool."})
 
 	fakeDB := &fakeDBStore{}
@@ -349,12 +349,12 @@ func TestAgent_Run_ContextCancelled_BeforeCall(t *testing.T) {
 	}
 }
 
-func TestAgent_Run_MaxTurnsLimit(t *testing.T) {
+func TestAgent_Run_MaxAgentLoopsLimit(t *testing.T) {
 	dir := t.TempDir()
 
 	cfg := newTestConfig()
 	cfg.WorkDir = dir
-	cfg.MaxTurns = 2
+	cfg.MaxAgentLoops = 2
 	cfg.Mode = config.ModeYolo
 
 	r := tools.NewRegistry()
@@ -386,7 +386,7 @@ func TestAgent_Run_MaxTurnsLimit(t *testing.T) {
 	events := collectEvents(a.Run(context.Background(), "keep doing things"))
 
 	if !hasEventType(events, "error") {
-		t.Errorf("expected error event when MaxTurns reached, got: %v", eventTypeSlice(events))
+		t.Errorf("expected error event when MaxAgentLoops reached, got: %v", eventTypeSlice(events))
 	} else {
 		for _, e := range events {
 			if e.Type == "error" && e.Err != nil && e.Err.Error() == "" {
@@ -614,7 +614,7 @@ func TestAgent_TurnDelay_Respected(t *testing.T) {
 
 	cfg := newTestConfig()
 	cfg.WorkDir = dir
-	cfg.MaxTurns = 5
+	cfg.MaxAgentLoops = 5
 	cfg.Mode = config.ModeYolo
 	cfg.TurnDelay = 200 * time.Millisecond
 
@@ -669,7 +669,7 @@ func TestAgent_TurnDelay_CancelOnContext(t *testing.T) {
 
 	cfg := newTestConfig()
 	cfg.WorkDir = dir
-	cfg.MaxTurns = 5
+	cfg.MaxAgentLoops = 5
 	cfg.Mode = config.ModeYolo
 	cfg.TurnDelay = 5 * time.Second
 
@@ -878,6 +878,189 @@ func TestAgent_Run_RebuildsSystemMessage(t *testing.T) {
 	}
 	if !strings.Contains(content, "main.go") {
 		t.Error("expected 'main.go' in relevant files section")
+	}
+}
+
+// TestAgent_Run_AnswersWithoutTools verifies the agent answers a direct question
+// without invoking any tool calls (AC 4).
+func TestAgent_Run_AnswersWithoutTools(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a .go file so Go is detected
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := newTestConfig()
+	cfg.WorkDir = dir
+	cfg.MaxAgentLoops = 5
+
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{Text: "A capital of France is Paris."},
+		},
+	}
+
+	fakeDB := &fakeDBStore{}
+	a := New(cfg, mc, r, fakeDB, "agent-ac4", nil, dir)
+
+	events := collectEvents(a.Run(context.Background(), "What is the capital of France?"))
+
+	// Verify the system message includes detected languages
+	if len(a.history) == 0 {
+		t.Fatal("history is empty")
+	}
+	sysMsg := *a.history[0].Content
+	if !strings.Contains(sysMsg, "Linguagens detectadas: Go") {
+		t.Error("expected 'Linguagens detectadas: Go' in system message")
+	}
+
+	// Verify no tool calls were made
+	if hasEventType(events, "tool_start") {
+		t.Error("expected no tool_start events for a simple language question")
+	}
+	if hasEventType(events, "tool_done") {
+		t.Error("expected no tool_done events for a simple language question")
+	}
+
+	// Verify text and turn_done events are present
+	if !hasEventType(events, "text") {
+		t.Error("expected text event with the answer")
+	}
+	if !hasEventType(events, "turn_done") {
+		t.Error("expected turn_done event")
+	}
+
+	// Verify the final answer text
+	foundAnswer := false
+	for _, e := range events {
+		if e.Type == "text" && strings.Contains(e.Text, "Paris") {
+			foundAnswer = true
+			break
+		}
+	}
+	if !foundAnswer {
+		t.Error("expected answer text to contain 'Paris'")
+	}
+}
+
+// TestAgent_Run_ContextDocFlowsToSystemMessage verifies that ContextDoc from config
+// is included in the system message both at construction and after Run (AC 5).
+func TestAgent_Run_ContextDocFlowsToSystemMessage(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.ContextDoc = "This is a test context document."
+	cfg.MaxAgentLoops = 5
+
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{Text: "Understood."},
+		},
+	}
+
+	fakeDB := &fakeDBStore{}
+	a := New(cfg, mc, r, fakeDB, "agent-ac5", nil, "/tmp/test-workdir")
+
+	// Verify history[0] (system message) contains the ContextDoc content
+	if len(a.history) == 0 {
+		t.Fatal("expected at least one system message in history")
+	}
+	initialSysMsg := *a.history[0].Content
+	if !strings.Contains(initialSysMsg, "This is a test context document.") {
+		t.Errorf("expected ContextDoc in system message after New(), got:\n%s", initialSysMsg)
+	}
+
+	// Run the agent
+	events := collectEvents(a.Run(context.Background(), "do something"))
+
+	// Verify the system message (rebuild at run time) still contains ContextDoc
+	if len(a.history) == 0 {
+		t.Fatal("history is empty after Run")
+	}
+	runSysMsg := *a.history[0].Content
+	if !strings.Contains(runSysMsg, "This is a test context document.") {
+		t.Errorf("expected ContextDoc in system message after Run(), got:\n%s", runSysMsg)
+	}
+
+	// Verify the agent answered
+	if !hasEventType(events, "text") {
+		t.Error("expected text event")
+	}
+	if !hasEventType(events, "turn_done") {
+		t.Error("expected turn_done event")
+	}
+}
+
+// TestAgent_RunWithMessage_RebuildsSystemMessage verifies that runWithMessage
+// rebuilds the system message with project context for multimodal input.
+func TestAgent_RunWithMessage_RebuildsSystemMessage(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a Go file so Go is detected
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := newTestConfig()
+	cfg.WorkDir = dir
+	cfg.ContextDoc = "Multimodal context document."
+	cfg.MaxAgentLoops = 5
+
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{Text: "Processed multimodal message."},
+		},
+	}
+
+	fakeDB := &fakeDBStore{}
+	a := New(cfg, mc, r, fakeDB, "agent-mm", nil, dir)
+
+	// Verify initial history has ContextDoc
+	if len(a.history) == 0 {
+		t.Fatal("expected system message after New()")
+	}
+	initialSysMsg := *a.history[0].Content
+	if !strings.Contains(initialSysMsg, "Multimodal context document.") {
+		t.Errorf("expected ContextDoc in system message after New(), got:\n%s", initialSysMsg)
+	}
+
+	// Create a multimodal message with text content
+	msg := llm.Message{
+		Role: llm.RoleUser,
+		ContentParts: []llm.ContentPart{
+			{Type: llm.TypeText, Text: "What can you see?"},
+			{Type: llm.TypeImageURL, ImageURL: &llm.ImageURL{
+				URL:    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+				Detail: "auto",
+			}},
+		},
+	}
+
+	events := collectEvents(a.RunWithMessage(context.Background(), msg))
+
+	// Verify history[0] is rebuilt with updated system message containing project context
+	if len(a.history) == 0 {
+		t.Fatal("history is empty after RunWithMessage")
+	}
+	runSysMsg := *a.history[0].Content
+	if !strings.Contains(runSysMsg, "Contexto do projeto") {
+		t.Errorf("expected 'Contexto do projeto' in system message after RunWithMessage, got:\n%s", runSysMsg)
+	}
+	if !strings.Contains(runSysMsg, "Linguagens detectadas: Go") {
+		t.Errorf("expected 'Linguagens detectadas: Go' in system message after RunWithMessage, got:\n%s", runSysMsg)
+	}
+	if !strings.Contains(runSysMsg, "Multimodal context document.") {
+		t.Errorf("expected ContextDoc in system message after RunWithMessage, got:\n%s", runSysMsg)
+	}
+
+	// Verify runWithMessage processes the multimodal content
+	if !hasEventType(events, "text") {
+		t.Error("expected text event")
+	}
+	if !hasEventType(events, "turn_done") {
+		t.Error("expected turn_done event")
 	}
 }
 

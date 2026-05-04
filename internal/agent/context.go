@@ -52,7 +52,69 @@ func BuildProjectContext(workDir string) string {
 		b.WriteString("\n")
 	}
 
+	// Root-level files (up to 30 entries)
+	if files := listRootFiles(workDir); files != "" {
+		b.WriteString("- Arquivos raiz: ")
+		b.WriteString(files)
+		b.WriteString("\n")
+	}
+
+	// go.mod detection
+	if module, goVer := readGoMod(workDir); module != "" {
+		b.WriteString("- Módulo: ")
+		b.WriteString(module)
+		b.WriteString("\n")
+		if goVer != "" {
+			b.WriteString("- Versão Go: ")
+			b.WriteString(goVer)
+			b.WriteString("\n")
+		}
+	}
+
 	return b.String()
+}
+
+// listRootFiles returns a comma-separated string of up to 30 root-level entries.
+func listRootFiles(workDir string) string {
+	entries, err := os.ReadDir(workDir)
+	if err != nil {
+		return ""
+	}
+
+	var names []string
+	for i, e := range entries {
+		if i >= 30 {
+			names = append(names, "...")
+			break
+		}
+		name := e.Name()
+		if e.IsDir() {
+			name += "/"
+		}
+		names = append(names, name)
+	}
+
+	return strings.Join(names, ", ")
+}
+
+// readGoMod extracts the module name and Go version from go.mod.
+// Returns empty strings if go.mod cannot be read or parsed.
+func readGoMod(workDir string) (module, goVersion string) {
+	data, err := os.ReadFile(filepath.Join(workDir, "go.mod"))
+	if err != nil {
+		return "", ""
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			module = strings.TrimPrefix(line, "module ")
+		}
+		if strings.HasPrefix(line, "go ") {
+			goVersion = strings.TrimPrefix(line, "go ")
+		}
+	}
+	return module, goVersion
 }
 
 func gitBranch(workDir string) string {

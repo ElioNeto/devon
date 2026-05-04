@@ -73,7 +73,6 @@ func TestLoad_Success(t *testing.T) {
 			"DEVON_MODEL=gpt-4\n" +
 			"DEVON_BASE_URL=https://api.openai.com/v1\n" +
 			"DEVON_MODE=auto\n" +
-			"DEVON_MAX_TURNS=10\n" +
 			"DEVON_TIMEOUT=60\n",
 	)
 	if err := os.WriteFile(envFile, content, 0o644); err != nil {
@@ -90,7 +89,6 @@ func TestLoad_Success(t *testing.T) {
 	os.Unsetenv("DEVON_MODEL")
 	os.Unsetenv("DEVON_BASE_URL")
 	os.Unsetenv("DEVON_MODE")
-	os.Unsetenv("DEVON_MAX_TURNS")
 	os.Unsetenv("DEVON_TIMEOUT")
 
 	cfg, err := Load(envFile)
@@ -106,8 +104,8 @@ func TestLoad_Success(t *testing.T) {
 	if cfg.Mode != ModeAuto {
 		t.Errorf("Mode = %v, want %v", cfg.Mode, ModeAuto)
 	}
-	if cfg.MaxTurns != 10 {
-		t.Errorf("MaxTurns = %d, want 10", cfg.MaxTurns)
+	if cfg.MaxAgentLoops != 10 {
+		t.Errorf("MaxAgentLoops = %d, want 10", cfg.MaxAgentLoops)
 	}
 	if cfg.Timeout.Seconds() != 60 {
 		t.Errorf("Timeout = %v, want 60s", cfg.Timeout)
@@ -115,7 +113,7 @@ func TestLoad_Success(t *testing.T) {
 }
 
 func TestLoad_EnvFileNotFound_Succeeds(t *testing.T) {
-	for _, k := range []string{"DEVON_API_KEY", "DEVON_MODEL", "DEVON_BASE_URL", "DEVON_MODE", "DEVON_MAX_TURNS", "DEVON_TIMEOUT"} {
+	for _, k := range []string{"DEVON_API_KEY", "DEVON_MODEL", "DEVON_BASE_URL", "DEVON_MODE", "DEVON_TIMEOUT"} {
 		os.Unsetenv(k)
 	}
 	os.Setenv("DEVON_MODEL", "gpt-4")
