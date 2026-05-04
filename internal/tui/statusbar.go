@@ -51,9 +51,6 @@ func renderStatusBar(m *appModel, width int) string {
 	if m.turnNumber > 0 {
 		extraSegments += sep + s.statusVal.Render(fmt.Sprintf("turno %d", m.turnNumber))
 	}
-	if m.toolCallCount > 0 {
-		extraSegments += sep + s.statusVal.Render(fmt.Sprintf("loop %d/%d", m.toolCallCount, m.cfg.MaxAgentLoops))
-	}
 
 	// Provider
 	providerName := extractProvider(m.cfg.BaseURL)

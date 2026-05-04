@@ -53,7 +53,6 @@ func (m *appModel) sendInput() (tea.Model, tea.Cmd) {
 			Content: text + fmt.Sprintf(" [%d imagem(ns)]", len(m.attachments)),
 		})
 		m.toolRuns = nil
-		m.toolCallCount = 0
 		m.running = true
 		m.currentTask = text
 		m.rightView = viewLogs
@@ -75,7 +74,6 @@ func (m *appModel) sendInput() (tea.Model, tea.Cmd) {
 	// Text-only path (legacy)
 	m.messages = append(m.messages, chatMessage{Sender: "user", Content: text})
 	m.toolRuns = nil
-	m.toolCallCount = 0
 	m.running = true
 	m.currentTask = text
 	m.rightView = viewLogs
@@ -158,7 +156,6 @@ func (m *appModel) processAgentEvent(ev agent.Event) {
 
 	case "tool_start":
 		m.toolRuns = append(m.toolRuns, toolRun{Name: ev.Tool, Args: ev.Args, Status: "running"})
-		m.toolCallCount++
 		m.leftItemCount = len(m.toolRuns) + 3
 		detail := ""
 		if ev.Args != "" {

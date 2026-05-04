@@ -139,9 +139,6 @@ type appModel struct {
 	// Agent channel for streaming events
 	agentCh <-chan agent.Event
 
-	// Agentic loop control
-	maxAgentLoops int
-
 	// Typing cursor state
 	isGenerating  bool
 	cursorVisible bool
@@ -149,7 +146,6 @@ type appModel struct {
 
 	// Turn tracking
 	turnNumber    int
-	toolCallCount int
 }
 
 type chatMessage struct {
@@ -273,7 +269,6 @@ func newModel(cfg *config.Config, registry *tools.Registry, resumeSessionID stri
 		attachments:      []Attachment{},
 		dbStore:          store,
 		sidebarOpen:      true,
-		maxAgentLoops:    cfg.MaxAgentLoops,
 		canBlink:         os.Getenv("TERM") != "dumb",
 		cursorVisible:    true,
 	}

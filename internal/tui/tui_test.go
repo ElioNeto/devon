@@ -702,7 +702,6 @@ func TestAgenticLoopCancellation(t *testing.T) {
 	m.width = 80
 	m.height = 24
 	m.running = true
-	m.maxAgentLoops = 10
 	m.currentTask = "test task"
 	m.toolRuns = []toolRun{{Name: "bash", Args: `{"cmd":"ls"}`, Status: "running"}}
 
@@ -1413,32 +1412,8 @@ func TestToolCallCountIncremented(t *testing.T) {
 	m.processAgentEvent(agent.Event{Type: "tool_start", Tool: "bash", Args: `{"cmd":"ls"}`})
 	m.processAgentEvent(agent.Event{Type: "tool_start", Tool: "grep", Args: `{"pattern":"foo"}`})
 	m.processAgentEvent(agent.Event{Type: "tool_start", Tool: "write", Args: `{"path":"test.txt"}`})
-	if m.toolCallCount != 3 {
-		t.Errorf("toolCallCount should be 3, got %d", m.toolCallCount)
-	}
-}
-
-func TestToolCallCountResetOnSendInput(t *testing.T) {
-	// Text-only path
-	m := newModel(testConfig(), testRegistry(), "")
-	m.input = "hello world"
-	m.toolCallCount = 5
-	_, _ = m.sendInput()
-	if m.toolCallCount != 0 {
-		t.Errorf("toolCallCount should be 0 after sendInput (text path), got %d", m.toolCallCount)
-	}
-}
-
-func TestToolCallCountResetOnSendInputWithAttachments(t *testing.T) {
-	m := newModel(testConfig(), testRegistry(), "")
-	m.input = "hello with image"
-	m.toolCallCount = 5
-	m.attachments = []Attachment{
-		{Filename: "test.png", Data: []byte("data"), SizeKB: 1, MimeType: "image/png"},
-	}
-	_, _ = m.sendInput()
-	if m.toolCallCount != 0 {
-		t.Errorf("toolCallCount should be 0 after sendInput (attachments path), got %d", m.toolCallCount)
+	if len(m.toolRuns) != 3 {
+		t.Errorf("len(toolRuns) should be 3, got %d", len(m.toolRuns))
 	}
 }
 
@@ -1485,19 +1460,14 @@ func TestStatusbarPortugueseLabels(t *testing.T) {
 
 func TestStatusbarTurnoLoopDisplay(t *testing.T) {
 	cfg := testConfig()
-	cfg.MaxAgentLoops = 10
 	m := &appModel{
-		cfg:           cfg,
-		styles:        newUIStyles(),
-		turnNumber:    2,
-		toolCallCount: 3,
+		cfg:        cfg,
+		styles:     newUIStyles(),
+		turnNumber: 2,
 	}
 	bar := renderStatusBar(m, 80)
 	if !strings.Contains(bar, "turno 2") {
 		t.Errorf("statusbar should contain 'turno 2', got: %s", bar)
-	}
-	if !strings.Contains(bar, "loop 3/10") {
-		t.Errorf("statusbar should contain 'loop 3/10', got: %s", bar)
 	}
 }
 
@@ -1534,19 +1504,14 @@ func TestStatusbarModelFromRouter(t *testing.T) {
 
 func TestStatusbarTurnoHiddenWhenZero(t *testing.T) {
 	cfg := testConfig()
-	cfg.MaxAgentLoops = 10
 	m := &appModel{
-		cfg:           cfg,
-		styles:        newUIStyles(),
-		turnNumber:    0,
-		toolCallCount: 0,
+		cfg:        cfg,
+		styles:     newUIStyles(),
+		turnNumber: 0,
 	}
 	bar := renderStatusBar(m, 80)
 	if strings.Contains(bar, "turno") {
 		t.Errorf("statusbar should NOT contain 'turno' when turnNumber=0, got: %s", bar)
-	}
-	if strings.Contains(bar, "loop") {
-		t.Errorf("statusbar should NOT contain 'loop' when toolCallCount=0, got: %s", bar)
 	}
 }
 
@@ -1563,5 +1528,48 @@ func TestStatusbarTurnoHiddenWhenZeroAndModelOnly(t *testing.T) {
 	}
 	if !strings.Contains(bar, "my-model") {
 		t.Errorf("statusbar should still show model name, got: %s", bar)
+	}
+}
+
+func TestAgenticMultiTurnEventConsumption(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+	m.running = true
+	m.agentCh = make(<-chan agent.Event) // non-nil mock channel
+
+	// Simulate: text → tool_start → tool_done → text → turn_done
+	m = updateApp(m, agentEventMsg(agent.Event{Type: "text", Text: "I will use bash"}))
+	if !m.running {
+		t.Error("agent should still be running after text event")
+	}
+
+	m = updateApp(m, agentEventMsg(agent.Event{Type: "tool_start", Tool: "bash", Args: `{"cmd":"ls"}`}))
+	if len(m.toolRuns) != 1 {
+		t.Error("expected 1 tool run")
+	}
+	if !m.running {
+		t.Error("agent should still be running after tool_start")
+	}
+
+	m = updateApp(m, agentEventMsg(agent.Event{Type: "tool_done", Tool: "bash", Result: "file1"}))
+	if !m.running {
+		t.Error("agent should still be running after tool_done (agent continues internally)")
+	}
+
+	// Second turn text from agent
+	m = updateApp(m, agentEventMsg(agent.Event{Type: "text", Text: "Done."}))
+	if !m.running {
+		t.Error("agent should still be running during second turn")
+	}
+
+	// turn_done + finalizeTurn should stop the agent
+	m.processAgentEvent(agent.Event{Type: "turn_done"})
+	m.finalizeTurn()
+	if m.running {
+		t.Error("agent should not be running after finalizeTurn")
+	}
+	if len(m.toolRuns) != 0 {
+		t.Error("toolRuns should be cleared after finalizeTurn")
 	}
 }

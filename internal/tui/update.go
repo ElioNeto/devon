@@ -121,7 +121,10 @@ func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentEventMsg:
 		ev := agent.Event(msg)
 
-		// Intercept turn_done: emit log events via processAgentEvent, then persist state
+			// turn_done is emitted by the agent ONLY when its internal runLoop() (internal/agent/agent.go)
+		// has completed all multi-turn tool execution. The agent manages its own loop via cfg.MaxTurns.
+		// The TUI MUST NOT re-invoke startAgent or try to continue the loop here.
+		// We only process log events and persist state.
 		if ev.Type == "turn_done" {
 			m.processAgentEvent(ev) // emit log events (testes passando, agent reply)
 			m.finalizeTurn()         // persist state (historyTurns, session, cleanup)
