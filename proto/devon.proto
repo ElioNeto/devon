@@ -1,0 +1,105 @@
+// proto/devon.proto — gRPC service definition for the Devon headless server.
+// This file is a reference specification; the actual HTTP/SSE implementation
+// in internal/headless/ follows the same event model without requiring gRPC.
+//
+// Event flow:
+//   text_delta → tool_start → tool_done → turn_done  (streaming)
+//   action_required → (client responds via /api/respond)
+//
+// All event types reuse the Event message with a oneof payload.
+
+syntax = "proto3";
+
+package devon;
+
+option go_package = "github.com/ElioNeto/devon/proto;devonpb";
+
+// DevonService is the main service for the Devon headless agent.
+service DevonService {
+  // Prompt sends a user prompt and streams back events (SSE-style).
+  rpc Prompt(PromptRequest) returns (stream EventResponse);
+
+  // Respond unblocks an action_required event with the user's decision.
+  rpc Respond(RespondRequest) returns (RespondResponse);
+
+  // Health returns the server health status.
+  rpc Health(HealthRequest) returns (HealthResponse);
+
+  // Status returns the current agent session status.
+  rpc Status(StatusRequest) returns (StatusResponse);
+}
+
+// PromptRequest contains the user's prompt.
+message PromptRequest {
+  string prompt = 1;
+  string mode = 2;           // optional: "auto" | "safe" | "yolo"
+  string session_id = 3;     // optional: resume an existing session
+}
+
+// EventResponse is a server-sent event streamed back to the client.
+message EventResponse {
+  oneof event {
+    TextDelta text_delta = 1;
+    ToolStart tool_start = 2;
+    ToolDone tool_done = 3;
+    TurnDone turn_done = 4;
+    ActionRequired action_required = 5;
+    ErrorEvent error = 6;
+  }
+}
+
+// TextDelta is a chunk of generated text.
+message TextDelta {
+  string text = 1;
+}
+
+// ToolStart indicates the agent has started executing a tool.
+message ToolStart {
+  string tool = 1;
+  string args = 2;
+}
+
+// ToolDone indicates the agent has finished executing a tool.
+message ToolDone {
+  string tool = 1;
+  string result = 2;
+}
+
+// TurnDone indicates the agent has finished its current turn.
+message TurnDone {}
+
+// ActionRequired is sent when the agent needs user confirmation.
+message ActionRequired {
+  string tool = 1;
+  string args = 2;
+  string request_id = 3;    // used to correlate with Respond
+}
+
+// ErrorEvent indicates an error occurred.
+message ErrorEvent {
+  string message = 1;
+}
+
+// RespondRequest is the client's response to an action_required event.
+message RespondRequest {
+  string request_id = 1;
+  bool approved = 2;
+  bool always_allow = 3;
+}
+
+message RespondResponse {
+  bool success = 1;
+}
+
+message HealthRequest {}
+message HealthResponse {
+  string status = 1;        // "ok"
+}
+
+message StatusRequest {}
+message StatusResponse {
+  bool running = 1;
+  string session_id = 2;
+  string model = 3;
+  string task_type = 4;
+}

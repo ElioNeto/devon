@@ -32,10 +32,11 @@ func TextContent(s string) *string { return &s }
 
 // Message representa uma mensagem no histórico da conversa.
 type Message struct {
-	Role       Role       `json:"role"`
-	Content    *string    `json:"content,omitempty"` // nil → omitido no JSON
-	ToolCallID string     `json:"tool_call_id,omitempty"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	Role         Role          `json:"role"`
+	Content      *string       `json:"content,omitempty"` // nil → omitido no JSON
+	ContentParts []ContentPart `json:"-"`                 // multimodal parts (custom MarshalJSON)
+	ToolCallID   string        `json:"tool_call_id,omitempty"`
+	ToolCalls    []ToolCall    `json:"tool_calls,omitempty"`
 }
 
 // ToolCall representa uma chamada de ferramenta solicitada pelo modelo.
@@ -93,6 +94,8 @@ type Usage struct {
 // Permite mockar o cliente LLM em testes.
 type Streamer interface {
 	Stream(ctx context.Context, messages []Message, tools []ToolDef) (<-chan StreamEvent, error)
+	// Info returns model metadata (e.g. SupportsVision).
+	Info() ModelInfo
 }
 
 // Client é um cliente HTTP para APIs OpenAI-compatible.
@@ -110,6 +113,16 @@ func New(apiKey, baseURL, model string, timeout time.Duration) *Client {
 		baseURL: strings.TrimRight(baseURL, "/"),
 		model:   model,
 		http:    &http.Client{Timeout: timeout},
+	}
+}
+
+// Info returns model info for the OpenAI-compatible client.
+func (c *Client) Info() ModelInfo {
+	return ModelInfo{
+		Name:           c.model,
+		Provider:       "openai",
+		SupportsTools:  true,
+		SupportsVision: strings.HasPrefix(c.model, "gpt-4") || strings.HasPrefix(c.model, "claude-3") || strings.HasPrefix(c.model, "claude-sonnet-4"),
 	}
 }
 

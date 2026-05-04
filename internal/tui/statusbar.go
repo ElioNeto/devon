@@ -60,9 +60,21 @@ func renderInputBar(m *appModel, width int) string {
 		return s.inputBar.Width(width - 2).Render(running)
 	}
 
+	// Attachment badges — rendered above the prompt line
+	var badgeLine string
+	if len(m.attachments) > 0 {
+		badgeStyle := s.badge.Copy()
+		var badges []string
+		for _, att := range m.attachments {
+			badge := badgeStyle.Render(att.attachmentBadge())
+			badges = append(badges, badge)
+		}
+		badgeLine = strings.Join(badges, " ") + "\n"
+	}
+
 	if !strings.Contains(m.input, "\n") {
 		prompt := s.inputPrompt.Render("> ")
-		return s.inputBar.Width(width - 2).Render(prompt + renderInputLine(m))
+		return s.inputBar.Width(width - 2).Render(badgeLine + prompt + renderInputLine(m))
 	}
 
 	// Multi-line input: stack rows vertically.
@@ -94,7 +106,11 @@ func renderInputBar(m *appModel, width int) string {
 	}
 
 	m.multilineRows = multilineRows
-	return s.inputBar.Width(width - 2).Render(strings.Join(lines, "\n"))
+	content := strings.Join(lines, "\n")
+	if badgeLine != "" {
+		content = badgeLine + content
+	}
+	return s.inputBar.Width(width - 2).Render(content)
 }
 
 // runeOffset returns the rune index where line `lineIdx` starts in `s`.
@@ -141,7 +157,19 @@ func renderInputLine(m *appModel) string {
 func buildStatusRight(m *appModel) string {
 	s := m.styles
 
-	model := s.keyStyle.Render("modelo: ") + s.statusVal.Render(m.cfg.Model)
+	// Show routing info when agent router is available
+	var model string
+	if m.router != nil {
+		activeType := m.agent.ActiveTaskType()
+		activeModel := m.agent.ActiveModel()
+		if activeModel == "" {
+			activeModel = m.cfg.Model
+		}
+		model = s.keyStyle.Render("tarefa: ") + s.statusVal.Render(string(activeType)) +
+			s.statusSep.Render(" ") + s.keyStyle.Render("modelo: ") + s.statusVal.Render(activeModel)
+	} else {
+		model = s.keyStyle.Render("modelo: ") + s.statusVal.Render(m.cfg.Model)
+	}
 
 	if m.tracker == nil {
 		return model

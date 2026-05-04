@@ -312,12 +312,21 @@ func renderLeftPanel(m *appModel, width, height int, focused bool) string {
 	var lines []string
 
 	// Header da sessão (linha 0 do painel)
+	modelLabel := truncate(m.cfg.Model, 12)
+	if m.router != nil {
+		activeType := m.agent.ActiveTaskType()
+		activeModel := m.agent.ActiveModel()
+		if activeModel == "" {
+			activeModel = m.cfg.Model
+		}
+		modelLabel = string(activeType) + ":" + truncate(activeModel, 8)
+	}
 	sessionLine := s.configKey.Render(" devon ") +
 		s.configVal.Render("v"+appVersion) +
 		"  " +
 		s.statusVal.Render("sessão "+truncate(m.sessionID(), 8)) +
 		"  " +
-		s.statusVal.Render("model "+truncate(m.cfg.Model, 12)) +
+		s.statusVal.Render("model "+modelLabel) +
 		"  tokens " +
 		s.configVal.Render(fmtShort(m.totalTokens()))
 	lines = append(lines, sessionLine)

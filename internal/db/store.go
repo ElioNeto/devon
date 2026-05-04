@@ -80,6 +80,21 @@ type FileAccess struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+// SessionDetail represents a session record from the DB with aggregated counts.
+type SessionDetail struct {
+	ID            string    `json:"id"`
+	Task          string    `json:"task,omitempty"`
+	Model         string    `json:"model,omitempty"`
+	Status        string    `json:"status"`
+	Duration      int64     `json:"duration_ms"`
+	LastActivity  time.Time `json:"last_activity"`
+	CreatedAt     time.Time `json:"created_at"`
+	MessageCount  int       `json:"message_count"`
+	ToolCallCount int       `json:"tool_call_count"`
+	TotalCost     float64   `json:"total_cost,omitempty"`
+	TotalTokens   int       `json:"total_tokens,omitempty"`
+}
+
 // ErrorPattern representa um padrão de erro detectado.
 type ErrorPattern struct {
 	ID         int64     `json:"id"`
@@ -102,8 +117,13 @@ type FactRow struct {
 type Store interface {
 	// Sessions
 	CreateSession(ctx context.Context, id string) error
+	CreateSessionWithMeta(ctx context.Context, id, task, model, status string) error
 	GetSession(ctx context.Context, id string) (bool, error)
 	ListSessions(ctx context.Context, limit int) ([]string, error)
+	GetSessionDetail(ctx context.Context, id string) (*SessionDetail, error)
+	ListSessionsDetail(ctx context.Context, limit int) ([]SessionDetail, error)
+	UpdateSession(ctx context.Context, id, task, model, status string) error
+	DeleteSession(ctx context.Context, id string) error
 
 	// Hot path - Messages
 	PutMessage(ctx context.Context, agentID, sessionID, role, content string) error
@@ -187,6 +207,11 @@ func New(dbPath string) (Store, error) {
 		pubsub:   make(map[string]chan Event),
 	}
 
+	if err := migrateSessionColumns(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	return store, nil
 }
 
@@ -195,6 +220,56 @@ func execSchema(db *sql.DB) error {
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// migrateSessionColumns adds the new columns to the sessions table if they don't exist.
+// This is needed for databases created before the schema update.
+func migrateSessionColumns(db *sql.DB) error {
+	// Check which columns exist in the sessions table
+	rows, err := db.Query("PRAGMA table_info('sessions')")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	existing := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return err
+		}
+		existing[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	// Add missing columns
+	type colDef struct {
+		name string
+		typ  string
+		dflt string
+	}
+	columns := []colDef{
+		{"task", "TEXT", "''"},
+		{"model", "TEXT", "''"},
+		{"duration", "INTEGER", "0"},
+		{"last_activity", "DATETIME", "CURRENT_TIMESTAMP"},
+	}
+
+	for _, c := range columns {
+		if !existing[c.name] {
+			stmt := "ALTER TABLE sessions ADD COLUMN " + c.name + " " + c.typ + " DEFAULT " + c.dflt
+			if _, err := db.Exec(stmt); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -239,8 +314,14 @@ func splitSchema(s string) []string {
 
 // Sessions
 func (s *SQLiteStore) CreateSession(ctx context.Context, id string) error {
+	return s.CreateSessionWithMeta(ctx, id, "", "", "active")
+}
+
+func (s *SQLiteStore) CreateSessionWithMeta(ctx context.Context, id, task, model, status string) error {
 	_, err := s.db.ExecContext(ctx,
-		"INSERT OR REPLACE INTO sessions (id) VALUES (?)", id)
+		`INSERT OR REPLACE INTO sessions (id, task, model, status, last_activity)
+		 VALUES (?, ?, ?, ?, datetime('now'))`,
+		id, task, model, status)
 	return err
 }
 
@@ -269,6 +350,91 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, limit int) ([]string, er
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+func (s *SQLiteStore) GetSessionDetail(ctx context.Context, id string) (*SessionDetail, error) {
+	query := `
+		SELECT s.id, s.task, s.model, s.status, s.duration, s.last_activity, s.created_at,
+			COALESCE(msg.cnt, 0) AS message_count,
+			COALESCE(tc.cnt, 0) AS tool_call_count,
+			COALESCE(cs.total_cost, 0) AS total_cost,
+			COALESCE(json_extract(cs.token_usage, '$.total_tokens'), 0) AS total_tokens
+		FROM sessions s
+		LEFT JOIN (SELECT session_id, COUNT(*) AS cnt FROM messages GROUP BY session_id) msg ON msg.session_id = s.id
+		LEFT JOIN (SELECT session_id, COUNT(*) AS cnt FROM tool_calls GROUP BY session_id) tc ON tc.session_id = s.id
+		LEFT JOIN (SELECT session_id, total_cost, token_usage FROM cost_summary) cs ON cs.session_id = s.id
+		WHERE s.id = ?`
+
+	var sd SessionDetail
+	var lastActivity, createdAt time.Time
+	err := s.db.QueryRowContext(ctx, query, id).Scan(
+		&sd.ID, &sd.Task, &sd.Model, &sd.Status, &sd.Duration,
+		&lastActivity, &createdAt,
+		&sd.MessageCount, &sd.ToolCallCount, &sd.TotalCost, &sd.TotalTokens,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	sd.LastActivity = lastActivity
+	sd.CreatedAt = createdAt
+	return &sd, nil
+}
+
+func (s *SQLiteStore) ListSessionsDetail(ctx context.Context, limit int) ([]SessionDetail, error) {
+	query := `
+		SELECT s.id, s.task, s.model, s.status, s.duration, s.last_activity, s.created_at,
+			COALESCE(msg.cnt, 0) AS message_count,
+			COALESCE(tc.cnt, 0) AS tool_call_count,
+			COALESCE(cs.total_cost, 0) AS total_cost,
+			COALESCE(json_extract(cs.token_usage, '$.total_tokens'), 0) AS total_tokens
+		FROM sessions s
+		LEFT JOIN (SELECT session_id, COUNT(*) AS cnt FROM messages GROUP BY session_id) msg ON msg.session_id = s.id
+		LEFT JOIN (SELECT session_id, COUNT(*) AS cnt FROM tool_calls GROUP BY session_id) tc ON tc.session_id = s.id
+		LEFT JOIN (SELECT session_id, total_cost, token_usage FROM cost_summary) cs ON cs.session_id = s.id
+		ORDER BY s.last_activity DESC
+		LIMIT ?`
+
+	rows, err := s.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []SessionDetail
+	for rows.Next() {
+		var sd SessionDetail
+		var lastActivity, createdAt time.Time
+		if err := rows.Scan(
+			&sd.ID, &sd.Task, &sd.Model, &sd.Status, &sd.Duration,
+			&lastActivity, &createdAt,
+			&sd.MessageCount, &sd.ToolCallCount, &sd.TotalCost, &sd.TotalTokens,
+		); err != nil {
+			return nil, err
+		}
+		sd.LastActivity = lastActivity
+		sd.CreatedAt = createdAt
+		sessions = append(sessions, sd)
+	}
+	return sessions, rows.Err()
+}
+
+func (s *SQLiteStore) UpdateSession(ctx context.Context, id, task, model, status string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE sessions SET task=COALESCE(NULLIF(?, ''), task),
+		 model=COALESCE(NULLIF(?, ''), model),
+		 status=COALESCE(NULLIF(?, ''), status),
+		 last_activity=datetime('now')
+		 WHERE id=?`,
+		task, model, status, id)
+	return err
+}
+
+func (s *SQLiteStore) DeleteSession(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM sessions WHERE id=?", id)
+	return err
 }
 
 // Hot path - Messages

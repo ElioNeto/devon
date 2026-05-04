@@ -7,8 +7,12 @@ const schema = `
 
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    status TEXT DEFAULT 'active'
+    task TEXT DEFAULT '',
+    model TEXT DEFAULT '',
+    status TEXT DEFAULT 'active',
+    duration INTEGER DEFAULT 0,
+    last_activity DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -82,21 +86,22 @@ CREATE TABLE IF NOT EXISTS facts (
     confidence REAL DEFAULT 1.0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_facts_project (project_id),
-    INDEX idx_facts_category (category)
+    UNIQUE(project_id, category, content)
 );
 
+CREATE INDEX IF NOT EXISTS idx_facts_project ON facts(project_id);
+CREATE INDEX IF NOT EXISTS idx_facts_category ON facts(category);
 CREATE TABLE IF NOT EXISTS file_access (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
     file_path TEXT NOT NULL,
     access_type TEXT NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
-    INDEX idx_file_access_session (session_id),
-    INDEX idx_file_access_path (file_path)
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
+CREATE INDEX IF NOT EXISTS idx_file_access_session ON file_access(session_id);
+CREATE INDEX IF NOT EXISTS idx_file_access_path ON file_access(file_path);
 CREATE TABLE IF NOT EXISTS error_patterns (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id TEXT NOT NULL,
@@ -104,14 +109,29 @@ CREATE TABLE IF NOT EXISTS error_patterns (
     context TEXT,
     occurrences INTEGER DEFAULT 1,
     first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-    last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_error_patterns_project (project_id),
-    INDEX idx_error_patterns_pattern (pattern)
+    last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_error_patterns_project ON error_patterns(project_id);
+CREATE INDEX IF NOT EXISTS idx_error_patterns_pattern ON error_patterns(pattern);
 
 -- Índices para performance
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_agent ON messages(agent_id);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session_id);
+
+-- TABELA DE CACHE DE RESPOSTAS (response cache)
+
+CREATE TABLE IF NOT EXISTS cache_entries (
+    hash_key TEXT PRIMARY KEY,
+    model TEXT NOT NULL,
+    response TEXT NOT NULL,
+    tokens_saved INTEGER DEFAULT 0,
+    file_hashes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_cache_entries_expires ON cache_entries(expires_at);
 `

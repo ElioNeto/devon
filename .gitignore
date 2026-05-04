@@ -29,3 +29,13 @@ build/
 *.db
 *.db-wal
 *.db-shm
+
+# OpenCode / project artifacts
+.task-state.json
+devon.toml
+dist/
+opencode.json
+.opencode/
+
+# Node
+node_modules/

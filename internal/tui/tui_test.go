@@ -6,6 +6,8 @@ import (
 
 	"github.com/ElioNeto/devon/internal/agent"
 	"github.com/ElioNeto/devon/internal/config"
+	"github.com/ElioNeto/devon/internal/llm"
+	"github.com/ElioNeto/devon/internal/tools"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -23,8 +25,12 @@ func testConfig() *config.Config {
 	}
 }
 
+func testRegistry() *tools.Registry {
+	return tools.NewRegistry()
+}
+
 func TestNewModel(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	if m.cfg.Model != "test-model" {
 		t.Errorf("expected model test-model, got %q", m.cfg.Model)
 	}
@@ -34,7 +40,7 @@ func TestNewModel(t *testing.T) {
 }
 
 func TestModel_Init(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	cmd := m.Init()
 	if cmd == nil {
 		t.Error("Init should return a cmd")
@@ -42,7 +48,7 @@ func TestModel_Init(t *testing.T) {
 }
 
 func TestModel_UpdateWindowSize(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m = updateApp(m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	if m.width != 80 || m.height != 24 {
 		t.Errorf("expected size 80x24, got %dx%d", m.width, m.height)
@@ -50,7 +56,7 @@ func TestModel_UpdateWindowSize(t *testing.T) {
 }
 
 func TestModel_UpdateTypeText(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -66,7 +72,7 @@ func TestModel_UpdateTypeText(t *testing.T) {
 }
 
 func TestModel_UpdateDeleteWord(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -83,7 +89,7 @@ func TestModel_UpdateDeleteWord(t *testing.T) {
 }
 
 func TestModel_UpdateClearInput(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -95,7 +101,7 @@ func TestModel_UpdateClearInput(t *testing.T) {
 }
 
 func TestModel_UpdateCursor(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -121,7 +127,7 @@ func TestModel_UpdateCursor(t *testing.T) {
 }
 
 func TestModel_UpdateAgentResult(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 	m.running = true
@@ -140,7 +146,7 @@ func TestModel_UpdateAgentResult(t *testing.T) {
 }
 
 func TestModel_UpdateClearChat(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.messages = append(m.messages, chatMessage{Sender: "devon", Content: "hello"})
 	m.scroll = 5
 
@@ -154,7 +160,7 @@ func TestModel_UpdateClearChat(t *testing.T) {
 }
 
 func TestModel_UpdateNewSession(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.messages = append(m.messages, chatMessage{Sender: "devon", Content: "old"})
 	m.tracker.TotalInputTokens = 100
 
@@ -168,7 +174,7 @@ func TestModel_UpdateNewSession(t *testing.T) {
 }
 
 func TestModel_UpdateHelp(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -181,7 +187,7 @@ func TestModel_UpdateHelp(t *testing.T) {
 // ── Issue #27: shortcut keys must not conflict with text input ─────────────
 
 func TestModel_ShortcutsDontConflictWithInput(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -218,7 +224,7 @@ func TestModel_ShortcutsDontConflictWithInput(t *testing.T) {
 }
 
 func TestModel_CtrlShortcutsWork(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -261,7 +267,7 @@ func TestModel_CtrlShortcutsWork(t *testing.T) {
 }
 
 func TestModel_HelpShowsNewBindings(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 40
 
@@ -286,7 +292,7 @@ func TestModel_HelpShowsNewBindings(t *testing.T) {
 }
 
 func TestModel_UpdateCtrlC(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -387,7 +393,7 @@ func TestProcessAgentEventSystem(t *testing.T) {
 }
 
 func TestModel_View_ZeroSize(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	v := m.View()
 	if v != "Iniciando Devon..." {
 		t.Errorf("expected placeholder, got %q", v)
@@ -395,7 +401,7 @@ func TestModel_View_ZeroSize(t *testing.T) {
 }
 
 func TestModel_View_Basic(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -413,7 +419,7 @@ func TestModel_View_Basic(t *testing.T) {
 }
 
 func TestModel_ViewRunning(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 	m.running = true
@@ -429,7 +435,7 @@ func TestModel_ViewRunning(t *testing.T) {
 }
 
 func TestModel_ViewWithToolRuns(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 	m.toolRuns = []toolRun{
@@ -443,7 +449,7 @@ func TestModel_ViewWithToolRuns(t *testing.T) {
 }
 
 func TestModel_ViewHelp(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 40
 	m.showHelp = true
@@ -518,7 +524,7 @@ func TestFormatTokens(t *testing.T) {
 }
 
 func TestInputEditMiddle(t *testing.T) {
-	m := newModel(testConfig())
+	m := newModel(testConfig(), testRegistry(), "")
 	m.width = 80
 	m.height = 24
 
@@ -565,3 +571,168 @@ func TestDeleteWordTrailingSpaces(t *testing.T) {
 type testErr struct{ msg string }
 
 func (e testErr) Error() string { return e.msg }
+
+// ── Attachment tests ──────────────────────────────────────────────────────────
+
+func TestFilePickerInitializedInModel(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// Verify file picker state is initialized
+	if m.fp.FileAllowed != true {
+		t.Error("file picker should allow files")
+	}
+	if len(m.fp.AllowedTypes) == 0 {
+		t.Error("file picker should have allowed types configured")
+	}
+	if m.attachments == nil {
+		t.Error("attachments slice should be initialized")
+	}
+}
+
+func TestRemoveAttachment_CtrlRRemovesLast(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// Manually add attachments
+	m.attachments = []Attachment{
+		{Filename: "img1.png", Data: []byte("data1"), SizeKB: 1, MimeType: "image/png"},
+		{Filename: "img2.jpg", Data: []byte("data2"), SizeKB: 2, MimeType: "image/jpeg"},
+	}
+	if len(m.attachments) != 2 {
+		t.Fatalf("expected 2 attachments, got %d", len(m.attachments))
+	}
+
+	// Ctrl+R should remove last
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlR})
+	if len(m.attachments) != 1 {
+		t.Fatalf("expected 1 attachment after Ctrl+R, got %d", len(m.attachments))
+	}
+	if m.attachments[0].Filename != "img1.png" {
+		t.Errorf("expected remaining attachment 'img1.png', got %q", m.attachments[0].Filename)
+	}
+}
+
+func TestRemoveAttachment_CtrlREmptyDoesNotPanic(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// Ctrl+R with no attachments should not panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Ctrl+R with no attachments should not panic: %v", r)
+		}
+	}()
+	_ = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlR})
+}
+
+func TestAttachmentBadgeFormat(t *testing.T) {
+	att := Attachment{
+		Filename: "test.png",
+		SizeKB:   42,
+		MimeType: "image/png",
+	}
+	badge := att.attachmentBadge()
+	expected := "img: test.png 42KB"
+	if badge != expected {
+		t.Errorf("expected badge %q, got %q", expected, badge)
+	}
+}
+
+func TestDataURIFormat(t *testing.T) {
+	att := Attachment{
+		Filename: "test.png",
+		Data:     []byte("hello"),
+		MimeType: "image/png",
+		SizeKB:   0,
+	}
+	uri := att.dataURI()
+	// "hello" base64 = aGVsbG8=
+	expected := "data:image/png;base64,aGVsbG8="
+	if uri != expected {
+		t.Errorf("expected data URI %q, got %q", expected, uri)
+	}
+}
+
+func TestAttachmentBadgesInInputBar(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// Add attachments
+	m.attachments = []Attachment{
+		{Filename: "pic1.png", SizeKB: 10, MimeType: "image/png"},
+		{Filename: "pic2.jpg", SizeKB: 20, MimeType: "image/jpeg"},
+	}
+
+	// Render the view
+	v := m.View()
+	if !strings.Contains(v, "pic1.png") || !strings.Contains(v, "pic2.jpg") {
+		t.Error("attachment badges should contain filenames in the view")
+	}
+	if !strings.Contains(v, "10KB") || !strings.Contains(v, "20KB") {
+		t.Error("attachment badges should contain sizes in the view")
+	}
+}
+
+func TestAttachmentsClearedAfterSend(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// Simulate attachments
+	m.attachments = []Attachment{
+		{Filename: "test.png", Data: []byte("some data"), SizeKB: 1, MimeType: "image/png"},
+	}
+	m.input = "hello with image"
+
+	// sendInput should trigger
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m2 := result.(*appModel)
+
+	// After send, attachments should be cleared
+	if len(m2.attachments) != 0 {
+		t.Errorf("expected 0 attachments after send, got %d", len(m2.attachments))
+	}
+}
+
+func TestOversizedAttachmentRejected(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// Create a large attachment (bigger than 10 MB default)
+	bigData := make([]byte, 11*1024*1024)
+	att := Attachment{
+		Filename: "big.png",
+		Data:     bigData,
+		MimeType: "image/png",
+		SizeKB:   len(bigData) / 1024,
+	}
+
+	err := m.validateAttachment(att)
+	if err == nil {
+		t.Error("expected error for oversized attachment, got nil")
+	}
+	if err != nil && !strings.Contains(err.Error(), "muito grande") {
+		t.Errorf("expected size error, got: %v", err)
+	}
+}
+
+func TestHasVisionContent(t *testing.T) {
+	textParts := []llm.ContentPart{llm.NewTextPart("hello")}
+	if llm.HasVisionContent(textParts) {
+		t.Error("text-only parts should not have vision content")
+	}
+
+	parts := []llm.ContentPart{
+		llm.NewTextPart("describe this"),
+		llm.NewImagePartBase64("data:image/png;base64,abc123"),
+	}
+	if !llm.HasVisionContent(parts) {
+		t.Error("parts with image should have vision content")
+	}
+}

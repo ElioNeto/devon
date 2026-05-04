@@ -4,11 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/ElioNeto/devon/internal/permissions"
@@ -137,7 +134,7 @@ const (
 func detectMode(p patchParams) (string, error) {
 	hasPatch := p.Diff != ""
 	hasReplace := p.OldStr != "" && p.NewStr != ""
-	hasInsert := p.After > 0 && p.Content != ""
+	hasInsert := p.After >= 0 && p.Content != ""
 
 	count := 0
 	if hasPatch {
@@ -166,62 +163,86 @@ func detectMode(p patchParams) (string, error) {
 	return modeInsert, nil
 }
 
-// applyApplyUnifiedDiff aplica um diff unificado usando o comando patch via subprocesso
-// para maior confiabilidade com a formatação GNU.
+// applyPatch aplica um diff unificado em formato string.
+// Implementa um parser simples de unified diff para evitar dependência
+// do comando patch externo.
 func applyPatch(content, diff string) ([]byte, string, error) {
-	// Usa patch via subprocesso para máxima compatibilidade com unidiff
-	tmpIn, err := os.CreateTemp("", "patch-*.unified")
-	if err != nil {
-		return nil, "", fmt.Errorf("falha ao criar tempfile para diff: %w", err)
-	}
-	tmpInPath := tmpIn.Name()
-	defer func() {
-		tmpIn.Close()
-		os.Remove(tmpInPath)
-	}()
+	lines := strings.Split(content, "\n")
+	diffLines := strings.Split(diff, "\n")
 
-	if _, err := io.WriteString(tmpIn, diff); err != nil {
-		tmpIn.Close()
-		os.Remove(tmpInPath)
-		return nil, "", fmt.Errorf("falha ao escrever diff: %w", err)
-	}
-	if err := tmpIn.Close(); err != nil {
-		os.Remove(tmpInPath)
-		return nil, "", fmt.Errorf("falha ao fechar tempfile: %w", err)
+	var result []string
+	diffIdx := 0
+	contentIdx := 0
+
+	// Skip header lines (--- and +++ are the first two, then @@)
+	for diffIdx < len(diffLines) {
+		line := diffLines[diffIdx]
+		diffIdx++
+		if strings.HasPrefix(line, "@@") {
+			break
+		}
 	}
 
-	tmpFile, err := os.CreateTemp("", "patch-*.target")
-	if err != nil {
-		return nil, "", fmt.Errorf("falha ao criar tempfile alvo: %w", err)
-	}
-	tmpFilePath := tmpFile.Name()
-	defer func() {
-		tmpFile.Close()
-		os.Remove(tmpFilePath)
-	}()
+	applied := false
 
-	if _, err := io.WriteString(tmpFile, content); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFilePath)
-		return nil, "", fmt.Errorf("falha ao escrever conteudo alvo: %w", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpFilePath)
-		return nil, "", fmt.Errorf("falha ao fechar tempfile: %w", err)
+	for diffIdx < len(diffLines) {
+		line := diffLines[diffIdx]
+		diffIdx++
+
+		if line == "" {
+			continue
+		}
+
+		if strings.HasPrefix(line, "@@") {
+			// Copy remaining content lines as-is
+			for contentIdx < len(lines) {
+				result = append(result, lines[contentIdx])
+				contentIdx++
+			}
+			applied = true
+			continue
+		}
+
+		if strings.HasPrefix(line, "-") {
+			// Remove line from content
+			removed := line[1:]
+			if contentIdx < len(lines) && lines[contentIdx] == removed {
+				contentIdx++
+				applied = true
+			} else {
+				return nil, "", fmt.Errorf("diff nao corresponde ao conteudo: esperado %q, encontrado %q", removed, lines[contentIdx])
+			}
+		} else if strings.HasPrefix(line, "+") {
+			// Add line to result
+			result = append(result, line[1:])
+		} else {
+			// Context line - copy from content
+			if contentIdx < len(lines) {
+				result = append(result, lines[contentIdx])
+				contentIdx++
+			}
+		}
 	}
 
-	output, err := exec.Command("patch", "-s", "-o", tmpFilePath, tmpFilePath, tmpInPath).CombinedOutput()
-	if err != nil {
-		return nil, "", fmt.Errorf("falha ao aplicar diff: %w\n%s", err, string(output))
+	// Copy remaining content lines
+	for contentIdx < len(lines) {
+		result = append(result, lines[contentIdx])
+		contentIdx++
 	}
 
-	newContent, err := os.ReadFile(tmpFilePath)
-	if err != nil {
-		return nil, "", fmt.Errorf("falha ao ler resultado: %w", err)
+	if !applied {
+		return nil, "", fmt.Errorf("nenhum hunk foi aplicado ao diff")
+	}
+
+	newContent := strings.Join(result, "\n")
+
+	// Preserve trailing newline if original had one
+	if strings.HasSuffix(content, "\n") && !strings.HasSuffix(newContent, "\n") {
+		newContent += "\n"
 	}
 
 	oldLines := strings.Split(content, "\n")
-	newLines := strings.Split(string(newContent), "\n")
+	newLines := strings.Split(newContent, "\n")
 	linesAdded := len(newLines) - len(oldLines)
 
 	info := fmt.Sprintf("diff aplicado: +%d -%d linhas", linesAdded, 0)
@@ -229,7 +250,7 @@ func applyPatch(content, diff string) ([]byte, string, error) {
 		info = fmt.Sprintf("diff aplicado: +%d -%d linhas", 0, -linesAdded)
 	}
 
-	return newContent, info, nil
+	return []byte(newContent), info, nil
 }
 
 // applyReplace aplica substituição exata de string com validação de unicidade.
@@ -273,15 +294,15 @@ func applyInsert(content string, afterLine int, insertContent string) ([]byte, s
 		return nil, "", fmt.Errorf("after_line deve ser >= 0")
 	}
 
-	lines := strings.Split(content, "\n")
+	// Strip trailing newline before splitting so we don't have an empty last element
+	trimmed := strings.TrimSuffix(content, "\n")
+	lines := strings.Split(trimmed, "\n")
 
 	// after_line=0 -> index 0 (antes de tudo)
 	// after_line=1 -> index 1 (após linha 1)
 	// after_line > len(lines) -> end
 	insertIdx := afterLine
-	if afterLine == 0 {
-		insertIdx = 0
-	} else if afterLine >= len(lines) {
+	if afterLine >= len(lines) {
 		// Append to end
 		insertIdx = len(lines)
 	}
@@ -361,5 +382,4 @@ func truncateString(s string, max int) string {
 	return s[:max] + "..."
 }
 
-// Regex para detectar inicio de hunk
-var hunkHeaderRegex = regexp.MustCompile(`^@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@`)
+

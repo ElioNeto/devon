@@ -17,15 +17,47 @@ import (
 	"github.com/ElioNeto/devon/internal/tools"
 )
 
+// TaskType is a convenience alias so agent callers don't need to import config directly.
+type TaskType = config.TaskType
+
+const (
+	TaskTypeExplore = config.TaskTypeExplore
+	TaskTypePlan    = config.TaskTypePlan
+	TaskTypeCode    = config.TaskTypeCode
+)
+
 // isRateLimited detects rate-limit errors.
 func isRateLimited(err error) bool {
 	s := err.Error()
 	return strings.Contains(s, "429") || strings.Contains(s, "rate")
 }
 
-// Event é emitido pelo agente para a TUI.
+// fileModifyingTools contains the names of tools that modify files and
+// should emit file_change events so the VS Code extension can show gutter indicators.
+var fileModifyingTools = map[string]bool{
+	"write":      true,
+	"edit":       true,
+	"patch_file": true,
+}
+
+// toolPathParams is used to extract the "path" field from tool call arguments.
+type toolPathParams struct {
+	Path string `json:"path"`
+}
+
+// extractFilePath tries to extract a file path from tool call arguments JSON.
+// Returns empty string if the path cannot be determined.
+func extractFilePath(args string) string {
+	var p toolPathParams
+	if err := json.Unmarshal([]byte(args), &p); err != nil {
+		return ""
+	}
+	return p.Path
+}
+
+// Event é emitido pelo agente para a TUI e retransmitido via RPC para a extensão VS Code.
 type Event struct {
-	Type   string // "text" | "tool_start" | "tool_done" | "tool_error" | "rate_limited" | "turn_done" | "error" | "confirm_request"
+	Type   string // "text" | "tool_start" | "tool_done" | "tool_error" | "file_change" | "rate_limited" | "turn_done" | "error" | "confirm_request"
 	Text   string
 	Tool   string
 	Args   string
@@ -43,10 +75,14 @@ type Agent struct {
 	id          string
 	cfg         *config.Config
 	client      llm.Streamer
+	router      *llm.AgentRouter
 	registry    *tools.Registry
 	checker     *permissions.Checker
 	db          db.Store
 	history     []llm.Message
+	activeTaskType  config.TaskType
+	activeModel     string
+	forcedTaskType  config.TaskType // non-zero when --task-type forces classification
 	ReplyCh     chan ConfirmReply
 	mu          chan Event
 	mem         *memory.Manager
@@ -55,20 +91,30 @@ type Agent struct {
 }
 
 // New cria um novo Agent com DB injection.
-func New(cfg *config.Config, client llm.Streamer, registry *tools.Registry, db db.Store, agentID string, mem *memory.Manager, projectID string) *Agent {
+// The router parameter is optional; pass nil to use only the default client.
+func New(cfg *config.Config, client llm.Streamer, registry *tools.Registry, db db.Store, agentID string, mem *memory.Manager, projectID string, router ...*llm.AgentRouter) *Agent {
 	tools.RegisterBuiltin(registry, cfg.WorkDir, cfg.Timeout, cfg.Sandbox)
 	tools.RegisterMemoryTools(registry, mem, projectID)
+	tools.RegisterWebTools(registry, &cfg.Web)
 
 	blocklist := permissions.DefaultBlocklist
+
+	var r *llm.AgentRouter
+	if len(router) > 0 {
+		r = router[0]
+	}
 
 	a := &Agent{
 		id:          agentID,
 		cfg:         cfg,
 		client:      client,
+		router:      r,
 		registry:    registry,
 		db:          db,
 		mem:         mem,
 		projectID:   projectID,
+		activeTaskType: config.TaskTypeCode,
+		activeModel:    client.Info().Name,
 		checker: &permissions.Checker{
 			Mode:      cfg.Mode,
 			Session:   make(map[string]bool),
@@ -110,15 +156,54 @@ func (a *Agent) AgentID() string {
 	return a.id
 }
 
-// Run processa um turno do usuário.
+// ActiveTaskType returns the task type classified for the current/last run.
+func (a *Agent) ActiveTaskType() config.TaskType {
+	if a == nil {
+		return config.TaskTypeCode
+	}
+	return a.activeTaskType
+}
+
+// ActiveModel returns the model name used for the current/last run.
+func (a *Agent) ActiveModel() string {
+	if a == nil {
+		return ""
+	}
+	return a.activeModel
+}
+
+// SetForcedTaskType forces the agent to use a specific task type regardless of
+// automatic classification. Set to empty TaskType to disable forcing.
+func (a *Agent) SetForcedTaskType(tt config.TaskType) {
+	a.forcedTaskType = tt
+}
+
+// Run processa um turno do usuário (texto simples).
 func (a *Agent) Run(ctx context.Context, userInput string) <-chan Event {
 	a.mu = make(chan Event, 64)
 	go a.run(ctx, userInput, a.mu)
 	return a.mu
 }
 
+// RunWithMessage processa um turno com uma mensagem pré-construída (ex: multimodal).
+func (a *Agent) RunWithMessage(ctx context.Context, msg llm.Message) <-chan Event {
+	a.mu = make(chan Event, 64)
+	go a.runWithMessage(ctx, msg, a.mu)
+	return a.mu
+}
+
 func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 	defer close(ch)
+
+	if ctx.Err() != nil {
+		return
+	}
+
+	// Classify the task type based on user input (or use forced type)
+	a.activeTaskType = a.resolveTaskType(userInput)
+	a.selectClientForTask()
+
+	ch <- Event{Type: "system", Text: fmt.Sprintf("Tipo de tarefa: %s → modelo: %s", a.activeTaskType, a.activeModel)}
 
 	a.history = append(a.history, llm.Message{
 		Role:    llm.RoleUser,
@@ -130,6 +215,66 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 		a.db.PutMessage(ctx, a.id, a.id, "user", userInput)
 	}
 
+	a.runLoop(ctx, ch)
+}
+
+func (a *Agent) runWithMessage(ctx context.Context, msg llm.Message, ch chan<- Event) {
+	defer close(ch)
+
+	if ctx.Err() != nil {
+		return
+	}
+
+	// For multimodal messages, infer task type from text content
+	textContent := ""
+	if msg.Content != nil {
+		textContent = *msg.Content
+	} else if len(msg.ContentParts) > 0 {
+		for _, p := range msg.ContentParts {
+			if p.Type == llm.TypeText {
+				textContent = p.Text
+				break
+			}
+		}
+	}
+	if textContent != "" {
+		a.activeTaskType = a.resolveTaskType(textContent)
+	}
+	a.selectClientForTask()
+
+	ch <- Event{Type: "system", Text: fmt.Sprintf("Tipo de tarefa: %s → modelo: %s", a.activeTaskType, a.activeModel)}
+
+	// Check vision support — strip images if model doesn't support vision
+	if llm.HasVisionContent(msg.ContentParts) {
+		info := a.client.Info()
+		if !info.SupportsVision {
+			// Strip image parts, keep only text parts
+			var textParts []llm.ContentPart
+			for _, p := range msg.ContentParts {
+				if p.Type == llm.TypeText {
+					textParts = append(textParts, p)
+				}
+			}
+			msg.ContentParts = textParts
+			ch <- Event{Type: "system", Text: "Aviso: modelo não suporta visão. Imagens removidas da requisição."}
+		}
+	}
+
+	a.history = append(a.history, msg)
+
+	// Persiste mensagem no DB
+	if a.db != nil {
+		label := "[multimodal message]"
+		if msg.Content != nil && *msg.Content != "" {
+			label = *msg.Content
+		}
+		a.db.PutMessage(ctx, a.id, a.id, "user", label)
+	}
+
+	a.runLoop(ctx, ch)
+}
+
+func (a *Agent) runLoop(ctx context.Context, ch chan<- Event) {
 	for turn := 0; turn < a.cfg.MaxTurns; turn++ {
 		if ctx.Err() != nil {
 			return
@@ -208,6 +353,20 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 				result = fmt.Sprintf("error: %v", toolErr)
 			} else {
 				ch <- Event{Type: "tool_done", Tool: tc.Function.Name, Result: result}
+
+				// file_change: notify VS Code extension about file modifications
+				// so gutter indicators (A/M/D) can be rendered.
+				if fileModifyingTools[tc.Function.Name] {
+					if path := extractFilePath(tc.Function.Arguments); path != "" {
+						ch <- Event{
+							Type:   "file_change",
+							Tool:   tc.Function.Name,
+							Args:   path,
+							Text:   path,
+							Result: "modified",
+						}
+					}
+				}
 			}
 
 			a.history = append(a.history, llm.Message{
@@ -256,6 +415,35 @@ func (a *Agent) executeToolWithPermission(ctx context.Context, tc llm.ToolCall, 
 	}
 
 	return t.Execute(ctx, json.RawMessage(tc.Function.Arguments))
+}
+
+// selectClientForTask uses the AgentRouter (if available) to switch the active
+// client based on the classified task type. Falls back to the default client.
+func (a *Agent) selectClientForTask() {
+	if a.router == nil {
+		// No router configured — use the default client
+		if a.activeModel == "" {
+			a.activeModel = a.client.Info().Name
+		}
+		return
+	}
+
+	routed := a.router.ClientFor(a.activeTaskType)
+	if routed != nil {
+		a.client = routed
+	}
+	a.activeModel = a.router.ModelFor(a.activeTaskType)
+	if a.activeModel == "" {
+		a.activeModel = a.client.Info().Name
+	}
+}
+
+// resolveTaskType returns the forced task type if set, otherwise classifies the prompt.
+func (a *Agent) resolveTaskType(prompt string) config.TaskType {
+	if a.forcedTaskType != "" {
+		return a.forcedTaskType
+	}
+	return llm.ClassifyTask(prompt)
 }
 
 func (a *Agent) buildSystemMessages(userPrompt string) []llm.Message {

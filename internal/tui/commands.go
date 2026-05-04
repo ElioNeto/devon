@@ -3,6 +3,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/ElioNeto/devon/internal/agent"
@@ -16,7 +17,7 @@ import (
 
 func (m *appModel) sendInput() (tea.Model, tea.Cmd) {
 	text := strings.TrimSpace(m.input)
-	if text == "" || m.running {
+	if text == "" && len(m.attachments) == 0 || m.running {
 		return m, nil
 	}
 	m.input = ""
@@ -29,6 +30,46 @@ func (m *appModel) sendInput() (tea.Model, tea.Cmd) {
 	}
 
 	m.inputHist.push(text)
+
+	// Build message — multimodal if attachments exist
+	if len(m.attachments) > 0 {
+		// Build a Message with ContentParts
+		var parts []llm.ContentPart
+		if text != "" {
+			parts = append(parts, llm.NewTextPart(text))
+		}
+		for _, att := range m.attachments {
+			parts = append(parts, llm.NewImagePartBase64(att.dataURI()))
+		}
+		msg := llm.Message{
+			Role:         llm.RoleUser,
+			ContentParts: parts,
+		}
+
+		m.messages = append(m.messages, chatMessage{
+			Sender:  "user",
+			Content: text + fmt.Sprintf(" [%d imagem(ns)]", len(m.attachments)),
+		})
+		m.toolRuns = nil
+		m.running = true
+		m.currentTask = text
+		m.rightView = viewLogs
+		m.appendLog("agent", "Iniciando tarefa com imagem(ns): "+truncate(text, 50), "")
+
+		ctx, cancel := context.WithCancel(context.Background())
+		m.cancel = cancel
+		cmd := startAgentWithMessage(ctx, m.agent, msg)
+
+		// Clear attachments data and slice after send
+		for i := range m.attachments {
+			m.attachments[i].Data = nil
+		}
+		m.attachments = nil
+
+		return m, tea.Batch(m.spinner.Tick, cmd)
+	}
+
+	// Text-only path (legacy)
 	m.messages = append(m.messages, chatMessage{Sender: "user", Content: text})
 	m.toolRuns = nil
 	m.running = true
@@ -240,7 +281,73 @@ func (m *appModel) finalizeTurn() {
 	if m.session != nil {
 		_ = history.SaveMessages(m.cfg.WorkDir, m.session.ID, m.agentMessages(), &m.session.Usage)
 	}
+
+	// Persist session state to DB for crash recovery
+	m.persistSessionToDB()
+
 	m.toolRuns = nil
+}
+
+// persistSessionToDB saves the current session data to the DB for crash recovery.
+func (m *appModel) persistSessionToDB() {
+	if m.dbStore == nil || m.sessionMgr == nil || m.session == nil {
+		return
+	}
+
+	sessionID := m.session.ID
+	if sessionID == "" {
+		return
+	}
+
+	ctx := context.Background()
+
+	// Ensure session exists in DB
+	_ = m.dbStore.CreateSession(ctx, sessionID)
+
+	// Update session metadata with task and model
+	task := ""
+	for _, msg := range m.messages {
+		if msg.Sender == "user" && task == "" {
+			task = truncate(msg.Content, 200)
+		}
+	}
+	_ = m.sessionMgr.Update(ctx, sessionID, task, m.cfg.Model, "active")
+
+	// Persist messages
+	for _, cm := range m.messages {
+		switch cm.Sender {
+		case "user":
+			_ = m.dbStore.PutMessage(ctx, "tui", sessionID, "user", cm.Content)
+		case "devon":
+			role := "assistant"
+			if cm.IsError {
+				role = "tool"
+			}
+			_ = m.dbStore.PutMessage(ctx, "tui", sessionID, role, cm.Content)
+		}
+	}
+
+	// Persist tool runs
+	for _, tr := range m.toolRuns {
+		status := tr.Status
+		result := tr.Result
+		var errStr string
+		if status == "error" {
+			errStr = result
+		}
+		_, _ = m.dbStore.PutToolCall(ctx, "tui", sessionID, tr.Name, tr.Args, status, result, errStr)
+	}
+
+	// Persist cost summary
+	if m.tracker != nil {
+		tokens := map[string]int{
+			"prompt_tokens":     m.tracker.TotalInputTokens,
+			"completion_tokens": m.tracker.TotalOutputTokens,
+			"total_tokens":      m.tracker.TotalInputTokens + m.tracker.TotalOutputTokens,
+			"requests":          m.tracker.TotalRequests,
+		}
+		_ = m.dbStore.UpdateCostSummary(ctx, sessionID, m.tracker.TotalCostUSD, tokens)
+	}
 }
 
 func (m *appModel) agentMessages() []llm.Message {
@@ -257,6 +364,10 @@ func (m *appModel) agentMessages() []llm.Message {
 			msgs = append(msgs, llm.Message{Role: role, Content: llm.TextContent(cm.Content)})
 		}
 	}
+	// Note: multimodal messages with ContentParts are sent directly via
+	// RunWithMessage and are NOT persisted to agentMessages() history.
+	// The chatMessage for multimodal inputs includes a "[N imagem(ns)]" tag
+	// so the image count is preserved in the display log.
 	return msgs
 }
 
@@ -265,6 +376,17 @@ func (m *appModel) agentMessages() []llm.Message {
 func startAgent(ctx context.Context, a *agent.Agent, input string) tea.Cmd {
 	return func() tea.Msg {
 		ch := a.Run(ctx, input)
+		var events []agent.Event
+		for ev := range ch {
+			events = append(events, ev)
+		}
+		return agentResult{events: events}
+	}
+}
+
+func startAgentWithMessage(ctx context.Context, a *agent.Agent, msg llm.Message) tea.Cmd {
+	return func() tea.Msg {
+		ch := a.RunWithMessage(ctx, msg)
 		var events []agent.Event
 		for ev := range ch {
 			events = append(events, ev)

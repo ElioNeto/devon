@@ -61,6 +61,16 @@ func (m *MockClient) Stream(ctx context.Context, messages []Message, tools []Too
 	return ch, nil
 }
 
+// Info returns model info for the mock client.
+func (m *MockClient) Info() ModelInfo {
+	return ModelInfo{
+		Name:           "mock",
+		Provider:       "mock",
+		SupportsTools:  true,
+		SupportsVision: true,
+	}
+}
+
 // CallCount returns the number of Stream() calls made so far.
 func (m *MockClient) CallCount() int {
 	return m.callCount

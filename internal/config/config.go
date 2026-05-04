@@ -106,6 +106,13 @@ type SandboxConfig struct {
 	Timeouts      []CommandTimeout `toml:"timeouts"`
 }
 
+// HeadlessConfig configura o servidor HTTP/SSE headless.
+type HeadlessConfig struct {
+	Enabled bool   `toml:"enabled"`
+	Host    string `toml:"host"`
+	Port    int    `toml:"port"`
+}
+
 // Config contém toda a configuração de runtime do Devon.
 type Config struct {
 	// Provider
@@ -139,6 +146,21 @@ type Config struct {
 
 	// Sandbox
 	Sandbox SandboxConfig `toml:"sandbox"`
+
+	// Cache de respostas
+	Cache CacheConfig
+
+	// Web tools
+	Web WebConfig
+
+	// Attachments
+	MaxImageSizeMB int
+
+	// ForcedTaskType overrides automatic classification when non-empty.
+	ForcedTaskType TaskType
+
+	// Headless HTTP/SSE server configuration
+	Headless HeadlessConfig
 }
 
 // Load carrega a configuração.
@@ -173,6 +195,7 @@ func Load(envFile string) (*Config, error) {
 		DBPath:            getEnvDefault("DEVON_DB_PATH", ".devon/state.db"),
 		ContextWindowSize: getEnvInt("DEVON_CONTEXT_WINDOW_SIZE", 20),
 		Agents:            []AgentConfig{},
+		MaxImageSizeMB:    10,
 	}
 
 	// Carrega devon.toml e aplica sandbox + index
@@ -185,6 +208,20 @@ func Load(envFile string) (*Config, error) {
 		}
 		if tc.Index != nil {
 			cfg.Index = *tc.Index
+		}
+		if tc.Cache != nil {
+			cfg.Cache = *tc.Cache
+		} else {
+			cfg.Cache.Enabled = true // zero-config: cache ativo por padrao
+		}
+		if tc.Attachments != nil {
+			cfg.MaxImageSizeMB = tc.Attachments.MaxSizeMB
+		}
+		if tc.Web != nil {
+			cfg.Web = *tc.Web
+		}
+		if tc.Headless != nil {
+			cfg.Headless = *tc.Headless
 		}
 	}
 
@@ -219,6 +256,13 @@ func (c *Config) Doctor(ctx context.Context) error {
 
 	if c.ContextDoc != "" {
 		fmt.Printf("  DEVON.md:        encontrado (%d bytes)\n", len(c.ContextDoc))
+	}
+
+	fmt.Printf("\n[Web]\n")
+	fmt.Printf("  Enabled:         %v\n", c.Web.Enabled)
+	if c.Web.Enabled {
+		fmt.Printf("  Backend:         %s\n", webBackendLabel(c.Web.Backend))
+		fmt.Printf("  Firecrawl Key:   %s\n", webKeyStatus())
 	}
 
 	fmt.Printf("\n[Index]\n")
@@ -286,8 +330,42 @@ func parseDuration(s string) time.Duration {
 	return 0
 }
 
+// webBackendLabel returns a human-readable label for the web backend.
+func webBackendLabel(backend string) string {
+	if backend == "" || backend == "auto" {
+		return "auto (DuckDuckGo ou Firecrawl)"
+	}
+	return backend
+}
+
+// webKeyStatus returns a masked status of the Firecrawl API key.
+func webKeyStatus() string {
+	key := os.Getenv("DEVON_FIRECRAWL_KEY")
+	if key == "" {
+		return "não configurada"
+	}
+	if len(key) > 8 {
+		return key[:4] + "****" + key[len(key)-4:]
+	}
+	return "****"
+}
+
 func isLocalURL(u string) bool {
 	return strings.Contains(u, "localhost") ||
 		strings.Contains(u, "127.0.0.1") ||
 		strings.Contains(u, "10.0.0.")
+}
+
+// ParseTaskType parses a task type string, returning TaskTypeCode for unknown values.
+func ParseTaskType(s string) TaskType {
+	switch strings.ToLower(s) {
+	case "explore":
+		return TaskTypeExplore
+	case "plan":
+		return TaskTypePlan
+	case "code":
+		return TaskTypeCode
+	default:
+		return TaskTypeCode
+	}
 }
