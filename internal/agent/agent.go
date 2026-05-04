@@ -90,6 +90,9 @@ type Agent struct {
 	projectID       string
 	idxMgr          *index.Manager
 	hasExecutedTools bool // tracks whether any tool was executed in the current run
+
+	fileReadCache map[string]string   // cleared at start of runLoop
+	truncStats    truncationStats      // accumulated statistics
 }
 
 // New cria um novo Agent com DB injection.
@@ -182,10 +185,17 @@ func (a *Agent) SetForcedTaskType(tt config.TaskType) {
 
 // SetConversation replaces the agent's internal history with the given messages.
 // A fresh system message is built from the current config and prepended.
-// The caller is responsible for ensuring msgs does not include the system role.
+// System messages in msgs are stripped and replaced by fresh system messages.
 func (a *Agent) SetConversation(msgs []llm.Message) {
 	sysMsgs := a.buildSystemMessages("")
-	a.history = append(sysMsgs, msgs...)
+	// Filter out any system messages from the caller-provided messages
+	var nonSysMsgs []llm.Message
+	for _, msg := range msgs {
+		if msg.Role != llm.RoleSystem {
+			nonSysMsgs = append(nonSysMsgs, msg)
+		}
+	}
+	a.history = append(sysMsgs, nonSysMsgs...)
 }
 
 // ResetHistory resets the agent's history back to just the system message.
@@ -302,6 +312,8 @@ func (a *Agent) runWithMessage(ctx context.Context, msg llm.Message, ch chan<- E
 
 func (a *Agent) runLoop(ctx context.Context, ch chan<- Event) {
 	a.hasExecutedTools = false
+	a.fileReadCache = make(map[string]string)
+
 	for turn := 0; turn < a.cfg.MaxAgentLoops; turn++ {
 		if ctx.Err() != nil {
 			return
@@ -312,6 +324,16 @@ func (a *Agent) runLoop(ctx context.Context, ch chan<- Event) {
 			case <-time.After(a.cfg.TurnDelay):
 			case <-ctx.Done():
 				return
+			}
+		}
+
+		// Apply sliding window to limit history to max turns
+		if a.cfg.MaxHistoryTurns > 0 && len(a.history) > 1 {
+			filtered, removed := applySlidingWindow(a.history, a.cfg.MaxHistoryTurns)
+			if removed > 0 {
+				a.history = filtered
+				a.truncStats.TurnsRemoved += removed
+				ch <- Event{Type: "system", Text: fmt.Sprintf("Histórico truncado: removidos %d turnos", removed)}
 			}
 		}
 
@@ -378,7 +400,7 @@ func (a *Agent) runLoop(ctx context.Context, ch chan<- Event) {
 		for _, tc := range pendingTools {
 			ch <- Event{Type: "tool_start", Tool: tc.Function.Name, Args: tc.Function.Arguments}
 
-			result, toolErr := a.executeToolWithPermission(ctx, tc, ch)
+			result, toolErr := a.cachedExecuteTool(ctx, tc, ch)
 			if toolErr != nil {
 				ch <- Event{Type: "tool_error", Tool: tc.Function.Name, Err: toolErr}
 				result = fmt.Sprintf("error: %v", toolErr)
@@ -401,6 +423,14 @@ func (a *Agent) runLoop(ctx context.Context, ch chan<- Event) {
 				}
 			}
 
+			// Truncate tool result if it exceeds the maximum
+			if a.cfg.MaxToolResultChars > 0 && len(result) > a.cfg.MaxToolResultChars {
+				originalLen := len(result)
+				result = truncateToolResult(result, a.cfg.MaxToolResultChars)
+				a.truncStats.ToolCharsSaved += originalLen - len(result)
+				a.truncStats.ToolTruncatedCount++
+			}
+
 			a.history = append(a.history, llm.Message{
 				Role:       llm.RoleTool,
 				ToolCallID: tc.ID,
@@ -415,6 +445,42 @@ func (a *Agent) runLoop(ctx context.Context, ch chan<- Event) {
 	}
 
 	ch <- Event{Type: "error", Err: fmt.Errorf("agent: limite de %d turnos atingido", a.cfg.MaxAgentLoops)}
+}
+
+// cachedExecuteTool wraps executeToolWithPermission with file read caching.
+// Only caches "read_file" tool results to avoid re-reading the same file within a turn.
+func (a *Agent) cachedExecuteTool(ctx context.Context, tc llm.ToolCall, ch chan<- Event) (string, error) {
+	if tc.Function.Name == "read_file" {
+		var args struct {
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err == nil && args.Path != "" {
+			if cached, ok := a.fileReadCache[args.Path]; ok {
+				a.truncStats.CacheHits++
+				return cached, nil
+			}
+			result, err := a.executeToolWithPermission(ctx, tc, ch)
+			if err == nil {
+				a.fileReadCache[args.Path] = result
+			}
+			return result, err
+		}
+	}
+	return a.executeToolWithPermission(ctx, tc, ch)
+}
+
+// UsageStats returns a formatted string with truncation and caching statistics.
+func (a *Agent) UsageStats() string {
+	if a == nil {
+		return "Agente não inicializado."
+	}
+	var sb strings.Builder
+	sb.WriteString("Truncation Statistics:\n")
+	sb.WriteString(fmt.Sprintf("- Turns removed from context: %d\n", a.truncStats.TurnsRemoved))
+	sb.WriteString(fmt.Sprintf("- Tool result chars saved: %d (~%d tokens)\n", a.truncStats.ToolCharsSaved, a.truncStats.ToolCharsSaved/4))
+	sb.WriteString(fmt.Sprintf("- Tool results truncated: %d\n", a.truncStats.ToolTruncatedCount))
+	sb.WriteString(fmt.Sprintf("- File read cache hits: %d\n", a.truncStats.CacheHits))
+	return sb.String()
 }
 
 func (a *Agent) executeToolWithPermission(ctx context.Context, tc llm.ToolCall, ch chan<- Event) (string, error) {

@@ -158,6 +158,14 @@ type Config struct {
 	// MaxAgentLoops limits the number of automatic continuation loops.
 	MaxAgentLoops int
 
+	// MaxHistoryTurns limits the number of conversation turns sent to the LLM.
+	// 0 means unlimited.
+	MaxHistoryTurns int
+
+	// MaxToolResultChars limits the size of tool result strings appended to history.
+	// 0 means unlimited.
+	MaxToolResultChars int
+
 	// ForcedTaskType overrides automatic classification when non-empty.
 	ForcedTaskType TaskType
 
@@ -196,6 +204,8 @@ func Load(envFile string) (*Config, error) {
 		DBPath:            getEnvDefault("DEVON_DB_PATH", ".devon/state.db"),
 		ContextWindowSize: getEnvInt("DEVON_CONTEXT_WINDOW_SIZE", 20),
 		MaxAgentLoops:     getEnvInt("DEVON_MAX_LOOPS", 10),
+		MaxHistoryTurns:   getEnvInt("DEVON_MAX_HISTORY_TURNS", 20),
+		MaxToolResultChars: getEnvInt("DEVON_MAX_TOOL_RESULT_CHARS", 4000),
 		Agents:            []AgentConfig{},
 		MaxImageSizeMB:    10,
 	}
@@ -224,6 +234,14 @@ func Load(envFile string) (*Config, error) {
 		}
 		if tc.Headless != nil {
 			cfg.Headless = *tc.Headless
+		}
+		if tc.Context != nil {
+			if tc.Context.MaxHistoryTurns > 0 {
+				cfg.MaxHistoryTurns = tc.Context.MaxHistoryTurns
+			}
+			if tc.Context.MaxToolResultChars > 0 {
+				cfg.MaxToolResultChars = tc.Context.MaxToolResultChars
+			}
 		}
 	}
 

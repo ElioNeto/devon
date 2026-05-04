@@ -504,6 +504,7 @@ func (m *appModel) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 	case cmd == "/clear":
 		m.messages = nil
 		m.toolRuns = nil
+		m.historyTurns = nil
 		m.logEvents = nil
 		m.scroll = 0
 		m.agent.ResetHistory()
@@ -515,10 +516,23 @@ func (m *appModel) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Chat limpo. Nova sessão iniciada."})
 		}
 
+	case cmd == "/usage" || cmd == "/cost":
+		var sb strings.Builder
+		if m.tracker != nil {
+			sb.WriteString(m.tracker.Format())
+			sb.WriteString("\n\n")
+		}
+		if m.agent != nil {
+			sb.WriteString(m.agent.UsageStats())
+		} else {
+			sb.WriteString("Agente não inicializado.")
+		}
+		m.messages = append(m.messages, chatMessage{Sender: "system", Content: sb.String()})
+
 	default:
 		m.messages = append(m.messages, chatMessage{
 			Sender:  "system",
-			Content: "Comando desconhecido. Disponíveis: /history, /load <id>, /clear",
+			Content: "Comando desconhecido. Disponíveis: /history, /load <id>, /clear, /usage",
 		})
 	}
 

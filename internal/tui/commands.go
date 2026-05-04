@@ -131,9 +131,17 @@ func (m *appModel) handleSlash(text string) {
 		m.fileChanges = nil
 		m.agent.ResetHistory()
 	case text == "/usage" || text == "/cost":
+		var sb strings.Builder
 		if m.tracker != nil {
-			m.popup = m.tracker.Format()
+			sb.WriteString(m.tracker.Format())
+			sb.WriteString("\n\n")
 		}
+		if m.agent != nil {
+			sb.WriteString(m.agent.UsageStats())
+		} else {
+			sb.WriteString("Agente não inicializado.")
+		}
+		m.popup = sb.String()
 	case strings.HasPrefix(text, "/load "):
 		id := strings.TrimSpace(strings.TrimPrefix(text, "/load"))
 		if ses, err := history.LoadSession(m.cfg.WorkDir, id); err == nil {

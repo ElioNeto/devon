@@ -137,7 +137,7 @@ func TestLoad_EmptyDir_Succeeds(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = os.Chdir(oldWd) }()
-	for _, k := range []string{"DEVON_API_KEY", "DEVON_MODEL", "DEVON_BASE_URL", "DEVON_MODE", "DEVON_MAX_TURNS", "DEVON_TIMEOUT"} {
+	for _, k := range []string{"DEVON_API_KEY", "DEVON_MODEL", "DEVON_BASE_URL", "DEVON_MODE", "DEVON_TIMEOUT"} {
 		os.Unsetenv(k)
 	}
 	os.Setenv("DEVON_API_KEY", "k")
@@ -166,8 +166,8 @@ func TestLoad_EmptyDir_Succeeds(t *testing.T) {
 	if cfg.Mode != ModeAuto {
 		t.Errorf("Mode = %v, want %v", cfg.Mode, ModeAuto)
 	}
-	if cfg.MaxTurns != 50 {
-		t.Errorf("MaxTurns = %d, want 50", cfg.MaxTurns)
+	if cfg.MaxAgentLoops != 10 {
+		t.Errorf("MaxAgentLoops = %d, want 10", cfg.MaxAgentLoops)
 	}
 }
 
@@ -293,6 +293,86 @@ func TestLoad_LocalURL_NoKeyRequired(t *testing.T) {
 	}
 	if cfg.Model != "m" {
 		t.Errorf("Model = %q, want %q", cfg.Model, "m")
+	}
+}
+
+func TestLoad_DEVON_MAX_HISTORY_TURNS(t *testing.T) {
+	tests := []struct {
+		name string
+		val  string
+		want int
+	}{
+		{"default when unset", "", 20},
+		{"explicit value", "10", 10},
+		{"invalid falls back to default", "abc", 20},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			os.Unsetenv("DEVON_MAX_HISTORY_TURNS")
+			if tc.val != "" {
+				os.Setenv("DEVON_MAX_HISTORY_TURNS", tc.val)
+				defer os.Unsetenv("DEVON_MAX_HISTORY_TURNS")
+			}
+			dir := t.TempDir()
+			oldWd, _ := os.Getwd()
+			if err := os.Chdir(dir); err != nil {
+				t.Fatal(err)
+			}
+			os.Setenv("DEVON_MODEL", "m")
+			os.Setenv("DEVON_BASE_URL", "http://localhost:11434/v1")
+			defer func() {
+				os.Unsetenv("DEVON_MODEL")
+				os.Unsetenv("DEVON_BASE_URL")
+				os.Chdir(oldWd)
+			}()
+			cfg, err := Load("")
+			if err != nil {
+				t.Fatalf("Load() error: %v", err)
+			}
+			if cfg.MaxHistoryTurns != tc.want {
+				t.Errorf("MaxHistoryTurns = %d, want %d", cfg.MaxHistoryTurns, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoad_DEVON_MAX_TOOL_RESULT_CHARS(t *testing.T) {
+	tests := []struct {
+		name string
+		val  string
+		want int
+	}{
+		{"default when unset", "", 4000},
+		{"explicit value", "2000", 2000},
+		{"invalid falls back to default", "abc", 4000},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			os.Unsetenv("DEVON_MAX_TOOL_RESULT_CHARS")
+			if tc.val != "" {
+				os.Setenv("DEVON_MAX_TOOL_RESULT_CHARS", tc.val)
+				defer os.Unsetenv("DEVON_MAX_TOOL_RESULT_CHARS")
+			}
+			dir := t.TempDir()
+			oldWd, _ := os.Getwd()
+			if err := os.Chdir(dir); err != nil {
+				t.Fatal(err)
+			}
+			os.Setenv("DEVON_MODEL", "m")
+			os.Setenv("DEVON_BASE_URL", "http://localhost:11434/v1")
+			defer func() {
+				os.Unsetenv("DEVON_MODEL")
+				os.Unsetenv("DEVON_BASE_URL")
+				os.Chdir(oldWd)
+			}()
+			cfg, err := Load("")
+			if err != nil {
+				t.Fatalf("Load() error: %v", err)
+			}
+			if cfg.MaxToolResultChars != tc.want {
+				t.Errorf("MaxToolResultChars = %d, want %d", cfg.MaxToolResultChars, tc.want)
+			}
+		})
 	}
 }
 

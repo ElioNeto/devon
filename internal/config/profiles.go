@@ -76,6 +76,12 @@ type WebConfig struct {
 	Backend string `toml:"backend"`
 }
 
+// ContextConfig configura o gerenciamento de contexto (sliding window, truncamento).
+type ContextConfig struct {
+	MaxHistoryTurns    int `toml:"max_history_turns"`
+	MaxToolResultChars int `toml:"max_tool_result_chars"`
+}
+
 // TomlConfig represents the structure of devon.toml.
 type TomlConfig struct {
 	Defaults struct {
@@ -91,6 +97,7 @@ type TomlConfig struct {
 	MCPServers    []MCPServerConfig   `toml:"mcp_servers"`
 	AgentRouting  *AgentRoutingConfig `toml:"agent_routing"`
 	Headless      *HeadlessConfig     `toml:"headless"`
+	Context       *ContextConfig      `toml:"context"`
 }
 
 // ResolveAgentRouting resolves profile names in AgentRoutingConfig to actual Profiles.
