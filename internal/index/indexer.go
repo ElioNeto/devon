@@ -32,7 +32,11 @@ type Config struct {
 	TopK int
 }
 
-// DefaultConfig returns the default indexer configuration.
+// DefaultConfig returns a Config populated with sensible defaults:
+//   - Extensions: .go, .md, .txt, .json, .yaml, .yml, .toml, .js, .ts, .py, .rb
+//   - Excludes: vendor/, node_modules/, .git/, dist/, build/, *.pb.go, third_party/
+//   - MaxFileSizeKB: 500
+//   - TopK: 5
 func DefaultConfig() Config {
 	return Config{
 		Extensions:    []string{".go", ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".js", ".ts", ".py", ".rb"},
@@ -95,75 +99,6 @@ func (c *Config) shouldIndex(path string) bool {
 	return false
 }
 
-// LoadGitignore loads gitignore patterns from .gitignore files.
-func LoadGitignore(path string) []string {
-	var patterns []string
-	dir := filepath.Dir(path)
-	for {
-		gitignore := filepath.Join(dir, ".gitignore")
-		if content, err := os.ReadFile(gitignore); err == nil {
-			for _, line := range strings.Split(string(content), "\n") {
-				line = strings.TrimSpace(line)
-				if line != "" && !strings.HasPrefix(line, "#") {
-					patterns = append(patterns, line)
-				}
-			}
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return patterns
-}
-
-// GitignoreMatcher matches paths against .gitignore patterns.
-type GitignoreMatcher struct {
-	patterns []string
-}
-
-// NewGitignoreMatcher creates a matcher from gitignore patterns.
-func NewGitignoreMatcher(patterns []string) *GitignoreMatcher {
-	return &GitignoreMatcher{patterns: patterns}
-}
-
-// ShouldIgnore checks if a path should be ignored.
-func (m *GitignoreMatcher) ShouldIgnore(relPath string) bool {
-	for _, pattern := range m.patterns {
-		if shouldIgnorePath(pattern, relPath) {
-			return true
-		}
-	}
-	return false
-}
-
-func shouldIgnorePath(pattern, path string) bool {
-	if strings.HasSuffix(pattern, "/") {
-		pattern = strings.TrimSuffix(pattern, "/")
-		if path == pattern || strings.HasPrefix(path, pattern+"/") {
-			return true
-		}
-		return false
-	}
-	if strings.Contains(pattern, "**") {
-		parts := strings.Split(pattern, "**")
-		if len(parts) == 2 {
-			start := strings.Trim(parts[0], "/")
-			end := strings.Trim(parts[1], "/")
-			if start != "" && end != "" {
-				return strings.HasPrefix(path, start) && strings.HasSuffix(path, end)
-			}
-		}
-	}
-	if strings.Contains(pattern, "*") {
-		p := strings.ReplaceAll(pattern, "*", ".*")
-		matched, _ := regexp.MatchString("^"+p+"$", filepath.Base(path))
-		return matched
-	}
-	return pattern == filepath.Base(path) || strings.Contains(path, pattern)
-}
-
 // Indexer handles file indexing with persistence.
 type Indexer struct {
 	config    Config
@@ -178,11 +113,6 @@ func NewIndexer(workDir string, config Config) (*Indexer, error) {
 		config:    config,
 		indexPath: NewIndex(),
 	}, nil
-}
-
-// Load loads an existing index from disk (placeholder for future SQLite implementation).
-func (i *Indexer) Load() error {
-	return nil
 }
 
 // AddFile indexes a single file. Returns true if the file was indexed.

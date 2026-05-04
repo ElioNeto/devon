@@ -1,5 +1,28 @@
-// Package memory fornece uma camada de memória semântica para o agente.
-// Persiste fatos sobre o projeto e recupera contexto relevante para o system prompt.
+// Package memory provides a persistent semantic memory layer for the Devon agent.
+//
+// It stores facts about the project (conventions, architecture decisions, errors, etc.)
+// and retrieves relevant context for injection into the system prompt.
+//
+// Types:
+//   - Manager — main type that manages fact persistence and retrieval.
+//   - Fact — a simple fact returned by the public APIs (ID, Category, Content).
+//   - FactWithID — a fact with an associated database ID (used internally via db.FactRow).
+//
+// Public functions:
+//   - New — creates a new Manager with the given store and project ID.
+//   - Remember — saves a fact to the facts table.
+//   - Recall — retrieves facts filtered by category and/or keyword.
+//   - Clear — removes all facts for a project.
+//   - ContextFor — returns Markdown-formatted relevant facts for system prompt injection.
+//   - ProjectIDFromWorkDir — computes a truncated SHA1 hash from a work directory path.
+//
+// Examples:
+//
+//	store, _ := db.New(":memory:")
+//	mgr := memory.New(store, "myproject")
+//	_ = mgr.Remember(ctx, "myproject", "convention", "use fmt.Errorf with %w")
+//	ctxStr, _ := mgr.ContextFor(ctx, "myproject", "error handling")
+//	fmt.Println(ctxStr)
 package memory
 
 import (
@@ -12,13 +35,13 @@ import (
 	"github.com/ElioNeto/devon/internal/db"
 )
 
-// Manager gerencia fatos do projeto: persistência, recuperação e contexto para prompts.
+// Manager manages facts for a project: persistence, retrieval, and context for prompts.
 type Manager struct {
 	store     db.Store
 	projectID string
 }
 
-// New cria um novo Manager com o store fornecido.
+// New creates a new Manager with the provided store.
 func New(store db.Store, projectID string) *Manager {
 	return &Manager{
 		store:     store,
@@ -26,20 +49,20 @@ func New(store db.Store, projectID string) *Manager {
 	}
 }
 
-// Fact representa um fato simples para retorno das APIs de memória.
+// Fact represents a simple fact returned by the memory APIs.
 type Fact struct {
 	ID      int64
 	Category string
 	Content string
 }
 
-// ContextFor retorna uma string Markdown com os fatos relevantes para
-// injetar no system prompt. Busca na tabela facts por project_id filtrando
-// por keywords do prompt (tokenização simples por espaço).
+// ContextFor returns a Markdown string with relevant facts for
+// injection into the system prompt. It queries the facts table by project_id
+// filtering by prompt keywords (simple space-delimited tokenization).
 //
 // projectID deve ser um hash SHA1 truncado de 8 chars do WorkDir.
 func (m *Manager) ContextFor(ctx context.Context, projectID, prompt string) (string, error) {
-	// Tokenizar prompt por espaço
+	// Tokenize prompt by spaces
 	words := strings.Fields(strings.ToLower(prompt))
 	if len(words) == 0 {
 		return "", nil

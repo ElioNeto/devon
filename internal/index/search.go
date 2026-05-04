@@ -3,21 +3,26 @@ package index
 import (
 	"math"
 	"regexp"
+	"sort"
 	"strings"
 )
 
-// Searcher provides search functionality over indexed documents.
+// Searcher provides search functionality over an existing Index.
+// It wraps the Index methods with nil-guard and offers additional
+// search strategies like regex matching and prefix search.
 type Searcher struct {
 	index *Index
 }
 
-// NewSearcher creates a new searcher for the given index.
+// NewSearcher creates a new Searcher backed by the given Index.
+// The index must be non-nil for meaningful results (nil-safe methods return zero values).
 func NewSearcher(index *Index) *Searcher {
 	return &Searcher{index: index}
 }
 
-// Search performs a semantic search over the index.
-// It returns documents sorted by BM25 relevance score.
+// Search performs a BM25 semantic search over the index.
+// It tokenizes the query and returns documents sorted by descending relevance score.
+// If the index is nil, it returns nil.
 func (s *Searcher) Search(query string, topK int) []DocumentWithScore {
 	if s.index == nil {
 		return nil
@@ -25,7 +30,8 @@ func (s *Searcher) Search(query string, topK int) []DocumentWithScore {
 	return s.index.Search(query, topK)
 }
 
-// SearchByPath returns a document by its path.
+// SearchByPath returns a single Document identified by its file path,
+// or nil if the path is not indexed.
 func (s *Searcher) SearchByPath(path string) *Document {
 	if s.index == nil {
 		return nil
@@ -33,7 +39,9 @@ func (s *Searcher) SearchByPath(path string) *Document {
 	return s.index.GetDocument(path)
 }
 
-// SearchRegex searches for documents containing any of the terms in a regex pattern.
+// SearchRegex searches for indexed documents whose tokens match a given regex pattern.
+// It scores documents by TF-IDF of matching terms. If topK is 0, all matches are returned.
+// Returns nil if the index is nil or the pattern is invalid.
 func (s *Searcher) SearchRegex(pattern string, topK int) []DocumentWithScore {
 	if s.index == nil {
 		return nil
@@ -57,7 +65,10 @@ func (s *Searcher) SearchRegex(pattern string, topK int) []DocumentWithScore {
 				docFreq := s.index.docFreqs[term]
 				tf := s.index.termFreqs[doc.Path][term]
 				if tf > 0 {
-					score += float64(tf) * mathLog(float64(s.index.totalDocs)/float64(docFreq))
+					ratio := float64(s.index.totalDocs) / float64(docFreq)
+					if ratio > 0 {
+						score += float64(tf) * math.Log(ratio)
+					}
 					matchedTokens++
 				}
 			}
@@ -72,7 +83,9 @@ func (s *Searcher) SearchRegex(pattern string, topK int) []DocumentWithScore {
 		}
 	}
 
-	sortResults(results)
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
 
 	if topK > 0 && len(results) > topK {
 		results = results[:topK]
@@ -81,7 +94,8 @@ func (s *Searcher) SearchRegex(pattern string, topK int) []DocumentWithScore {
 	return results
 }
 
-// SearchPrefix searches for documents containing terms that start with a prefix.
+// SearchPrefix searches for documents containing terms that start with the given prefix.
+// It performs individual BM25 searches for each matching term and deduplicates results.
 func (s *Searcher) SearchPrefix(prefix string, topK int) []DocumentWithScore {
 	if s.index == nil {
 		return nil
@@ -110,34 +124,13 @@ func (s *Searcher) SearchPrefix(prefix string, topK int) []DocumentWithScore {
 		}
 	}
 
-	sortResults(results)
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
 
 	if topK > 0 && len(results) > topK {
 		results = results[:topK]
 	}
 
 	return results
-}
-
-// sortResults sorts results by score descending.
-func sortResults(results []DocumentWithScore) {
-	for i := 0; i < len(results)-1; i++ {
-		for j := i + 1; j < len(results); j++ {
-			if results[j].Score > results[i].Score {
-				results[i], results[j] = results[j], results[i]
-			}
-		}
-	}
-}
-
-// mathLog computes log(x+1) safely.
-func mathLog(x float64) float64 {
-	if x <= 0 {
-		return 0
-	}
-	return mathLogUnsafe(x)
-}
-
-func mathLogUnsafe(x float64) float64 {
-	return math.Log(x + 1)
 }

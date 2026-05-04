@@ -10,18 +10,18 @@ import (
 	"github.com/ElioNeto/devon/internal/permissions"
 )
 
-// RememberTool — name: "remember"
-// Salva um fato no banco usando Manager.Remember.
-// Permission: PermRead (não modifica arquivos, só o banco).
+// RememberTool is a tool that saves a fact to the semantic memory store.
+// Name: "remember"
+// Permission: PermRead (it only writes to the database, not to the filesystem).
 type RememberTool struct {
 	Manager   *Manager
 	ProjectID string
 }
 
-// Name retorna o nome da ferramenta.
+// Name returns the tool name: "remember".
 func (t *RememberTool) Name() string { return "remember" }
 
-// Description descreve o propósito da ferramenta.
+// Description returns the purpose and parameter schema of the remember tool.
 func (t *RememberTool) Description() string {
 	return `Salva um fato sobre o projeto para memória semântica.
 
@@ -31,12 +31,13 @@ Args: {
 }`
 }
 
-// Schema retorna o JSON Schema dos parâmetros.
+// Schema returns the JSON Schema for the remember tool parameters.
 func (t *RememberTool) Schema() json.RawMessage {
 	return json.RawMessage(`{"type":"object","properties":{"category":{"type":"string","description":"categoria do fato"},"content":{"type":"string","description":"conteúdo do fato a ser salvo"}},"required":["category","content"]}`)
 }
 
-// Execute executa a ferramenta, salvando o fato.
+// Execute runs the remember tool, saving a fact via Manager.Remember.
+// It expects "category" and "content" in the JSON params.
 func (t *RememberTool) Execute(ctx context.Context, params json.RawMessage) (string, error) {
 	var req struct {
 		Category string `json:"category"`
@@ -54,23 +55,23 @@ func (t *RememberTool) Execute(ctx context.Context, params json.RawMessage) (str
 	return fmt.Sprintf("Saved fact [%s]: %s", req.Category, req.Content), nil
 }
 
-// Permission retorna o nível de permissão necessário.
+// Permission returns the permission level required to use this tool.
 func (t *RememberTool) Permission() permissions.PermissionLevel {
 	return permissions.PermRead
 }
 
-// RecallTool — name: "recall"
-// Retorna lista formatada de fatos.
+// RecallTool is a tool that retrieves facts from semantic memory.
+// Name: "recall"
 // Permission: PermRead.
 type RecallTool struct {
 	Manager   *Manager
 	ProjectID string
 }
 
-// Name retorna o nome da ferramenta.
+// Name returns the tool name: "recall".
 func (t *RecallTool) Name() string { return "recall" }
 
-// Description descreve o propósito da ferramenta.
+// Description returns the purpose and parameter schema of the recall tool.
 func (t *RecallTool) Description() string {
 	return `Retrieves facts from semantic memory.
 
@@ -80,12 +81,13 @@ Args: {
 }`
 }
 
-// Schema retorna o JSON Schema dos parâmetros.
+// Schema returns the JSON Schema for the recall tool parameters.
 func (t *RecallTool) Schema() json.RawMessage {
 	return json.RawMessage(`{"type":"object","properties":{"category":{"type":"string","description":"filter by category"},"keyword":{"type":"string","description":"search keyword"}}}`)
 }
 
-// Execute executa a ferramenta, buscando fatos.
+// Execute runs the recall tool, fetching facts via Manager.Recall.
+// It accepts optional "category" and "keyword" params. Returns a formatted string of facts.
 func (t *RecallTool) Execute(ctx context.Context, params json.RawMessage) (string, error) {
 	var req struct {
 		Category string `json:"category"`
@@ -118,7 +120,7 @@ func (t *RecallTool) Execute(ctx context.Context, params json.RawMessage) (strin
 	return strings.TrimSuffix(b.String(), "\n"), nil
 }
 
-// Permission retorna o nível de permissão necessário.
+// Permission returns the permission level required to use this tool.
 func (t *RecallTool) Permission() permissions.PermissionLevel {
 	return permissions.PermRead
 }

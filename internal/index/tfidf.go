@@ -1,8 +1,4 @@
-// Package index provides semantic indexing and search capabilities using TF-IDF and BM25.
-//
-// The index uses a term frequency-inverse document frequency scoring algorithm
-// to find relevant files based on search queries. It's implemented in pure Go
-// with no external dependencies beyond the SQLite database.
+// Package-level documentation is in doc.go.
 package index
 
 import (
@@ -13,31 +9,32 @@ import (
 	"unicode"
 )
 
-// Token represents a single token from text.
+// Token represents a single token extracted from text during tokenization.
 type Token struct {
-	Text     string // normalized token text
-	Offset   int    // original character offset
-	Position int    // token position in document
+	Text     string // normalized token text (lowercase, no punctuation)
+	Offset   int    // original byte offset in the source text
+	Position int    // ordinal position of the token in the document (0-based)
 }
 
-// Document represents a document in the index.
+// Document represents an indexed document, typically a source file.
 type Document struct {
-	ID       string    // unique document ID (file path)
-	Path     string    // file path relative to workspace
-	Tokens   []Token   // tokens in the document
-	Length   int       // number of tokens
-	WordLen  float64   // effective length (after stopping)
-	Modified int64     // last modified timestamp (Unix epoch)
+	ID       string    // unique document identifier (file path)
+	Path     string    // file path relative to the workspace root
+	Tokens   []Token   // extracted tokens from the document content
+	Length   int       // total number of tokens in the document
+	WordLen  float64   // effective word count (after stopword removal)
+	Modified int64     // last modified timestamp as Unix epoch
 }
 
-// DocumentWithScore is a document with its BM25 relevance score.
+// DocumentWithScore pairs a Document with its BM25 relevance score and match count.
 type DocumentWithScore struct {
 	Document
-	Score         float64
-	MatchedTokens int
+	Score         float64 // BM25 relevance score for the query
+	MatchedTokens int     // number of query tokens that matched in this document
 }
 
-// Index represents a searchable TF-IDF index.
+// Index is an in-memory searchable TF-IDF index that supports BM25 scoring.
+// It is safe for concurrent access via RWMutex.
 type Index struct {
 	mu          sync.RWMutex
 	documents   map[string]*Document
@@ -381,23 +378,4 @@ func (i *Index) GetTerms() []string {
 		terms = append(terms, term)
 	}
 	return terms
-}
-
-// BuildRegex creates a regex pattern string from terms.
-func BuildRegex(terms []string) string {
-	if len(terms) == 0 {
-		return ""
-	}
-
-	patterns := make([]string, len(terms))
-	for i, term := range terms {
-		escaped := term
-		specialChars := []string{".", "^", "$", "*", "+", "?", "(", ")", "[", "]", "{", "}", "|", "\\"}
-		for _, ch := range specialChars {
-			escaped = strings.ReplaceAll(escaped, ch, "\\"+ch)
-		}
-		patterns[i] = "\\b" + escaped + "\\b"
-	}
-
-	return strings.Join(patterns, "|")
 }

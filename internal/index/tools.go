@@ -4,18 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/ElioNeto/devon/internal/permissions"
 )
 
-// SearchCodebaseTool is a tool that allows the agent to search the codebase
-// using semantic search powered by TF-IDF/BM25.
+// SearchCodebaseTool is an agent tool that enables semantic codebase search.
+// It uses TF-IDF/BM25 to find relevant files based on natural language queries.
+// Register this tool so the LLM can invoke "search_codebase" during conversations.
 type SearchCodebaseTool struct {
 	indexer *Indexer
 	topK    int
 }
 
-// NewSearchCodebaseTool creates a new search_codebase tool.
+// NewSearchCodebaseTool creates a SearchCodebaseTool backed by the given indexer.
+// If topK is <= 0, it defaults to 5.
 func NewSearchCodebaseTool(indexer *Indexer, topK int) *SearchCodebaseTool {
 	if topK <= 0 {
 		topK = 5
@@ -95,11 +98,10 @@ func (t *SearchCodebaseTool) Execute(ctx context.Context, params json.RawMessage
 		return "No matching files found.", nil
 	}
 
-	var sb fmt.Stringer = &stringsBuilder{}
+	var sb strings.Builder
 	for i, result := range results {
 		lines := result.Length
-		sbStringer := sb.(*stringsBuilder)
-		sbStringer.WriteString(fmt.Sprintf("%d. %s (score: %.2f) — %d lines\n",
+		sb.WriteString(fmt.Sprintf("%d. %s (score: %.2f) — %d lines\n",
 			i+1, result.Path, result.Score, lines))
 	}
 
@@ -109,18 +111,4 @@ func (t *SearchCodebaseTool) Execute(ctx context.Context, params json.RawMessage
 // Permission returns the permission level required for this tool.
 func (t *SearchCodebaseTool) Permission() permissions.PermissionLevel {
 	return permissions.PermRead
-}
-
-// stringsBuilder is a helper for building strings.
-type stringsBuilder struct {
-	str string
-}
-
-func (b *stringsBuilder) WriteString(s string) (int, error) {
-	b.str += s
-	return len(s), nil
-}
-
-func (b *stringsBuilder) String() string {
-	return b.str
 }
