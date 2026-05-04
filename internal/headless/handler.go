@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"sync/atomic"
 
 	agentpkg "github.com/ElioNeto/devon/internal/agent"
 	"github.com/ElioNeto/devon/internal/config"
@@ -15,13 +14,12 @@ import (
 	"github.com/ElioNeto/devon/internal/tools"
 )
 
-// agentRun is a helper that creates an agent, runs it with the given prompt,
-// and streams events to the provided channel. The events channel is closed
-// when the agent finishes.
-func agentRun(ctx context.Context, cfg *config.Config, registry *tools.Registry, router *llm.AgentRouter, prompt string, eventsCh chan<- agentEvent) {
+// agentRun is a helper that creates an agent with the given LLM client, runs it
+// with the given prompt, and streams events to the provided channel. The events
+// channel is closed when the agent finishes.
+func agentRun(ctx context.Context, client llm.Streamer, cfg *config.Config, registry *tools.Registry, router *llm.AgentRouter, prompt string, eventsCh chan<- agentEvent) {
 	defer close(eventsCh)
 
-	client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
 	agent := agentpkg.New(cfg, client, registry, &noopStore{}, "headless-agent", nil, cfg.WorkDir, router)
 	if cfg.ForcedTaskType != "" {
 		agent.SetForcedTaskType(cfg.ForcedTaskType)
@@ -51,7 +49,7 @@ func RegisterHandlers(s *Server, cfg *config.Config, registry *tools.Registry, r
 		handleHealth(w, r)
 	})
 	s.mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		handleStatus(w, r)
+		handleStatus(s, w, r)
 	})
 }
 
@@ -100,13 +98,19 @@ func handlePrompt(s *Server, cfg *config.Config, registry *tools.Registry, route
 	eventsCh := make(chan agentEvent, 64)
 
 	// Update agent status before starting the run
-	agentStatus.running.Store(true)
-	agentStatus.sessionID.Store(req.SessionID)
-	agentStatus.model.Store(cfgCopy.Model)
-	agentStatus.taskType.Store(string(cfgCopy.ForcedTaskType))
+	s.status.running.Store(true)
+	s.status.sessionID.Store(req.SessionID)
+	s.status.model.Store(cfgCopy.Model)
+	s.status.taskType.Store(string(cfgCopy.ForcedTaskType))
+
+	// Create LLM client (use testClient if set, for testing)
+	client := s.testClient
+	if client == nil {
+		client = llm.New(cfgCopy.APIKey, cfgCopy.BaseURL, cfgCopy.Model, cfgCopy.Timeout)
+	}
 
 	// Start agent in background (use cfgCopy to avoid data race on cfg.Mode)
-	go agentRun(ctx, &cfgCopy, registry, router, req.Prompt, eventsCh)
+	go agentRun(ctx, client, &cfgCopy, registry, router, req.Prompt, eventsCh)
 
 	// Stream events via SSE
 	for ev := range eventsCh {
@@ -186,7 +190,7 @@ func handlePrompt(s *Server, cfg *config.Config, registry *tools.Registry, route
 	}
 
 	// Agent run finished
-	agentStatus.running.Store(false)
+	s.status.running.Store(false)
 }
 
 // handleRespond handles POST /api/respond — unblocks an action_required event.
@@ -231,26 +235,12 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// agentStatus stores the current agent status (set by the handler).
-var agentStatus struct {
-	running   atomic.Bool
-	sessionID atomic.Value // string
-	model     atomic.Value // string
-	taskType  atomic.Value // string
-}
-
-func init() {
-	agentStatus.sessionID.Store("")
-	agentStatus.model.Store("")
-	agentStatus.taskType.Store("")
-}
-
 // handleStatus handles GET /api/status.
-func handleStatus(w http.ResponseWriter, r *http.Request) {
-	running := agentStatus.running.Load()
-	sessionID, _ := agentStatus.sessionID.Load().(string)
-	model, _ := agentStatus.model.Load().(string)
-	taskType, _ := agentStatus.taskType.Load().(string)
+func handleStatus(s *Server, w http.ResponseWriter, r *http.Request) {
+	running := s.status.running.Load()
+	sessionID, _ := s.status.sessionID.Load().(string)
+	model, _ := s.status.model.Load().(string)
+	taskType, _ := s.status.taskType.Load().(string)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"running":    running,

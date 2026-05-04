@@ -151,6 +151,7 @@ Exit codes:
 	}
 	runCmd.Flags().String("mode", "auto", "Modo de permissão: auto | safe | yolo")
 	runCmd.Flags().Bool("no-cache", false, "Ignora o cache de respostas do LLM")
+	runCmd.Flags().Bool("dry-run", false, "Exibe o payload que seria enviado ao LLM sem enviar a requisição")
 	root.AddCommand(runCmd)
 
 	// Subcomando index
@@ -339,9 +340,25 @@ func runTask(cmd *cobra.Command, args []string) error {
 	}
 
 	noCache, _ := cmd.Flags().GetBool("no-cache")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
+
+	if dryRun {
+		client := llm.New(cfg.APIKey, cfg.BaseURL, cfg.Model, cfg.Timeout)
+		registry := initMCPTools(ctx, cfg, slog.Default())
+		router := buildAgentRouter(cfg)
+
+		fakeDB := &fakeDB{}
+		agent := agentpkg.New(cfg, client, registry, fakeDB, "default-agent", nil, "", router)
+		if cfg.ForcedTaskType != "" {
+			agent.SetForcedTaskType(cfg.ForcedTaskType)
+		}
+
+		fmt.Fprint(cmd.OutOrStdout(), agent.FormatPayload(ctx, task))
+		return nil
+	}
 
 	result, err := runOneShot(ctx, cfg, task, noCache)
 	if err != nil {
@@ -695,7 +712,10 @@ func runHeadless(cmd *cobra.Command, _ []string) error {
 	router := buildAgentRouter(cfg)
 
 	// Create headless server
-	srv := headlesspkg.NewServer(cfg.Headless.Host, cfg.Headless.Port)
+	srv, err := headlesspkg.NewServer(cfg.Headless.Host, cfg.Headless.Port)
+	if err != nil {
+		return fmt.Errorf("headless: invalid server config: %w", err)
+	}
 
 	// Register HTTP handlers
 	headlesspkg.RegisterHandlers(srv, cfg, registry, router)

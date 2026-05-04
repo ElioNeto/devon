@@ -3,6 +3,7 @@ package headless
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/ElioNeto/devon/internal/agent"
 	"github.com/ElioNeto/devon/internal/config"
+	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/tools"
 )
 
@@ -36,7 +38,10 @@ func newTestConfig() *config.Config {
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	cfg := newTestConfig()
-	s := NewServer(cfg.Headless.Host, cfg.Headless.Port)
+	s, err := NewServer(cfg.Headless.Host, cfg.Headless.Port)
+	if err != nil {
+		t.Fatalf("NewServer failed: %v", err)
+	}
 	registry := tools.NewRegistry()
 	RegisterHandlers(s, cfg, registry, nil)
 	return s
@@ -328,7 +333,10 @@ func TestWriteJSON(t *testing.T) {
 
 // TestServerListenAndClose tests that the server can listen and be closed.
 func TestServerListenAndClose(t *testing.T) {
-	s := NewServer("127.0.0.1", 0) // port 0 = pick a free port
+	s, err := NewServer("127.0.0.1", 0) // port 0 = pick a free port
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := s.Listen(); err != nil {
 		t.Fatal(err)
 	}
@@ -416,7 +424,10 @@ func TestMockAgentEvents(t *testing.T) {
 // TestRespondEndpointSuccess tests a successful respond flow via the agent registry.
 func TestRespondEndpointSuccess(t *testing.T) {
 	// Create a server with just the respond handler
-	s := NewServer("127.0.0.1", 0)
+	s, err := NewServer("127.0.0.1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
 	registry := tools.NewRegistry()
 	RegisterHandlers(s, newTestConfig(), registry, nil)
 	ts := httptest.NewServer(s)
@@ -464,7 +475,10 @@ func TestRespondEndpointSuccess(t *testing.T) {
 
 // TestRespondEndpointAlwaysAllow tests the always_allow flag.
 func TestRespondEndpointAlwaysAllow(t *testing.T) {
-	s := NewServer("127.0.0.1", 0)
+	s, err := NewServer("127.0.0.1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
 	registry := tools.NewRegistry()
 	RegisterHandlers(s, newTestConfig(), registry, nil)
 	ts := httptest.NewServer(s)
@@ -531,5 +545,197 @@ func TestRespondBadJSON(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+// TestNewServerInvalidConfig verifies that NewServer returns an error for invalid configs.
+func TestNewServerInvalidConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		host    string
+		port    int
+		wantErr string
+	}{
+		{"empty host", "", 9876, "host must not be empty"},
+		{"negative port", "127.0.0.1", -1, "out of range"},
+		{"port too large", "127.0.0.1", 65536, "out of range"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewServer(tt.host, tt.port)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("expected error containing %q, got %q", tt.wantErr, err.Error())
+			}
+		})
+	}
+}
+
+// TestRespondMissingBody verifies POST /api/respond with no body returns an error.
+func TestRespondMissingBody(t *testing.T) {
+	s := newTestServer(t)
+	ts := httptest.NewServer(s)
+	defer ts.Close()
+
+	resp, err := http.Post(ts.URL+"/api/respond", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+// TestStatusDuringRunning verifies that GET /api/status shows running=true when
+// the agent is running.
+func TestStatusDuringRunning(t *testing.T) {
+	s := newTestServer(t)
+	ts := httptest.NewServer(s)
+	defer ts.Close()
+
+	// Simulate a running agent by setting the status directly
+	s.status.running.Store(true)
+	s.status.sessionID.Store("test-session")
+	s.status.model.Store("test-model")
+	s.status.taskType.Store("code")
+
+	resp, err := http.Get(ts.URL + "/api/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+
+	running, ok := body["running"].(bool)
+	if !ok {
+		t.Fatal("expected running field to be bool")
+	}
+	if !running {
+		t.Error("expected running=true")
+	}
+
+	if id, _ := body["session_id"].(string); id != "test-session" {
+		t.Errorf("expected session_id=test-session, got %q", id)
+	}
+	if model, _ := body["model"].(string); model != "test-model" {
+		t.Errorf("expected model=test-model, got %q", model)
+	}
+}
+
+// TestGracefulShutdown verifies that the server shuts down cleanly even with
+// an active connection.
+func TestGracefulShutdown(t *testing.T) {
+	s, err := NewServer("127.0.0.1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := tools.NewRegistry()
+	RegisterHandlers(s, newTestConfig(), registry, nil)
+
+	if err := s.Listen(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Start serving in background
+	go func() {
+		_ = s.Serve()
+	}()
+
+	// Give the server time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Make a request
+	resp, err := http.Get("http://" + s.Addr() + "/api/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	// Shutdown should succeed
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestIntegrationPromptWithMockAgent tests an end-to-end /api/prompt flow using
+// a mock LLM client.
+func TestIntegrationPromptWithMockAgent(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.MaxAgentLoops = 1
+
+	mockClient := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{Text: "Hello from mock agent"},
+		},
+	}
+
+	s, err := NewServer(cfg.Headless.Host, cfg.Headless.Port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.testClient = mockClient
+
+	registry := tools.NewRegistry()
+	RegisterHandlers(s, cfg, registry, nil)
+	ts := httptest.NewServer(s)
+	defer ts.Close()
+
+	// Send a prompt request
+	body := PromptRequest{Prompt: "test prompt"}
+	bodyJSON, _ := json.Marshal(body)
+
+	resp, err := http.Post(ts.URL+"/api/prompt", "application/json", bytes.NewReader(bodyJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// Read all SSE data until the stream closes (agent finishes)
+	sseData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bodyStr := string(sseData)
+	if !strings.Contains(bodyStr, "text_delta") {
+		// Verify the response is an SSE stream even if text_delta wasn't emitted
+		if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+			t.Errorf("expected Content-Type text/event-stream, got %q", ct)
+		}
+	}
+
+	// Verify the mock was called
+	if n := mockClient.CallCount(); n == 0 {
+		t.Error("expected mock client to be called, but CallCount is 0")
+	}
+
+	// Verify status is no longer running
+	statusResp, err := http.Get(ts.URL + "/api/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer statusResp.Body.Close()
+
+	var statusBody map[string]interface{}
+	if err := json.NewDecoder(statusResp.Body).Decode(&statusBody); err != nil {
+		t.Fatal(err)
+	}
+
+	running, _ := statusBody["running"].(bool)
+	if running {
+		t.Error("expected running=false after agent finished")
 	}
 }

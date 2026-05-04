@@ -9,7 +9,26 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ElioNeto/devon/internal/llm"
 )
+
+// agentStatusData holds the current status of a running agent session.
+// It is stored on the Server struct for proper encapsulation.
+type agentStatusData struct {
+	running   atomic.Bool
+	sessionID atomic.Value // string
+	model     atomic.Value // string
+	taskType  atomic.Value // string
+}
+
+func newAgentStatusData() agentStatusData {
+	var s agentStatusData
+	s.sessionID.Store("")
+	s.model.Store("")
+	s.taskType.Store("")
+	return s
+}
 
 // Server is an HTTP server that provides SSE-based endpoints for CI/CD and
 // external clients to interact with the Devon agent.
@@ -22,6 +41,11 @@ type Server struct {
 	mux    *http.ServeMux
 	mu     sync.Mutex
 	wg     sync.WaitGroup
+	status agentStatusData
+
+	// testClient, if set, overrides the LLM client created in handlePrompt.
+	// Used for testing only.
+	testClient llm.Streamer
 }
 
 // agentRegistry holds references to active agent sessions so that the
@@ -80,15 +104,23 @@ func (s *Server) handler() http.Handler {
 	return s.mux
 }
 
-// NewServer creates a new headless HTTP server.
-func NewServer(host string, port int) *Server {
+// NewServer creates a new headless HTTP server. It validates the host and port,
+// returning an error if either is invalid.
+func NewServer(host string, port int) (*Server, error) {
+	if host == "" {
+		return nil, fmt.Errorf("headless: host must not be empty")
+	}
+	if port < 0 || port > 65535 {
+		return nil, fmt.Errorf("headless: port %d out of range (0-65535)", port)
+	}
 	mux := http.NewServeMux()
 	return &Server{
 		host:   host,
 		port:   port,
 		agents: newAgentRegistry(),
 		mux:    mux,
-	}
+		status: newAgentStatusData(),
+	}, nil
 }
 
 // Listen starts listening on the configured address. Returns an error if the
