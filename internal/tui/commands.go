@@ -266,10 +266,10 @@ func (m *appModel) finalizeTurn() {
 		toolSummary += tr.Name + " "
 	}
 
-	// Log the complete agent response truncated
-	if reply != "" {
-		m.appendLog("agent", truncate(reply, 80), "")
-	}
+	// NOTE: The full agent reply was already logged by the turn_done handler
+	// in processAgentEvent. Do NOT add another appendLog here — it would
+	// duplicate the log line. The reply variable is still needed below for
+	// historyTurns.
 
 	m.historyTurns = append(m.historyTurns, historyTurn{
 		UserPrompt:  prompt,

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ElioNeto/devon/internal/agent"
 	"github.com/ElioNeto/devon/internal/config"
+	"github.com/ElioNeto/devon/internal/cost"
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/tools"
 	tea "github.com/charmbracelet/bubbletea"
@@ -507,6 +508,32 @@ func TestTurnDoneSummary_LoopConcluido(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected log event 'loop concluído em 3 turnos' when Summary is set")
+	}
+}
+
+func TestTurnDoneLogDeduplication(t *testing.T) {
+	// finalizeTurn() needs a tracker for token tracking
+	m := appModel{running: true, tracker: cost.NewSession("test-model")}
+	// Simulate a multi-token agent response: first token, second token, then done
+	m.processAgentEvent(agent.Event{Type: "text", Text: "Hello, "})
+	m.processAgentEvent(agent.Event{Type: "text", Text: "world!"})
+
+	// turn_done should log summary + full agent reply, but NOT a third line
+	m.processAgentEvent(agent.Event{Type: "turn_done", Summary: "resposta enviada"})
+	m.finalizeTurn()
+
+	// Expected log events:
+	//   1. "agent" + "Hello, "           (first token)
+	//   2. "ok"    + "resposta enviada"   (turn_done summary)
+	//   3. "agent" + "Hello, world!"      (turn_done full reply)
+	// Total: 3
+	// CRITICAL: should NOT be 4 (would mean finalizeTurn also logged the reply)
+	if len(m.logEvents) != 3 {
+		t.Fatalf("expected 3 log events, got %d: %+v", len(m.logEvents), m.logEvents)
+	}
+	// Verify the third event is the full reply
+	if m.logEvents[2].Actor != "agent" || m.logEvents[2].Msg != "Hello, world!" {
+		t.Errorf("expected agent log 'Hello, world!', got %+v", m.logEvents[2])
 	}
 }
 
