@@ -121,12 +121,10 @@ func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentEventMsg:
 		ev := agent.Event(msg)
 
-		// Intercept turn_done: check agentic loop, finalize or continue
+		// Intercept turn_done: emit log events via processAgentEvent, then persist state
 		if ev.Type == "turn_done" {
-			if m.shouldContinueAgenticLoop() {
-				return m, m.continueAgentLoop()
-			}
-			m.finalizeTurn()
+			m.processAgentEvent(ev) // emit log events (testes passando, agent reply)
+			m.finalizeTurn()         // persist state (historyTurns, session, cleanup)
 			return m, m.spinner.Tick
 		}
 
@@ -146,39 +144,18 @@ func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.spinner.Tick
 
+	// ── Cursor blink toggle ────────────────────────────────────────────
+	case cursorBlinkMsg:
+		m.cursorVisible = !m.cursorVisible
+		return m, m.cursorBlinkCmd()
+
 	// ── Agent channel closed ────────────────────────────────────────────
 	case agentDoneMsg:
+		m.isGenerating = false
 		m.agentCh = nil
 		if m.running {
 			m.finalizeTurn()
 		}
-		return m, nil
-
-	// ── Agentic loop continuation ───────────────────────────────────────
-	case agentContinueMsg:
-		if m.currentLoopCount >= m.maxAgentLoops {
-			m.appendLog("system", fmt.Sprintf("Loop agentic atingiu o limite máximo (%d)", m.maxAgentLoops), "")
-			m.finalizeTurn()
-			return m, nil
-		}
-		return m, tea.Batch(m.spinner.Tick, m.continueAgentLoop())
-
-	// ── Batch result (kept for test compatibility) ──────────────────────
-	case agentResult:
-		for _, ev := range msg.events {
-			m.processAgentEvent(ev)
-		}
-		if m.session != nil {
-			_ = history.SaveMessages(m.cfg.WorkDir, m.session.ID, m.agentMessages(), &m.session.Usage)
-		}
-		total := m.tracker.TotalInputTokens + m.tracker.TotalOutputTokens
-		m.tokenPerTurn = append(m.tokenPerTurn, total)
-		if m.cancel != nil {
-			m.cancel()
-			m.cancel = nil
-		}
-		m.running = false
-		m.toolRuns = nil
 		return m, nil
 
 	case spinner.TickMsg:
@@ -197,6 +174,19 @@ func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
+	case "ctrl+a":
+		ru := []rune(m.input)
+		// Find start of current line (scan backward for \n)
+		lineStart := 0
+		for i := m.cursor - 1; i >= 0; i-- {
+			if ru[i] == '\n' {
+				lineStart = i + 1
+				break
+			}
+		}
+		m.cursor = lineStart
+		return m, nil
+
 	case "ctrl+c":
 		if m.running && m.cancel != nil {
 			m.cancel()
@@ -218,6 +208,10 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "ctrl+k":
+		m.deleteToEnd()
+		return m, nil
+
+	case "ctrl+n":
 		m.messages = nil
 		m.toolRuns = nil
 		m.logEvents = nil
@@ -338,8 +332,21 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.newLine()
 		return m, nil
 
-	case KeyExpand: // Ctrl+E — toggle expanded
-		m.expandedView = !m.expandedView
+	case "ctrl+e":
+		ru := []rune(m.input)
+		if len(ru) > 0 {
+			// Move cursor to end of current line
+			lineEnd := len(ru)
+			for i := m.cursor; i < len(ru); i++ {
+				if ru[i] == '\n' {
+					lineEnd = i
+					break
+				}
+			}
+			m.cursor = lineEnd
+		} else {
+			m.expandedView = !m.expandedView
+		}
 		return m, nil
 
 	case KeySession2: // Ctrl+2 — workspace 1
@@ -393,8 +400,7 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "ctrl+u":
-		m.input = ""
-		m.cursor = 0
+		m.deleteToStart()
 		return m, nil
 
 	case "ctrl+w":
@@ -596,7 +602,7 @@ func (m appModel) View() string {
 	}
 
 	statusBarH := 1
-	inputH := 3
+	inputH := max(1, min(m.multilineRows, 6))
 	panelH := m.height - statusBarH - inputH
 	if panelH < 5 {
 		panelH = 5

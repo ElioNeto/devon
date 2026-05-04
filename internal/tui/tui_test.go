@@ -94,10 +94,29 @@ func TestModel_UpdateClearInput(t *testing.T) {
 	m.width = 80
 	m.height = 24
 
+	// Single-line: cursor at end → Ctrl+U deletes everything
 	m = updateApp(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hello")})
 	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlU})
 	if m.input != "" || m.cursor != 0 {
-		t.Errorf("ctrl+u should clear input, got %q cursor=%d", m.input, m.cursor)
+		t.Errorf("ctrl+u on single line at end should clear, got %q cursor=%d", m.input, m.cursor)
+	}
+
+	// Multi-line: cursor in middle of second line → Ctrl+U deletes from line start to cursor
+	m.input = "hello\nworld"
+	m.cursor = 9 // the 'l' of 'world'
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlU})
+	if m.input != "hello\nld" || m.cursor != 6 {
+		t.Errorf("ctrl+u should delete 'wo', got %q cursor=%d", m.input, m.cursor)
+	}
+
+	// Cursor at line start → no-op
+	m.input = "hello\nworld"
+	m.cursor = 6 // start of second line
+	before := m.input
+	beforeCursor := m.cursor
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlU})
+	if m.input != before || m.cursor != beforeCursor {
+		t.Errorf("ctrl+u at line start should be no-op, got %q cursor=%d", m.input, m.cursor)
 	}
 }
 
@@ -168,12 +187,12 @@ func TestModel_UpdateNewSession(t *testing.T) {
 	m.messages = append(m.messages, chatMessage{Sender: "devon", Content: "old"})
 	m.tracker.TotalInputTokens = 100
 
-	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlK})
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlN})
 	if m.tracker.TotalInputTokens != 0 {
-		t.Error("ctrl+k should reset usage")
+		t.Error("ctrl+n should reset usage")
 	}
 	if m.messages[0].Sender != "system" {
-		t.Error("ctrl+k should add a system message")
+		t.Error("ctrl+n should add a system message")
 	}
 }
 
@@ -288,7 +307,7 @@ func TestModel_HelpShowsNewBindings(t *testing.T) {
 	if has("x") || has(" ") || has("e") || has("1") || has("2") {
 		t.Error("old single-letter bindings should be removed from hints")
 	}
-	for _, key := range []string{"Ctrl+2..5", "!", "Ctrl+E", "Ctrl+C", "Ctrl+L", "Ctrl+K"} {
+	for _, key := range []string{"Ctrl+2..5", "!", "Ctrl+E", "Ctrl+C", "Ctrl+L", "Ctrl+N", "Ctrl+K", "Ctrl+A"} {
 		if !has(key) {
 			t.Errorf("missing %s in AllHints()", key)
 		}
@@ -701,6 +720,216 @@ func TestAgenticLoopCancellation(t *testing.T) {
 	}
 	if len(m2.toolRuns) != 0 {
 		t.Error("toolRuns should be cleared after Ctrl+C")
+	}
+}
+
+// ── Multi-line input and readline key tests ──────────────────────────────
+
+func TestModel_CtrlA_MovesCursorToLineStart(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// Multi-line: cursor in middle of second line → Ctrl+A moves to start of second line
+	m.input = "hello\nworld"
+	m.cursor = 8 // the 'o' of 'world'
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlA})
+	if m.cursor != 6 {
+		t.Errorf("ctrl+a should move cursor to start of second line (6), got %d", m.cursor)
+	}
+
+	// Single-line: cursor at position 3 → Ctrl+A moves to 0
+	m.input = "hello"
+	m.cursor = 3
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlA})
+	if m.cursor != 0 {
+		t.Errorf("ctrl+a on single line should move cursor to 0, got %d", m.cursor)
+	}
+
+	// Already at line start → no-op
+	m.input = "hello\nworld"
+	m.cursor = 6
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlA})
+	if m.cursor != 6 {
+		t.Errorf("ctrl+a at line start should be no-op, got %d", m.cursor)
+	}
+}
+
+func TestModel_CtrlE_MovesCursorToLineEnd(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// Multi-line: cursor on first line → Ctrl+E moves to end of first line
+	m.input = "hello\nworld"
+	m.cursor = 2 // 'l' of 'hello'
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlE})
+	if m.cursor != 5 {
+		t.Errorf("ctrl+e should move cursor to end of first line (5), got %d", m.cursor)
+	}
+
+	// Multi-line: cursor on second line → Ctrl+E moves to end of second line
+	m.input = "hello\nworld"
+	m.cursor = 7 // 'o' of 'world'
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlE})
+	if m.cursor != 11 {
+		t.Errorf("ctrl+e should move cursor to end of second line (11), got %d", m.cursor)
+	}
+
+	// Single-line: cursor at start → Ctrl+E moves to end
+	m.input = "hello"
+	m.cursor = 0
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlE})
+	if m.cursor != 5 {
+		t.Errorf("ctrl+e on single line should move cursor to 5, got %d", m.cursor)
+	}
+
+	// Already at line end → no-op
+	m.input = "hello"
+	m.cursor = 5
+	before := m.cursor
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlE})
+	if m.cursor != before {
+		t.Errorf("ctrl+e at line end should be no-op, got %d", m.cursor)
+	}
+}
+
+func TestModel_CtrlE_TogglesExpandWhenInputEmpty(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// Input is empty → Ctrl+E toggles expandedView
+	m.expandedView = false
+	m.input = ""
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlE})
+	if !m.expandedView {
+		t.Error("ctrl+e with empty input should toggle expandedView on")
+	}
+
+	// Toggle back
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlE})
+	if m.expandedView {
+		t.Error("ctrl+e with empty input should toggle expandedView off")
+	}
+
+	// Input non-empty → Ctrl+E moves cursor, does NOT toggle expanded
+	m.expandedView = false
+	m.input = "hello"
+	m.cursor = 0
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlE})
+	if m.expandedView {
+		t.Error("ctrl+e with non-empty input should NOT toggle expandedView")
+	}
+	if m.cursor != 5 {
+		t.Errorf("ctrl+e with non-empty input should move cursor to end (5), got %d", m.cursor)
+	}
+}
+
+func TestModel_CtrlK_DeletesToEndOfLine(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// Multi-line: cursor in middle of first line → deletes rest of first line
+	m.input = "hello world\nfoo\nbar"
+	m.cursor = 5 // after 'hello'
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlK})
+	expected := "hello\nfoo\nbar"
+	if m.input != expected {
+		t.Errorf("ctrl+k should delete rest of first line, got %q, want %q", m.input, expected)
+	}
+
+	// Cursor at end of line → no-op
+	m.input = "hello\nworld"
+	m.cursor = 5 // end of first line
+	before := m.input
+	beforeCursor := m.cursor
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlK})
+	if m.input != before || m.cursor != beforeCursor {
+		t.Errorf("ctrl+k at line end should be no-op, got %q cursor=%d", m.input, m.cursor)
+	}
+}
+
+func TestModel_CtrlU_DeletesToStartOfLine(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// Multi-line: cursor in middle of second line → deletes from line start to cursor
+	m.input = "hello\nworld"
+	m.cursor = 9 // the 'l' of 'world'
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlU})
+	expected := "hello\nld"
+	if m.input != expected || m.cursor != 6 {
+		t.Errorf("ctrl+u should delete 'wo', got %q cursor=%d", m.input, m.cursor)
+	}
+
+	// Cursor at line start → no-op
+	m.input = "hello\nworld"
+	m.cursor = 6 // start of second line
+	before := m.input
+	beforeCursor := m.cursor
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlU})
+	if m.input != before || m.cursor != beforeCursor {
+		t.Errorf("ctrl+u at line start should be no-op, got %q cursor=%d", m.input, m.cursor)
+	}
+
+	// Single-line: cursor at end → clears entire line
+	m.input = "hello"
+	m.cursor = 5
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyCtrlU})
+	if m.input != "" || m.cursor != 0 {
+		t.Errorf("ctrl+u on single line at end should clear, got %q cursor=%d", m.input, m.cursor)
+	}
+}
+
+func TestModel_InputHeight_Dynamic(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// Default multilineRows is 1
+	if m.multilineRows != 1 {
+		t.Errorf("multilineRows should default to 1, got %d", m.multilineRows)
+	}
+
+	// Set multilineRows to 3, verify dynamic height via View()
+	m.multilineRows = 3
+	m.input = "line1\nline2\nline3"
+	v := m.View()
+	// View should render with inputHeight = max(1, min(3, 6)) = 3
+	if v == "" {
+		t.Error("view should not be empty")
+	}
+
+	// Set multilineRows beyond cap (8), should be capped at 6
+	m.multilineRows = 8
+	m.input = "a\nb\nc\nd\ne\nf\ng\nh"
+	v = m.View()
+	if v == "" {
+		t.Error("view should not be empty with 8 lines input")
+	}
+}
+
+func TestModel_HomeEnd_StillAbsolute(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// Home on multi-line → cursor goes to 0 (absolute start)
+	m.input = "hello\nworld"
+	m.cursor = 8
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyHome})
+	if m.cursor != 0 {
+		t.Errorf("home should move cursor to absolute start (0), got %d", m.cursor)
+	}
+
+	// End on multi-line → cursor goes to len(input) (absolute end)
+	m.cursor = 3
+	m = updateApp(m, tea.KeyMsg{Type: tea.KeyEnd})
+	if m.cursor != 11 {
+		t.Errorf("end should move cursor to absolute end (11), got %d", m.cursor)
 	}
 }
 

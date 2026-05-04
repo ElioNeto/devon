@@ -5,7 +5,7 @@ const (
 	KeyQuit         = "ctrl+c"
 	KeySend         = "enter"
 	KeyClear        = "ctrl+l"
-	KeyNewSession   = "ctrl+k"
+	KeyNewSession   = "ctrl+n"
 	KeyClearInput   = "ctrl+u"
 	KeyDeleteWord   = "ctrl+w"
 	KeyDeleteWordBS = "ctrl+backspace"
@@ -60,9 +60,11 @@ func AllHints() []KeyHint {
 		{"!", "painel de comandos"},
 		{"Ctrl+C", "interromper / sair"},
 		{"Ctrl+L", "limpar chat"},
-		{"Ctrl+K", "nova sessão"},
+		{"Ctrl+N", "nova sessão"},
 		{"Ctrl+2..5", "trocar de sessão"},
 		{"Ctrl+E", "expandir/colapsar"},
+		{"Ctrl+K", "apagar até o fim da linha"},
+		{"Ctrl+A", "início da linha"},
 		{"Ctrl+\\", "toggle sidebar"},
 		{"Tab", "ciclo de aba esquerda"},
 		{"← / →", "mudar foco painel"},

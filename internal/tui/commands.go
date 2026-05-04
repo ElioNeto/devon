@@ -23,6 +23,7 @@ func (m *appModel) sendInput() (tea.Model, tea.Cmd) {
 	}
 	m.input = ""
 	m.cursor = 0
+	m.multilineRows = 1
 	m.statusMsg = ""
 
 	if strings.HasPrefix(text, "/") {
@@ -516,6 +517,50 @@ func (m *appModel) newLine() {
 		m.input = string(ru[:m.cursor]) + "\n" + string(ru[m.cursor:])
 		m.cursor++
 	}
+	m.multilineRows = strings.Count(m.input, "\n") + 1
+}
+
+// deleteToEnd removes characters from cursor to the end of the current line.
+// If cursor is at/past the end, no-op.
+func (m *appModel) deleteToEnd() {
+	ru := []rune(m.input)
+	if m.cursor >= len(ru) {
+		return
+	}
+	// Find next \n from cursor position, or end of string
+	end := len(ru)
+	for i := m.cursor; i < len(ru); i++ {
+		if ru[i] == '\n' {
+			end = i
+			break
+		}
+	}
+	ru = append(ru[:m.cursor], ru[end:]...)
+	m.input = string(ru)
+	m.multilineRows = strings.Count(m.input, "\n") + 1
+}
+
+// deleteToStart removes characters from the start of the current line to cursor.
+// If cursor is already at line start, no-op.
+func (m *appModel) deleteToStart() {
+	ru := []rune(m.input)
+	if m.cursor <= 0 {
+		return
+	}
+	// Find previous \n before cursor, or 0
+	start := 0
+	for i := m.cursor - 1; i >= 0; i-- {
+		if ru[i] == '\n' {
+			start = i + 1
+			break
+		}
+	}
+	if start == m.cursor {
+		return
+	}
+	ru = append(ru[:start], ru[m.cursor:]...)
+	m.input = string(ru)
+	m.cursor = start
 	m.multilineRows = strings.Count(m.input, "\n") + 1
 }
 

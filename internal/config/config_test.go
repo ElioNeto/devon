@@ -235,6 +235,47 @@ func TestLoad_Validation_MissingKey_NonLocal(t *testing.T) {
 	}
 }
 
+func TestLoad_DEVON_MAX_LOOPS(t *testing.T) {
+	tests := []struct {
+		name string
+		val  string
+		want int
+	}{
+		{"default when unset", "", 10},
+		{"explicit value", "5", 5},
+		{"invalid falls back to default", "abc", 10},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			os.Unsetenv("DEVON_MAX_LOOPS")
+			if tc.val != "" {
+				os.Setenv("DEVON_MAX_LOOPS", tc.val)
+				defer os.Unsetenv("DEVON_MAX_LOOPS")
+			}
+			// Need a temp dir to avoid side effects
+			dir := t.TempDir()
+			oldWd, _ := os.Getwd()
+			if err := os.Chdir(dir); err != nil {
+				t.Fatal(err)
+			}
+			os.Setenv("DEVON_MODEL", "m")
+			os.Setenv("DEVON_BASE_URL", "http://localhost:11434/v1")
+			defer func() {
+				os.Unsetenv("DEVON_MODEL")
+				os.Unsetenv("DEVON_BASE_URL")
+				os.Chdir(oldWd)
+			}()
+			cfg, err := Load("")
+			if err != nil {
+				t.Fatalf("Load() error: %v", err)
+			}
+			if cfg.MaxAgentLoops != tc.want {
+				t.Errorf("MaxAgentLoops = %d, want %d", cfg.MaxAgentLoops, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoad_LocalURL_NoKeyRequired(t *testing.T) {
 	dir := t.TempDir()
 	oldWd, _ := os.Getwd()

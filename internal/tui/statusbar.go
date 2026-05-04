@@ -13,7 +13,7 @@ const appVersion = "0.4.1"
 
 // renderStatusBar renderiza a barra inferior no formato OpenCode:
 //
-//	[model] · [provider] · tokens: [in]/[out] · ~$[cost] · [status]
+//	[model][ · turno N][ · loop X/Y] · [provider] · tokens: [in]/[out] · ~$[cost] · [status]
 func renderStatusBar(m *appModel, width int) string {
 	s := m.styles
 
@@ -23,20 +23,37 @@ func renderStatusBar(m *appModel, width int) string {
 		hasRunningTool := false
 		for _, tr := range m.toolRuns {
 			if tr.Status == "running" {
-				statusStr = s.statusRunning.Render(fmt.Sprintf("⚙  running %s", tr.Name))
+				statusStr = s.statusRunning.Render(fmt.Sprintf("aguardando tool %s", tr.Name))
 				hasRunningTool = true
 				break
 			}
 		}
 		if !hasRunningTool {
-			statusStr = s.statusKey.Render(m.spinner.View() + " thinking…")
+			statusStr = s.statusKey.Render(m.spinner.View() + " gerando")
 		}
 	} else {
 		statusStr = s.statusSep.Render("●  idle")
 	}
 
-	// Model name
-	modelStr := s.statusKey.Render(m.cfg.Model)
+	// Model name — use router if available, fall back to cfg.Model
+	modelName := ""
+	if m.router != nil {
+		modelName = m.router.ModelFor(m.cfg.ForcedTaskType)
+	}
+	if modelName == "" {
+		modelName = m.cfg.Model
+	}
+	modelStr := s.statusKey.Render(modelName)
+
+	// Turno and tool call segments (inserted after model, before provider)
+	var extraSegments string
+	sep := s.statusSep.Render(" · ")
+	if m.turnNumber > 0 {
+		extraSegments += sep + s.statusVal.Render(fmt.Sprintf("turno %d", m.turnNumber))
+	}
+	if m.toolCallCount > 0 {
+		extraSegments += sep + s.statusVal.Render(fmt.Sprintf("loop %d/%d", m.toolCallCount, m.cfg.MaxAgentLoops))
+	}
 
 	// Provider
 	providerName := extractProvider(m.cfg.BaseURL)
@@ -60,13 +77,11 @@ func renderStatusBar(m *appModel, width int) string {
 		costStr = s.statusVal.Render("~$0.00")
 	}
 
-	// Build line: model · provider · tokens: in/out · ~$cost · status
-	sep := s.statusSep.Render(" · ")
-
+	// Build line: model[ · turno N][ · loop X/Y] · provider · tokens: in/out · ~$cost · status
 	tokensSection := s.statusKey.Render("tokens: ") + tokensStr
 
-	line := fmt.Sprintf("%s%s%s%s%s%s%s%s%s",
-		modelStr, sep,
+	line := fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s",
+		modelStr, extraSegments, sep,
 		providerStr, sep,
 		tokensSection, sep,
 		costStr, sep,

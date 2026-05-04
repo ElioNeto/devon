@@ -156,6 +156,9 @@ type Config struct {
 	// Attachments
 	MaxImageSizeMB int
 
+	// MaxAgentLoops limits the number of automatic continuation loops.
+	MaxAgentLoops int
+
 	// ForcedTaskType overrides automatic classification when non-empty.
 	ForcedTaskType TaskType
 
@@ -194,6 +197,7 @@ func Load(envFile string) (*Config, error) {
 		MaxAgents:         getEnvInt("DEVON_MAX_AGENTS", 4),
 		DBPath:            getEnvDefault("DEVON_DB_PATH", ".devon/state.db"),
 		ContextWindowSize: getEnvInt("DEVON_CONTEXT_WINDOW_SIZE", 20),
+		MaxAgentLoops:     getEnvInt("DEVON_MAX_LOOPS", 10),
 		Agents:            []AgentConfig{},
 		MaxImageSizeMB:    10,
 	}

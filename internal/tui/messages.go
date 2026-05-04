@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ElioNeto/devon/internal/agent"
@@ -10,19 +11,23 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// rendererCache caches glamour.TermRenderer instances keyed by width
+// to avoid recreating the renderer on every renderMarkdown call.
+var (
+	mdRenderer   *glamour.TermRenderer
+	mdRendererW  int
+	mdRendererMu sync.Mutex
+)
+
 // ── Bubble Tea message types ──────────────────────────────────────────────────
 
 type agentEventMsg agent.Event
 
-type agentResult struct {
-	events []agent.Event
-}
-
 // agentDoneMsg is sent when the agent channel closes (streaming complete).
 type agentDoneMsg struct{}
 
-// agentContinueMsg signals that the agentic loop should continue.
-type agentContinueMsg struct{}
+// cursorBlinkMsg is sent periodically to toggle the typing cursor.
+type cursorBlinkMsg struct{}
 
 // ── Left panel sections ───────────────────────────────────────────────────────
 
@@ -283,7 +288,7 @@ func contextMenuFor(m *appModel) []menuAction {
 			}
 		}})
 	}
-	actions = append(actions, menuAction{"Nova sessão [Ctrl+K]", "n", func(m *appModel) {
+	actions = append(actions, menuAction{"Nova sessão [Ctrl+N]", "n", func(m *appModel) {
 		m.messages = nil
 		m.toolRuns = nil
 		m.historyTurns = nil
@@ -686,6 +691,18 @@ func renderViewSteps(m *appModel, width, height int) string {
 			lines = append(lines, "")
 		}
 
+		// Blinking cursor for text generation
+		if m.isGenerating && len(m.messages) > 0 {
+			last := m.messages[len(m.messages)-1]
+			if last.Sender == "devon" && !last.IsError {
+				cursorChar := "▋"
+				if m.canBlink && !m.cursorVisible {
+					cursorChar = " "
+				}
+				lines = append(lines, m.styles.cursorStyle.Render("  "+cursorChar))
+			}
+		}
+
 		// Append tool calls inline after messages
 		if len(m.toolRuns) > 0 {
 			tcBlock := renderToolCallsInline(m, width-4)
@@ -824,18 +841,43 @@ func renderHelp(m *appModel, width int) string {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 // renderMarkdown renders a string as Markdown using Glamour.
+// It caches the TermRenderer keyed by width to avoid recreating it on every call.
 func renderMarkdown(text string, width int) string {
-	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle("dark"),
-		glamour.WithWordWrap(width-2),
-	)
-	if err != nil {
+	r := getRenderer(width)
+	if r == nil {
 		return text
 	}
 	if out, err := r.Render(text); err == nil {
 		return strings.TrimRight(out, "\n ")
 	}
 	return text
+}
+
+// getRenderer returns a cached glamour.TermRenderer for the given width.
+// If no cached renderer exists for this width, a new one is created and cached.
+// Returns nil on error (caller should fall back to plain text).
+func getRenderer(width int) *glamour.TermRenderer {
+	mdRendererMu.Lock()
+	defer mdRendererMu.Unlock()
+
+	if mdRenderer != nil && mdRendererW == width {
+		return mdRenderer
+	}
+
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(width - 2),
+	)
+	if err != nil {
+		// Don't cache nil renderer — only cache on success.
+		// Reset cache to force retry on next call.
+		mdRenderer = nil
+		return nil
+	}
+
+	mdRenderer = r
+	mdRendererW = width
+	return r
 }
 
 // appendLog adiciona um evento ao stream de logs do painel direito.

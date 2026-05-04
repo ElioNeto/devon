@@ -4,7 +4,7 @@ package tui
 import (
 	"context"
 	"fmt"
-
+	"os"
 	"path/filepath"
 
 	"github.com/ElioNeto/devon/internal/agent"
@@ -140,15 +140,23 @@ type appModel struct {
 	agentCh <-chan agent.Event
 
 	// Agentic loop control
-	agenticLoopDone  bool
-	maxAgentLoops    int
-	currentLoopCount int
+	maxAgentLoops int
+
+	// Typing cursor state
+	isGenerating  bool
+	cursorVisible bool
+	canBlink      bool
+
+	// Turn tracking
+	turnNumber    int
+	toolCallCount int
 }
 
 type chatMessage struct {
-	Sender  string
-	Content string
-	IsError bool
+	Sender       string
+	Content      string
+	ContentParts []llm.ContentPart
+	IsError      bool
 }
 
 type toolRun struct {
@@ -261,11 +269,13 @@ func newModel(cfg *config.Config, registry *tools.Registry, resumeSessionID stri
 		maxContextTokens: maxCtx,
 		activeWorkspace:  0,
 		fp:               fp,
+		multilineRows:    1,
 		attachments:      []Attachment{},
 		dbStore:          store,
 		sidebarOpen:      true,
-		maxAgentLoops:    10,
-		currentLoopCount: 0,
+		maxAgentLoops:    cfg.MaxAgentLoops,
+		canBlink:         os.Getenv("TERM") != "dumb",
+		cursorVisible:    true,
 	}
 
 	if store != nil {
@@ -367,8 +377,9 @@ func (m appModel) Init() tea.Cmd {
 	if m.session != nil {
 		welcome = "Sessão " + m.session.ID + " carregada."
 	}
-	return tea.Sequence(
+	return tea.Batch(
 		m.spinner.Tick,
+		m.cursorBlinkCmd(),
 		func() tea.Msg {
 			return agentEventMsg(agent.Event{Type: "system", Text: welcome})
 		},

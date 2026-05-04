@@ -3,11 +3,15 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/ElioNeto/devon/internal/config"
 	"github.com/ElioNeto/devon/internal/db"
+	"github.com/ElioNeto/devon/internal/index"
 	"github.com/ElioNeto/devon/internal/llm"
 	"github.com/ElioNeto/devon/internal/tools"
 )
@@ -723,6 +727,157 @@ func TestAgent_Run_RateLimited_Event(t *testing.T) {
 	}
 	if !hasEventType(events, "error") {
 		t.Errorf("expected error event after rate_limited, got: %v", eventTypeSlice(events))
+	}
+}
+
+func TestAgent_BuildSystemMessages_ProjectContext(t *testing.T) {
+	dir := t.TempDir()
+	// Create a Go file so BuildProjectContext can detect the language
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := newTestConfig()
+	cfg.WorkDir = dir
+	r := tools.NewRegistry()
+	fakeDB := &fakeDBStore{}
+	a := New(cfg, &llm.MockClient{}, r, fakeDB, "test", nil, dir)
+
+	msgs := a.history
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	content := *msgs[0].Content
+	if !strings.Contains(content, "Contexto do projeto") {
+		t.Error("expected 'Contexto do projeto' in system message")
+	}
+	if !strings.Contains(content, "Linguagens detectadas: Go") {
+		t.Error("expected 'Linguagens detectadas: Go' in system message")
+	}
+	if !strings.Contains(content, dir) {
+		t.Error("expected workdir path in system message")
+	}
+}
+
+func TestAgent_BuildSystemMessages_RelevantFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a Go file with unique content for indexing
+	goFile := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(goFile, []byte("package main\n\nfunc main() {\n\tprintln(\"hello world\")\n}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create index manager pointing to the temp dir
+	mgr, err := index.NewManager(dir, index.ManagerConfig{
+		Enabled: true,
+		IndexedConfig: index.IndexedConfig{
+			Extensions:    []string{".go"},
+			Excludes:      []string{},
+			MaxFileSizeKB: 500,
+			CacheDir:      filepath.Join(dir, ".cache"),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mgr.Close()
+
+	// Index the files
+	if err := mgr.Index(context.Background(), dir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create agent (without index)
+	cfg := newTestConfig()
+	cfg.WorkDir = dir
+	r := tools.NewRegistry()
+	fakeDB := &fakeDBStore{}
+	a := New(cfg, &llm.MockClient{}, r, fakeDB, "test", nil, dir)
+
+	// Inject the index manager
+	a.idxMgr = mgr
+
+	// Build system messages with a non-empty prompt
+	msgs := a.buildSystemMessages("hello world main function")
+
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	content := *msgs[0].Content
+	if !strings.Contains(content, "Arquivos relevantes") {
+		t.Error("expected 'Arquivos relevantes' section in system message")
+	}
+	if !strings.Contains(content, "main.go") {
+		t.Error("expected 'main.go' in relevant files")
+	}
+}
+
+func TestAgent_Run_RebuildsSystemMessage(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a Go file for indexing
+	goFile := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(goFile, []byte("package main\n\nfunc main() {\n\tprintln(\"hello world\")\n}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create index manager
+	mgr, err := index.NewManager(dir, index.ManagerConfig{
+		Enabled: true,
+		IndexedConfig: index.IndexedConfig{
+			Extensions:    []string{".go"},
+			Excludes:      []string{},
+			MaxFileSizeKB: 500,
+			CacheDir:      filepath.Join(dir, ".cache"),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mgr.Close()
+
+	// Index files
+	if err := mgr.Index(context.Background(), dir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create agent and inject index
+	cfg := newTestConfig()
+	cfg.WorkDir = dir
+	r := tools.NewRegistry()
+	mc := &llm.MockClient{
+		Responses: []llm.MockResponse{
+			{Text: "Got it"},
+		},
+	}
+	fakeDB := &fakeDBStore{}
+	a := New(cfg, mc, r, fakeDB, "agent-1", nil, dir)
+	a.idxMgr = mgr
+
+	// Run the agent
+	events := collectEvents(a.Run(context.Background(), "hello world main function"))
+	_ = events
+
+	// Verify history[0] was rebuilt with index-relevant content
+	if len(a.history) < 1 {
+		t.Fatal("history is empty")
+	}
+	content := *a.history[0].Content
+	if content == "" {
+		t.Error("system message should not be empty")
+	}
+	if a.history[0].Role != llm.RoleSystem {
+		t.Errorf("history[0] role = %q, want %q", a.history[0].Role, llm.RoleSystem)
+	}
+	if !strings.Contains(content, "Contexto do projeto") {
+		t.Error("expected 'Contexto do projeto' in rebuilt system message")
+	}
+	if !strings.Contains(content, "Arquivos relevantes") {
+		t.Error("expected 'Arquivos relevantes' in rebuilt system message")
+	}
+	if !strings.Contains(content, "main.go") {
+		t.Error("expected 'main.go' in relevant files section")
 	}
 }
 
