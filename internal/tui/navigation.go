@@ -57,6 +57,14 @@ func (m *appModel) selectLeftItem() {
 	if item.StatusKind == "header" {
 		return
 	}
+
+	// Toggle tool call collapse when selecting a tool run item
+	if item.Section == secFerramentas && item.Index > 0 && item.Index-1 < len(m.toolRuns) {
+		tr := &m.toolRuns[item.Index-1]
+		tr.Collapsed = !tr.Collapsed
+		return
+	}
+
 	m.syncRightView()
 	m.leftFocus = false
 }

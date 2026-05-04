@@ -27,9 +27,10 @@ type layout struct {
 	statusBarH int
 	chatH      int
 
-	leftPanelW  int
-	rightPanelW int
-	panelSepH   int
+	leftPanelW    int
+	rightPanelW   int
+	panelSepH     int
+	sidebarVisible bool
 
 	leftFocus  leftPanelSection
 	rightFocus rightPanel
@@ -47,7 +48,7 @@ const (
 	RightContext rightPanel = "context"
 )
 
-func calcLayout(w, h int) layout {
+func calcLayout(w, h int, sidebarOpen bool) layout {
 	l := layout{width: w, height: h}
 	l.headerH = 1
 	l.separatorH = 1
@@ -57,12 +58,14 @@ func calcLayout(w, h int) layout {
 	if l.chatH < 1 {
 		l.chatH = 1
 	}
-	l.leftPanelW = w / 3
-	if l.leftPanelW < 24 {
-		l.leftPanelW = 24
-	}
-	if l.leftPanelW > 48 {
-		l.leftPanelW = 48
+
+	// Sidebar visible only when user wants it AND terminal is wide enough
+	l.sidebarVisible = sidebarOpen && w > 120
+
+	if l.sidebarVisible {
+		l.leftPanelW = 28
+	} else {
+		l.leftPanelW = 0
 	}
 	l.rightPanelW = w - l.leftPanelW
 	l.panelSepH = h - l.inputH - l.statusBarH

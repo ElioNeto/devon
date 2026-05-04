@@ -33,7 +33,7 @@ func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.layout = calcLayout(msg.Width, msg.Height)
+		m.layout = calcLayout(msg.Width, msg.Height, m.sidebarOpen)
 		if m.showFilePicker {
 			var cmd tea.Cmd
 			m.fp, cmd = m.fp.Update(msg)
@@ -192,6 +192,11 @@ func (m *appModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Nova sessão " + m.session.ID})
 			m.appendLog("system", "Nova sessão "+m.session.ID, "")
 		}
+		return m, nil
+
+	case "ctrl+\\":
+		m.sidebarOpen = !m.sidebarOpen
+		m.layout = calcLayout(m.width, m.height, m.sidebarOpen)
 		return m, nil
 
 	case "tab":
@@ -545,7 +550,7 @@ func (m appModel) View() string {
 
 	l := m.layout
 	if l.width == 0 {
-		l = calcLayout(m.width, m.height)
+		l = calcLayout(m.width, m.height, m.sidebarOpen)
 	}
 
 	statusBarH := 1
@@ -555,21 +560,26 @@ func (m appModel) View() string {
 		panelH = 5
 	}
 
-	leftW := l.leftPanelW
-	if leftW <= 0 {
-		leftW = m.width / 3
+	var panels string
+	if l.sidebarVisible {
+		leftW := l.leftPanelW
+		if leftW < 24 {
+			leftW = 24
+		}
+		rightW := m.width - leftW
+		if rightW < 20 {
+			rightW = 20
+		}
+		leftPanel := renderLeftPanel(&m, leftW, panelH, m.leftFocus)
+		rightPanel := renderRightPanel(&m, rightW, panelH, !m.leftFocus)
+		panels = lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
+	} else {
+		rightW := m.width
+		if rightW < 20 {
+			rightW = 20
+		}
+		panels = renderRightPanel(&m, rightW, panelH, true)
 	}
-	if leftW < 24 {
-		leftW = 24
-	}
-	rightW := m.width - leftW
-	if rightW < 20 {
-		rightW = 20
-	}
-
-	leftPanel := renderLeftPanel(&m, leftW, panelH, m.leftFocus)
-	rightPanel := renderRightPanel(&m, rightW, panelH, !m.leftFocus)
-	panels := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 
 	inputBar := renderInputBar(&m, m.width)
 	statusBar := renderStatusBar(&m, m.width)

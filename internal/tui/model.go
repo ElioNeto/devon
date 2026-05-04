@@ -132,6 +132,9 @@ type appModel struct {
 
 	// Agent router for task-type-based model selection
 	router *llm.AgentRouter
+
+	// Sidebar toggle state (Ctrl+\)
+	sidebarOpen bool
 }
 
 type chatMessage struct {
@@ -147,6 +150,7 @@ type toolRun struct {
 	Status     string // "running"|"done"|"error"
 	DurationMs int
 	StartedAt  int64
+	Collapsed  bool // true = show collapsed summary
 }
 
 type toolStat struct {
@@ -241,7 +245,7 @@ func newModel(cfg *config.Config, registry *tools.Registry, resumeSessionID stri
 		tracker:          tracker,
 		spinner:          s,
 		styles:           newUIStyles(),
-		layout:           calcLayout(0, 0),
+		layout:           calcLayout(0, 0, true),
 		rightView:        viewLogs,
 		toolStats:        make(map[string]*toolStat),
 		selectedTurnIdx:  -1,
@@ -251,6 +255,7 @@ func newModel(cfg *config.Config, registry *tools.Registry, resumeSessionID stri
 		fp:               fp,
 		attachments:      []Attachment{},
 		dbStore:          store,
+		sidebarOpen:      true,
 	}
 
 	if store != nil {
@@ -309,10 +314,11 @@ func (m *appModel) loadSessionFromDB(ctx context.Context, sessionID string) {
 		m.toolRuns = nil
 		for _, tc := range calls {
 			tr := toolRun{
-				Name:   tc.ToolName,
-				Args:   tc.Arguments,
-				Result: tc.Result,
-				Status: tc.Status,
+				Name:      tc.ToolName,
+				Args:      tc.Arguments,
+				Result:    tc.Result,
+				Status:    tc.Status,
+				Collapsed: true,
 			}
 			if tc.Error != "" {
 				tr.Status = "error"

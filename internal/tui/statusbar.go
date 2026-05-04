@@ -5,50 +5,94 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/ElioNeto/devon/internal/cost"
 )
 
 // appVersion é a versão exibida na status bar.
 const appVersion = "0.4.1"
 
-// renderStatusBar renderiza a barra inferior — fiel à imagem:
+// renderStatusBar renderiza a barra inferior no formato OpenCode:
 //
-//	PgUp/PgDn: scroll   esc/q: quit   Tab: focus   ↑↓: navigate   Enter: select   x: menu
+//	[model] · [provider] · tokens: [in]/[out] · ~$[cost] · [status]
 func renderStatusBar(m *appModel, width int) string {
 	s := m.styles
 
-	// Status bar hints — updated for workspace tabs and command menu.
-	navHints := []struct{ key, desc string }{
-		{"PgUp/PgDn", "scroll"},
-		{"esc/q", "quit"},
-		{"Tab", "focus"},
-		{"↑↓", "navigate"},
-		{"Enter", "select"},
-		{"Shift+Enter", "↵"},
-		{"!", "comandos"},
-	}
-	var parts []string
-	for i, h := range navHints {
-		if i > 0 {
-			parts = append(parts, s.statusSep.Render("   "))
+	// Agent status
+	var statusStr string
+	if m.running {
+		hasRunningTool := false
+		for _, tr := range m.toolRuns {
+			if tr.Status == "running" {
+				statusStr = s.statusRunning.Render(fmt.Sprintf("⚙  running %s", tr.Name))
+				hasRunningTool = true
+				break
+			}
 		}
-		parts = append(parts, s.keyStyle.Render(h.key)+s.statusKey.Render(": "+h.desc))
-	}
-	leftStr := strings.Join(parts, "")
-
-	rightStr := buildStatusRight(m)
-
-	leftW := lipgloss.Width(leftStr)
-	rightW := lipgloss.Width(rightStr)
-	gap := width - leftW - rightW - 2
-	if gap < 1 {
-		gap = 1
+		if !hasRunningTool {
+			statusStr = s.statusKey.Render(m.spinner.View() + " thinking…")
+		}
+	} else {
+		statusStr = s.statusSep.Render("●  idle")
 	}
 
-	line := leftStr + strings.Repeat(" ", gap) + rightStr
+	// Model name
+	modelStr := s.statusKey.Render(m.cfg.Model)
+
+	// Provider
+	providerName := extractProvider(m.cfg.BaseURL)
+	providerStr := s.statusVal.Render(providerName)
+
+	// Tokens
+	var tokensStr string
+	if m.tracker != nil {
+		inStr := formatShort(m.tracker.TotalInputTokens)
+		outStr := formatShort(m.tracker.TotalOutputTokens)
+		tokensStr = s.statusVal.Render(fmt.Sprintf("%s/%s", inStr, outStr))
+	} else {
+		tokensStr = s.statusVal.Render("0/0")
+	}
+
+	// Cost
+	var costStr string
+	if m.tracker != nil && m.tracker.TotalCostUSD > 0 {
+		costStr = s.statusVal.Render(fmt.Sprintf("~$%s", cost.FormatCost(m.tracker.TotalCostUSD)))
+	} else {
+		costStr = s.statusVal.Render("~$0.00")
+	}
+
+	// Build line: model · provider · tokens: in/out · ~$cost · status
+	sep := s.statusSep.Render(" · ")
+
+	tokensSection := s.statusKey.Render("tokens: ") + tokensStr
+
+	line := fmt.Sprintf("%s%s%s%s%s%s%s%s%s",
+		modelStr, sep,
+		providerStr, sep,
+		tokensSection, sep,
+		costStr, sep,
+		statusStr,
+	)
+
 	return s.statusBar.Width(width).Render(line)
+}
+
+// extractProvider returns a short provider name from the base URL.
+func extractProvider(baseURL string) string {
+	lower := strings.ToLower(baseURL)
+	switch {
+	case strings.Contains(lower, "openai"):
+		return "openai"
+	case strings.Contains(lower, "anthropic"):
+		return "anthropic"
+	case strings.Contains(lower, "ollama"), strings.Contains(lower, "11434"):
+		return "ollama"
+	case strings.Contains(lower, "google"), strings.Contains(lower, "gemini"):
+		return "google"
+	case strings.Contains(lower, "deepseek"):
+		return "deepseek"
+	default:
+		return "api"
+	}
 }
 
 // renderInputBar renderiza a barra de input.
@@ -57,7 +101,7 @@ func renderInputBar(m *appModel, width int) string {
 
 	if m.running {
 		running := m.spinner.View() + "  " + s.statusKey.Render("aguardando resposta...")
-		return s.inputBar.Width(width - 2).Render(running)
+		return s.inputBar.Width(width).Render(running)
 	}
 
 	// Attachment badges — rendered above the prompt line
@@ -74,7 +118,7 @@ func renderInputBar(m *appModel, width int) string {
 
 	if !strings.Contains(m.input, "\n") {
 		prompt := s.inputPrompt.Render("> ")
-		return s.inputBar.Width(width - 2).Render(badgeLine + prompt + renderInputLine(m))
+		return s.inputBar.Width(width).Render(badgeLine + prompt + renderInputLine(m))
 	}
 
 	// Multi-line input: stack rows vertically.
@@ -110,7 +154,7 @@ func renderInputBar(m *appModel, width int) string {
 	if badgeLine != "" {
 		content = badgeLine + content
 	}
-	return s.inputBar.Width(width - 2).Render(content)
+	return s.inputBar.Width(width).Render(content)
 }
 
 // runeOffset returns the rune index where line `lineIdx` starts in `s`.
@@ -151,55 +195,4 @@ func renderInputLine(m *appModel) string {
 	cur := s.cursorStyle.Render(string(ru[m.cursor]))
 	after := string(ru[m.cursor+1:])
 	return before + cur + after
-}
-
-// buildStatusRight returns the right side of the status bar: model, tokens, cost, session.
-func buildStatusRight(m *appModel) string {
-	s := m.styles
-
-	// Show routing info when agent router is available
-	var model string
-	if m.router != nil {
-		activeType := m.agent.ActiveTaskType()
-		activeModel := m.agent.ActiveModel()
-		if activeModel == "" {
-			activeModel = m.cfg.Model
-		}
-		model = s.keyStyle.Render("tarefa: ") + s.statusVal.Render(string(activeType)) +
-			s.statusSep.Render(" ") + s.keyStyle.Render("modelo: ") + s.statusVal.Render(activeModel)
-	} else {
-		model = s.keyStyle.Render("modelo: ") + s.statusVal.Render(m.cfg.Model)
-	}
-
-	if m.tracker == nil {
-		return model
-	}
-
-	totalTokens := m.tracker.TotalInputTokens + m.tracker.TotalOutputTokens
-	if totalTokens == 0 {
-		return model
-	}
-
-	tokensStr := s.keyStyle.Render("tokens: ") + s.statusVal.Render(fmt.Sprint(totalTokens))
-
-	var costStr string
-	if strings.HasSuffix(strings.ToLower(m.cfg.Model), ":free") || m.tracker.TotalCostUSD == 0 {
-		costStr = s.keyStyle.Render("custo: ") + s.statusVal.Render("grátis")
-	} else {
-		costStr = s.keyStyle.Render("custo: ") + s.statusVal.Render(cost.FormatCost(m.tracker.TotalCostUSD))
-	}
-
-	sep := s.statusSep.Render("  ")
-
-	right := model + sep + tokensStr + sep + costStr
-
-	if m.session != nil && m.session.ID != "" {
-		id := m.session.ID
-		if len(id) > 15 {
-			id = id[len(id)-15:]
-		}
-		right += sep + s.keyStyle.Render("sessão: ") + s.statusVal.Render(id)
-	}
-
-	return right
 }

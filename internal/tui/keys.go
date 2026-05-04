@@ -33,17 +33,18 @@ const (
 	KeyEscape = "esc"
 
 	// Attachments
-	KeyAttachImage   = "ctrl+i"
-	KeyRemoveAttach  = "ctrl+r"
-	KeyExpand = "ctrl+e"
-	KeyCtxCmd = "!"
+	KeyAttachImage  = "ctrl+i"
+	KeyRemoveAttach = "ctrl+r"
+	KeyExpand       = "ctrl+e"
+	KeyCtxCmd       = "!"
 
 	// Session slots — Ctrl+2..5 switch between independent sessions
-	// (similar to Linux workspace tabs / tmux windows).
-	// Note: Ctrl+1 = \x01 = Ctrl+A (ambiguous), Ctrl+3 is terminal interrupt.
 	KeySession2 = "\x02" // Ctrl+2 → workspace 1
 	KeySession4 = "\x04" // Ctrl+4 → workspace 2
 	KeySession5 = "\x05" // Ctrl+5 → workspace 3
+
+	// Sidebar toggle
+	KeySidebar = "ctrl+\\"
 )
 
 // KeyHint descreve um atalho para exibição na ajuda.
@@ -62,6 +63,7 @@ func AllHints() []KeyHint {
 		{"Ctrl+K", "nova sessão"},
 		{"Ctrl+2..5", "trocar de sessão"},
 		{"Ctrl+E", "expandir/colapsar"},
+		{"Ctrl+\\", "toggle sidebar"},
 		{"Tab", "ciclo de aba esquerda"},
 		{"← / →", "mudar foco painel"},
 		{"↑ / ↓", "navegar itens"},

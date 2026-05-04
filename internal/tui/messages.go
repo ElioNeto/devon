@@ -489,7 +489,7 @@ func renderViewLogs(m *appModel, width, height int) string {
 	s := m.styles
 
 	events := m.logEvents
-	if len(events) == 0 {
+	if len(events) == 0 && len(m.toolRuns) == 0 {
 		return s.sysMsg.Render("  Aguardando eventos…")
 	}
 
@@ -512,6 +512,26 @@ func renderViewLogs(m *appModel, width, height int) string {
 		end = len(lines)
 	}
 
+	// Show inline tool calls
+	if len(m.toolRuns) > 0 {
+		tcBlock := renderToolCallsInline(m, width)
+		if tcBlock != "" {
+			toolLines := strings.Split(tcBlock, "\n")
+			lines = append(lines, "") // separator
+			lines = append(lines, toolLines...)
+			// Recalculate window with tool calls
+			if len(lines) > height {
+				start = len(lines) - height - m.rightScroll
+				if start < 0 {
+					start = 0
+				}
+			}
+			end = start + height
+			if end > len(lines) {
+				end = len(lines)
+			}
+		}
+	}
 	return strings.Join(lines[start:end], "\n")
 }
 
@@ -625,13 +645,24 @@ func renderViewSteps(m *appModel, width, height int) string {
 	idx := m.selectedTurnIdx
 	if idx < 0 || idx >= len(m.historyTurns) {
 		if len(m.messages) == 0 {
+			// Show tool calls if any
+			if len(m.toolRuns) > 0 {
+				tcBlock := renderToolCallsInline(m, width-4)
+				for _, l := range strings.Split(tcBlock, "\n") {
+					lines = append(lines, "  "+l)
+				}
+				if len(lines) > height {
+					lines = lines[:height]
+				}
+				return strings.Join(lines, "\n")
+			}
 			return s.sysMsg.Render("  Nenhum turno selecionado.")
 		}
 		// mostra turno ativo
 		for _, msg := range m.messages {
 			switch msg.Sender {
 			case "user":
-				lines = append(lines, s.userMsg.Render("▸ "+truncate(msg.Content, width-4)))
+				lines = append(lines, s.userMsg.Width(width-4).Render("▸ "+truncate(msg.Content, width-6)))
 			case "devon":
 				if msg.IsError {
 					for _, l := range wrapLine(msg.Content, width-4) {
@@ -648,6 +679,16 @@ func renderViewSteps(m *appModel, width, height int) string {
 			}
 			lines = append(lines, "")
 		}
+
+		// Append tool calls inline after messages
+		if len(m.toolRuns) > 0 {
+			tcBlock := renderToolCallsInline(m, width-4)
+			for _, l := range strings.Split(tcBlock, "\n") {
+				lines = append(lines, "  "+l)
+			}
+			lines = append(lines, "")
+		}
+
 		if len(lines) > height {
 			lines = lines[len(lines)-height:]
 		}
@@ -684,6 +725,67 @@ func renderViewSteps(m *appModel, width, height int) string {
 		lines = lines[:height]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// ── Tool calls inline rendering (collapsible blocks) ──────────────────────────
+
+// renderToolCallsInline renders all tool runs as collapsible inline blocks.
+func renderToolCallsInline(m *appModel, width int) string {
+	var blocks []string
+	for _, tr := range m.toolRuns {
+		block := renderToolCallInline(m, tr, width)
+		blocks = append(blocks, block)
+	}
+	return strings.Join(blocks, "\n")
+}
+
+// renderToolCallInline renders a single tool call as a collapsible block.
+//   - Collapsed: "▶ tool_name  arg_preview…" (yellow)
+//   - Expanded:  "▼ tool_name\n  args: {json}\n  result: ..." (muted)
+func renderToolCallInline(m *appModel, tool toolRun, width int) string {
+	s := m.styles
+
+	headerColor := s.toolRunning // yellow
+	if tool.Status == "done" {
+		headerColor = s.toolDone // green
+	} else if tool.Status == "error" {
+		headerColor = s.toolError // red
+	}
+
+	if tool.Collapsed {
+		preview := shortenArgs(tool.Args)
+		return headerColor.Render(fmt.Sprintf("▶ %s  %s", tool.Name, preview))
+	}
+
+	// Expanded: show args + result
+	var sb strings.Builder
+	sb.WriteString(headerColor.Render(fmt.Sprintf("▼ %s", tool.Name)))
+	sb.WriteString("\n")
+
+	// Args in muted JSON
+	argsStr := tool.Args
+	if len(argsStr) > width-8 {
+		argsStr = truncate(argsStr, width-8)
+	}
+	sb.WriteString(s.statusVal.Render(fmt.Sprintf("  args: %s", argsStr)))
+	sb.WriteString("\n")
+
+	// Result in muted
+	if tool.Result != "" {
+		resultStr := tool.Result
+		if len(resultStr) > width-4 {
+			resultStr = truncate(resultStr, width-4)
+		}
+		resultLines := strings.Split(resultStr, "\n")
+		for i, line := range resultLines {
+			if i > 0 && i < len(resultLines)-1 {
+				sb.WriteString(s.statusVal.Render(fmt.Sprintf("  %s", line)))
+				sb.WriteString("\n")
+			}
+		}
+	}
+
+	return strings.TrimRight(sb.String(), "\n")
 }
 
 // ── Help overlay ──────────────────────────────────────────────────────────────
