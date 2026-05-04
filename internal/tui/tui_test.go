@@ -511,6 +511,165 @@ func TestTurnDoneSummary_LoopConcluido(t *testing.T) {
 	}
 }
 
+// ── TODO 1: finalizeTurn() order — unit sub-test ────────────────────────────
+//
+// Verifies that:
+//   (a) historyTurn is appended to m.historyTurns before m.toolRuns becomes nil
+//   (b) agentMessages() returns tool results when called during finalizeTurn
+//   (c) m.toolRuns is nil after finalizeTurn returns
+func TestFinalizeTurnOrder(t *testing.T) {
+	m := appModel{
+		tracker: cost.NewSession("test-model"),
+	}
+	m.messages = []chatMessage{
+		{Sender: "user", Content: "hello"},
+	}
+	m.processAgentEvent(agent.Event{Type: "text", Text: "hi there"})
+	m.processAgentEvent(agent.Event{Type: "tool_start", Tool: "bash", Args: `{"cmd":"ls"}`})
+	m.processAgentEvent(agent.Event{Type: "tool_done", Tool: "bash", Result: "file1\nfile2"})
+
+	// (b) agentMessages() returns tool results while toolRuns are still populated
+	turnMsgs := m.agentMessages()
+	hasTool := false
+	for _, msg := range turnMsgs {
+		if msg.Role == llm.RoleTool {
+			hasTool = true
+			break
+		}
+	}
+	if !hasTool {
+		t.Error("agentMessages() should include RoleTool when toolRuns are present during finalizeTurn")
+	}
+	if len(m.toolRuns) == 0 {
+		t.Error("toolRuns should still be populated before finalizeTurn")
+	}
+
+	m.finalizeTurn()
+
+	// (a) historyTurn was appended
+	if len(m.historyTurns) != 1 {
+		t.Errorf("expected 1 historyTurn, got %d", len(m.historyTurns))
+	}
+	if m.historyTurns[0].UserPrompt != "hello" {
+		t.Errorf("historyTurn UserPrompt = %q, want 'hello'", m.historyTurns[0].UserPrompt)
+	}
+	if m.historyTurns[0].ToolSummary != "bash" {
+		t.Errorf("historyTurn ToolSummary = %q, want 'bash'", m.historyTurns[0].ToolSummary)
+	}
+
+	// (c) toolRuns is nil after finalizeTurn
+	if m.toolRuns != nil {
+		t.Error("toolRuns should be nil after finalizeTurn")
+	}
+}
+
+// ── TODO 2: agentMessages() completeness — unit sub-test ────────────────────
+//
+// Verifies that:
+//   (a) chatMessage with ContentParts produces llm.Message with ContentParts
+//   (b) toolRun with Status 'done' or 'error' produces RoleTool message
+//   (c) toolRun with Status 'running' is excluded
+func TestAgentMessagesCompleteness(t *testing.T) {
+	t.Run("ContentParts mapping", func(t *testing.T) {
+		m := appModel{}
+		m.messages = []chatMessage{
+			{
+				Sender:       "user",
+				Content:      "describe this [1 image]",
+				ContentParts: []llm.ContentPart{llm.NewTextPart("describe this"), llm.NewImagePartBase64("data:image/png;base64,abc")},
+			},
+		}
+		msgs := m.agentMessages()
+		if len(msgs) != 1 {
+			t.Fatalf("expected 1 message, got %d", len(msgs))
+		}
+		if len(msgs[0].ContentParts) != 2 {
+			t.Errorf("expected 2 ContentParts, got %d", len(msgs[0].ContentParts))
+		}
+		if msgs[0].Role != llm.RoleUser {
+			t.Errorf("expected RoleUser, got %v", msgs[0].Role)
+		}
+	})
+
+	t.Run("tool done produces RoleTool", func(t *testing.T) {
+		m := appModel{}
+		m.messages = []chatMessage{
+			{Sender: "user", Content: "run bash"},
+		}
+		m.toolRuns = []toolRun{
+			{Name: "bash", Status: "done", Result: "ok"},
+		}
+		msgs := m.agentMessages()
+		hasTool := false
+		for _, msg := range msgs {
+			if msg.Role == llm.RoleTool && msg.Content != nil && *msg.Content == "ok" {
+				hasTool = true
+				break
+			}
+		}
+		if !hasTool {
+			t.Error("done toolRun should produce RoleTool message with result content")
+		}
+	})
+
+	t.Run("tool error produces RoleTool", func(t *testing.T) {
+		m := appModel{}
+		m.messages = []chatMessage{
+			{Sender: "user", Content: "run bash"},
+		}
+		m.toolRuns = []toolRun{
+			{Name: "bash", Status: "error", Result: "command not found"},
+		}
+		msgs := m.agentMessages()
+		hasTool := false
+		for _, msg := range msgs {
+			if msg.Role == llm.RoleTool && msg.Content != nil && *msg.Content == "command not found" {
+				hasTool = true
+				break
+			}
+		}
+		if !hasTool {
+			t.Error("error toolRun should produce RoleTool message with error content")
+		}
+	})
+
+	t.Run("running tool is excluded", func(t *testing.T) {
+		m := appModel{}
+		m.messages = []chatMessage{
+			{Sender: "user", Content: "run bash"},
+		}
+		m.toolRuns = []toolRun{
+			{Name: "bash", Status: "running", Result: ""},
+		}
+		msgs := m.agentMessages()
+		for _, msg := range msgs {
+			if msg.Role == llm.RoleTool {
+				t.Error("running toolRun should NOT produce a RoleTool message")
+			}
+		}
+	})
+
+	t.Run("message role mapping", func(t *testing.T) {
+		m := appModel{}
+		m.messages = []chatMessage{
+			{Sender: "user", Content: "hello"},
+			{Sender: "devon", Content: "world"},
+			{Sender: "devon", Content: "error!", IsError: true},
+			{Sender: "system", Content: "info"},
+		}
+		msgs := m.agentMessages()
+		expected := []llm.Role{llm.RoleUser, llm.RoleAssistant, llm.RoleTool, llm.RoleSystem}
+		if len(msgs) != len(expected) {
+			t.Fatalf("expected %d messages, got %d", len(expected), len(msgs))
+		}
+		for i, role := range expected {
+			if msgs[i].Role != role {
+				t.Errorf("msgs[%d].Role = %v, want %v", i, msgs[i].Role, role)
+			}
+		}
+	})
+}
+
 func TestTurnDoneLogDeduplication(t *testing.T) {
 	// finalizeTurn() needs a tracker for token tracking
 	m := appModel{running: true, tracker: cost.NewSession("test-model")}
@@ -1359,9 +1518,26 @@ func TestMultiTurnHistoryPreservation(t *testing.T) {
 		t.Errorf("turn 3 user prompt = %q, want 'What did I ask first?'", m.historyTurns[2].UserPrompt)
 	}
 
-	// 3. historyTurns include tool summary
+	// 3. historyTurns preserve agent replies across turns
+	if m.historyTurns[0].AgentReply != "Nice to meet you John" {
+		t.Errorf("turn 1 agent reply = %q, want 'Nice to meet you John'", m.historyTurns[0].AgentReply)
+	}
+	if m.historyTurns[1].AgentReply != "Your name is John" {
+		t.Errorf("turn 2 agent reply = %q, want 'Your name is John'", m.historyTurns[1].AgentReply)
+	}
+	if m.historyTurns[2].AgentReply != "You said your name is John" {
+		t.Errorf("turn 3 agent reply = %q, want 'You said your name is John'", m.historyTurns[2].AgentReply)
+	}
+
+	// 4. historyTurns include tool summary for turn 1
 	if m.historyTurns[0].ToolSummary != "bash" {
 		t.Errorf("turn 1 tool summary = %q, want 'bash'", m.historyTurns[0].ToolSummary)
+	}
+	if m.historyTurns[1].ToolSummary != "" {
+		t.Errorf("turn 2 tool summary = %q, want '' (no tools)", m.historyTurns[1].ToolSummary)
+	}
+	if m.historyTurns[2].ToolSummary != "" {
+		t.Errorf("turn 3 tool summary = %q, want '' (no tools)", m.historyTurns[2].ToolSummary)
 	}
 
 	// 4. agentMessages() returns at least 6 messages (3 user + 3 assistant, plus tool results captured at persistence)

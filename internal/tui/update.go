@@ -122,7 +122,7 @@ func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ev := agent.Event(msg)
 
 			// turn_done is emitted by the agent ONLY when its internal runLoop() (internal/agent/agent.go)
-		// has completed all multi-turn tool execution. The agent manages its own loop via cfg.MaxTurns.
+		// has completed all multi-turn tool execution. The agent manages its own loop via cfg.MaxAgentLoops.
 		// The TUI MUST NOT re-invoke startAgent or try to continue the loop here.
 		// We only process log events and persist state.
 		if ev.Type == "turn_done" {
@@ -493,6 +493,10 @@ func (m *appModel) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 				Sender:  "system",
 				Content: fmt.Sprintf("Sessão %s carregada — %d mensagens.", id, len(ses.Messages)),
 			})
+			// Sync loaded messages into agent history
+			if msgs := m.agentMessages(); len(msgs) > 0 {
+				m.agent.SetConversation(msgs)
+			}
 		} else {
 			m.messages = append(m.messages, chatMessage{Sender: "system", Content: "Erro ao carregar sessão: " + err.Error()})
 		}
@@ -502,6 +506,7 @@ func (m *appModel) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 		m.toolRuns = nil
 		m.logEvents = nil
 		m.scroll = 0
+		m.agent.ResetHistory()
 		var err error
 		m.session, err = history.CreateSession(m.cfg.WorkDir)
 		if err != nil {
