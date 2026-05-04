@@ -18,6 +18,12 @@ type agentResult struct {
 	events []agent.Event
 }
 
+// agentDoneMsg is sent when the agent channel closes (streaming complete).
+type agentDoneMsg struct{}
+
+// agentContinueMsg signals that the agentic loop should continue.
+type agentContinueMsg struct{}
+
 // ── Left panel sections ───────────────────────────────────────────────────────
 
 type leftSection int

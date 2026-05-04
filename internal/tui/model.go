@@ -135,6 +135,14 @@ type appModel struct {
 
 	// Sidebar toggle state (Ctrl+\)
 	sidebarOpen bool
+
+	// Agent channel for streaming events
+	agentCh <-chan agent.Event
+
+	// Agentic loop control
+	agenticLoopDone  bool
+	maxAgentLoops    int
+	currentLoopCount int
 }
 
 type chatMessage struct {
@@ -256,6 +264,8 @@ func newModel(cfg *config.Config, registry *tools.Registry, resumeSessionID stri
 		attachments:      []Attachment{},
 		dbStore:          store,
 		sidebarOpen:      true,
+		maxAgentLoops:    10,
+		currentLoopCount: 0,
 	}
 
 	if store != nil {

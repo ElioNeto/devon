@@ -53,12 +53,13 @@ func (m *appModel) sendInput() (tea.Model, tea.Cmd) {
 		m.toolRuns = nil
 		m.running = true
 		m.currentTask = text
+		m.currentLoopCount = 0
 		m.rightView = viewLogs
 		m.appendLog("agent", "Iniciando tarefa com imagem(ns): "+truncate(text, 50), "")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		m.cancel = cancel
-		cmd := startAgentWithMessage(ctx, m.agent, msg)
+		cmd := m.startAgentWithMessage(ctx, msg)
 
 		// Clear attachments data and slice after send
 		for i := range m.attachments {
@@ -74,12 +75,13 @@ func (m *appModel) sendInput() (tea.Model, tea.Cmd) {
 	m.toolRuns = nil
 	m.running = true
 	m.currentTask = text
+	m.currentLoopCount = 0
 	m.rightView = viewLogs
 	m.appendLog("agent", "Iniciando tarefa: "+truncate(text, 50), "")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
-	cmd := startAgent(ctx, m.agent, text)
+	cmd := m.startAgent(ctx, text)
 	return m, tea.Batch(m.spinner.Tick, cmd)
 }
 
@@ -192,12 +194,18 @@ func (m *appModel) processAgentEvent(ev agent.Event) {
 
 	case "turn_done":
 		m.appendLog("ok", "testes passando", "")
-		m.finalizeTurn()
+		m.running = false
+		m.toolRuns = nil
+		// NOTE: finalizeTurn is NOT called here anymore.
+		// The caller (Update loop) decides whether to finalize or continue the loop.
 
 	case "error":
 		m.messages = append(m.messages, chatMessage{Sender: "devon", Content: "Erro: " + ev.Err.Error(), IsError: true})
 		m.appendLog("warn", "Erro: "+ev.Err.Error(), "")
-		m.finalizeTurn()
+		m.running = false
+		m.toolRuns = nil
+		// NOTE: finalizeTurn is NOT called here anymore.
+		// The caller handles finalization.
 
 	case "system":
 		m.messages = append(m.messages, chatMessage{Sender: "system", Content: ev.Text})
@@ -213,7 +221,109 @@ func (m *appModel) processAgentEvent(ev agent.Event) {
 	}
 }
 
-// captureFileChange detecta tool calls de escrita/remoção e registra a mudança.
+// ── Finalize turn ─────────────────────────────────────────────────────────────
+
+func (m *appModel) finalizeTurn() {
+	if m.cancel != nil {
+		m.cancel()
+		m.cancel = nil
+	}
+	m.running = false
+	m.currentTask = ""
+	m.agentCh = nil
+
+	// Track tokens
+	total := m.tracker.TotalInputTokens + m.tracker.TotalOutputTokens
+	m.tokenPerTurn = append(m.tokenPerTurn, total)
+
+	// Build history turn
+	prompt, reply, toolSummary := "", "", ""
+	for _, msg := range m.messages {
+		if msg.Sender == "user" && prompt == "" {
+			prompt = msg.Content
+		}
+		if msg.Sender == "devon" {
+			reply = msg.Content
+		}
+	}
+	for _, tr := range m.toolRuns {
+		toolSummary += tr.Name + " "
+	}
+
+	m.historyTurns = append(m.historyTurns, historyTurn{
+		UserPrompt:  prompt,
+		AgentReply:  reply,
+		ToolSummary: strings.TrimSpace(toolSummary),
+		Timestamp:   "agora",
+	})
+
+	if m.session != nil {
+		_ = history.SaveMessages(m.cfg.WorkDir, m.session.ID, m.agentMessages(), &m.session.Usage)
+	}
+
+	// Persist session state to DB for crash recovery
+	m.persistSessionToDB()
+
+	m.toolRuns = nil
+}
+
+// ── Agentic loop helpers ──────────────────────────────────────────────────────
+
+// shouldContinueAgenticLoop checks if there are tool calls that need continuation.
+func (m *appModel) shouldContinueAgenticLoop() bool {
+	if m.currentLoopCount >= m.maxAgentLoops {
+		return false
+	}
+	// Check if any tool was executed (not just running, but completed)
+	// that needs its result fed back to the LLM
+	for _, tr := range m.toolRuns {
+		if tr.Status == "done" || tr.Status == "error" {
+			return true
+		}
+	}
+	return false
+}
+
+// continueAgentLoop restarts the agent with the accumulated context.
+func (m *appModel) continueAgentLoop() tea.Cmd {
+	m.currentLoopCount++
+	m.appendLog("agent", fmt.Sprintf("Continuando loop agentic (volta %d/%d)...", m.currentLoopCount, m.maxAgentLoops), "")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancel = cancel
+	return m.startAgent(ctx, m.currentTask)
+}
+
+// ── Streaming agent commands ──────────────────────────────────────────────────
+
+// startAgent launches the agent and returns a streaming command.
+// The agent channel is stored in m.agentCh for subsequent listenAgent calls.
+func (m *appModel) startAgent(ctx context.Context, input string) tea.Cmd {
+	ch := m.agent.Run(ctx, input)
+	m.agentCh = ch
+	return listenAgent(ch)
+}
+
+// startAgentWithMessage launches the agent with a structured message.
+func (m *appModel) startAgentWithMessage(ctx context.Context, msg llm.Message) tea.Cmd {
+	ch := m.agent.RunWithMessage(ctx, msg)
+	m.agentCh = ch
+	return listenAgent(ch)
+}
+
+// listenAgent returns a tea.Cmd that reads one event from the channel.
+// When the channel is closed, it returns agentDoneMsg.
+func listenAgent(ch <-chan agent.Event) tea.Cmd {
+	return func() tea.Msg {
+		ev, ok := <-ch
+		if !ok {
+			return agentDoneMsg{}
+		}
+		return agentEventMsg(ev)
+	}
+}
+
+// ── captureFileChange detecta tool calls de escrita/remoção e registra a mudança.
 func (m *appModel) captureFileChange(tool, args, result string) {
 	switch tool {
 	case "write_file", "create_file":
@@ -248,44 +358,6 @@ func (m *appModel) upsertFileChange(path, status string, lines int) {
 		}
 	}
 	m.fileChanges = append(m.fileChanges, fileChange{Path: path, Status: status, Lines: lines})
-}
-
-func (m *appModel) finalizeTurn() {
-	if m.cancel != nil {
-		m.cancel()
-		m.cancel = nil
-	}
-	m.running = false
-	m.currentTask = ""
-
-	prompt, reply, toolSummary := "", "", ""
-	for _, msg := range m.messages {
-		if msg.Sender == "user" && prompt == "" {
-			prompt = msg.Content
-		}
-		if msg.Sender == "devon" {
-			reply = msg.Content
-		}
-	}
-	for _, tr := range m.toolRuns {
-		toolSummary += tr.Name + " "
-	}
-
-	m.historyTurns = append(m.historyTurns, historyTurn{
-		UserPrompt:  prompt,
-		AgentReply:  reply,
-		ToolSummary: strings.TrimSpace(toolSummary),
-		Timestamp:   "agora",
-	})
-
-	if m.session != nil {
-		_ = history.SaveMessages(m.cfg.WorkDir, m.session.ID, m.agentMessages(), &m.session.Usage)
-	}
-
-	// Persist session state to DB for crash recovery
-	m.persistSessionToDB()
-
-	m.toolRuns = nil
 }
 
 // persistSessionToDB saves the current session data to the DB for crash recovery.
@@ -364,35 +436,7 @@ func (m *appModel) agentMessages() []llm.Message {
 			msgs = append(msgs, llm.Message{Role: role, Content: llm.TextContent(cm.Content)})
 		}
 	}
-	// Note: multimodal messages with ContentParts are sent directly via
-	// RunWithMessage and are NOT persisted to agentMessages() history.
-	// The chatMessage for multimodal inputs includes a "[N imagem(ns)]" tag
-	// so the image count is preserved in the display log.
 	return msgs
-}
-
-// ── Agent command ─────────────────────────────────────────────────────────────
-
-func startAgent(ctx context.Context, a *agent.Agent, input string) tea.Cmd {
-	return func() tea.Msg {
-		ch := a.Run(ctx, input)
-		var events []agent.Event
-		for ev := range ch {
-			events = append(events, ev)
-		}
-		return agentResult{events: events}
-	}
-}
-
-func startAgentWithMessage(ctx context.Context, a *agent.Agent, msg llm.Message) tea.Cmd {
-	return func() tea.Msg {
-		ch := a.RunWithMessage(ctx, msg)
-		var events []agent.Event
-		for ev := range ch {
-			events = append(events, ev)
-		}
-		return agentResult{events: events}
-	}
 }
 
 // ── Input manipulation ────────────────────────────────────────────────────────

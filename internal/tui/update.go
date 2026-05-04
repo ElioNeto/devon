@@ -119,9 +119,51 @@ func (m *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case agentEventMsg:
-		m.processAgentEvent(agent.Event(msg))
+		ev := agent.Event(msg)
+
+		// Intercept turn_done: check agentic loop, finalize or continue
+		if ev.Type == "turn_done" {
+			if m.shouldContinueAgenticLoop() {
+				return m, m.continueAgentLoop()
+			}
+			m.finalizeTurn()
+			return m, m.spinner.Tick
+		}
+
+		// Intercept error: finalize turn
+		if ev.Type == "error" {
+			m.processAgentEvent(ev)
+			m.finalizeTurn()
+			return m, m.spinner.Tick
+		}
+
+		// Process all other events normally
+		m.processAgentEvent(ev)
+
+		// Continue listening on the agent channel if still running
+		if m.running && m.agentCh != nil {
+			return m, listenAgent(m.agentCh)
+		}
 		return m, m.spinner.Tick
 
+	// ── Agent channel closed ────────────────────────────────────────────
+	case agentDoneMsg:
+		m.agentCh = nil
+		if m.running {
+			m.finalizeTurn()
+		}
+		return m, nil
+
+	// ── Agentic loop continuation ───────────────────────────────────────
+	case agentContinueMsg:
+		if m.currentLoopCount >= m.maxAgentLoops {
+			m.appendLog("system", fmt.Sprintf("Loop agentic atingiu o limite máximo (%d)", m.maxAgentLoops), "")
+			m.finalizeTurn()
+			return m, nil
+		}
+		return m, tea.Batch(m.spinner.Tick, m.continueAgentLoop())
+
+	// ── Batch result (kept for test compatibility) ──────────────────────
 	case agentResult:
 		for _, ev := range msg.events {
 			m.processAgentEvent(ev)
