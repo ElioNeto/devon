@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ElioNeto/devon/internal/agent"
 	"github.com/ElioNeto/devon/internal/cost"
@@ -51,9 +52,9 @@ func (m *appModel) sendInput() (tea.Model, tea.Cmd) {
 			Content: text + fmt.Sprintf(" [%d imagem(ns)]", len(m.attachments)),
 		})
 		m.toolRuns = nil
+		m.toolCallCount = 0
 		m.running = true
 		m.currentTask = text
-		m.currentLoopCount = 0
 		m.rightView = viewLogs
 		m.appendLog("agent", "Iniciando tarefa com imagem(ns): "+truncate(text, 50), "")
 
@@ -73,9 +74,9 @@ func (m *appModel) sendInput() (tea.Model, tea.Cmd) {
 	// Text-only path (legacy)
 	m.messages = append(m.messages, chatMessage{Sender: "user", Content: text})
 	m.toolRuns = nil
+	m.toolCallCount = 0
 	m.running = true
 	m.currentTask = text
-	m.currentLoopCount = 0
 	m.rightView = viewLogs
 	m.appendLog("agent", "Iniciando tarefa: "+truncate(text, 50), "")
 
@@ -145,16 +146,18 @@ func (m *appModel) handleSlash(text string) {
 func (m *appModel) processAgentEvent(ev agent.Event) {
 	switch ev.Type {
 	case "text":
+		m.isGenerating = true
 		last := len(m.messages) - 1
 		if last < 0 || m.messages[last].Sender != "devon" {
 			m.messages = append(m.messages, chatMessage{Sender: "devon", Content: ev.Text})
+			m.appendLog("agent", truncate(ev.Text, 80), "")
 		} else {
 			m.messages[last].Content += ev.Text
 		}
-		m.appendLog("agent", truncate(ev.Text, 80), "")
 
 	case "tool_start":
 		m.toolRuns = append(m.toolRuns, toolRun{Name: ev.Tool, Args: ev.Args, Status: "running"})
+		m.toolCallCount++
 		m.leftItemCount = len(m.toolRuns) + 3
 		detail := ""
 		if ev.Args != "" {
@@ -193,19 +196,28 @@ func (m *appModel) processAgentEvent(ev agent.Event) {
 		}
 
 	case "turn_done":
-		m.appendLog("ok", "testes passando", "")
-		m.running = false
-		m.toolRuns = nil
-		// NOTE: finalizeTurn is NOT called here anymore.
-		// The caller (Update loop) decides whether to finalize or continue the loop.
+		// NOTE: state cleanup (isGenerating, running, toolRuns) is handled by finalizeTurn().
+		// This case only emits log events so turn_done flow is visible in the UI.
+		// The Summary field is set by the agent based on task type:
+		//   - "resposta enviada" for conversational turns (no tool calls)
+		//   - "tarefa concluída" for task completion (tools were used)
+		// Falls back to "testes passando" for backward compatibility.
+		msg := ev.Summary
+		if msg == "" {
+			msg = "testes passando"
+		}
+		m.appendLog("ok", msg, "")
+		if last := len(m.messages) - 1; last >= 0 && m.messages[last].Sender == "devon" {
+			m.appendLog("agent", truncate(m.messages[last].Content, 80), "")
+		}
 
 	case "error":
+		m.isGenerating = false
 		m.messages = append(m.messages, chatMessage{Sender: "devon", Content: "Erro: " + ev.Err.Error(), IsError: true})
 		m.appendLog("warn", "Erro: "+ev.Err.Error(), "")
 		m.running = false
-		m.toolRuns = nil
-		// NOTE: finalizeTurn is NOT called here anymore.
-		// The caller handles finalization.
+		// NOTE: finalizeTurn is NOT called here anymore — the caller handles it.
+		// toolRuns is NOT reset here so finalizeTurn can build the toolSummary.
 
 	case "system":
 		m.messages = append(m.messages, chatMessage{Sender: "system", Content: ev.Text})
@@ -224,6 +236,7 @@ func (m *appModel) processAgentEvent(ev agent.Event) {
 // ── Finalize turn ─────────────────────────────────────────────────────────────
 
 func (m *appModel) finalizeTurn() {
+	m.isGenerating = false
 	if m.cancel != nil {
 		m.cancel()
 		m.cancel = nil
@@ -231,23 +244,33 @@ func (m *appModel) finalizeTurn() {
 	m.running = false
 	m.currentTask = ""
 	m.agentCh = nil
+	m.turnNumber++
 
 	// Track tokens
 	total := m.tracker.TotalInputTokens + m.tracker.TotalOutputTokens
 	m.tokenPerTurn = append(m.tokenPerTurn, total)
 
-	// Build history turn
+	// Snapshot toolRuns before any cleanup — agentMessages() and persistSessionToDB() both need them
+	toolRunsSnapshot := make([]toolRun, len(m.toolRuns))
+	copy(toolRunsSnapshot, m.toolRuns)
+
+	// Build history turn — use the LAST user message as prompt (multi-turn support) and LAST devon as reply
 	prompt, reply, toolSummary := "", "", ""
 	for _, msg := range m.messages {
-		if msg.Sender == "user" && prompt == "" {
-			prompt = msg.Content
+		if msg.Sender == "user" {
+			prompt = msg.Content // last user message = current turn's prompt
 		}
 		if msg.Sender == "devon" {
-			reply = msg.Content
+			reply = msg.Content // last devon message = current turn's reply
 		}
 	}
-	for _, tr := range m.toolRuns {
+	for _, tr := range toolRunsSnapshot {
 		toolSummary += tr.Name + " "
+	}
+
+	// Log the complete agent response truncated
+	if reply != "" {
+		m.appendLog("agent", truncate(reply, 80), "")
 	}
 
 	m.historyTurns = append(m.historyTurns, historyTurn{
@@ -257,41 +280,16 @@ func (m *appModel) finalizeTurn() {
 		Timestamp:   "agora",
 	})
 
+	// Save messages — agentMessages() includes tool results from m.toolRuns (still available)
 	if m.session != nil {
 		_ = history.SaveMessages(m.cfg.WorkDir, m.session.ID, m.agentMessages(), &m.session.Usage)
 	}
 
-	// Persist session state to DB for crash recovery
+	// Persist session state to DB for crash recovery — uses m.toolRuns
 	m.persistSessionToDB()
 
+	// Safe to clear toolRuns now — all consumers (toolSummary, agentMessages, persistSessionToDB) have completed
 	m.toolRuns = nil
-}
-
-// ── Agentic loop helpers ──────────────────────────────────────────────────────
-
-// shouldContinueAgenticLoop checks if there are tool calls that need continuation.
-func (m *appModel) shouldContinueAgenticLoop() bool {
-	if m.currentLoopCount >= m.maxAgentLoops {
-		return false
-	}
-	// Check if any tool was executed (not just running, but completed)
-	// that needs its result fed back to the LLM
-	for _, tr := range m.toolRuns {
-		if tr.Status == "done" || tr.Status == "error" {
-			return true
-		}
-	}
-	return false
-}
-
-// continueAgentLoop restarts the agent with the accumulated context.
-func (m *appModel) continueAgentLoop() tea.Cmd {
-	m.currentLoopCount++
-	m.appendLog("agent", fmt.Sprintf("Continuando loop agentic (volta %d/%d)...", m.currentLoopCount, m.maxAgentLoops), "")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	m.cancel = cancel
-	return m.startAgent(ctx, m.currentTask)
 }
 
 // ── Streaming agent commands ──────────────────────────────────────────────────
@@ -321,6 +319,13 @@ func listenAgent(ch <-chan agent.Event) tea.Cmd {
 		}
 		return agentEventMsg(ev)
 	}
+}
+
+// cursorBlinkCmd returns a tea.Cmd that toggles the cursor visibility every 500ms.
+func (m *appModel) cursorBlinkCmd() tea.Cmd {
+	return tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
+		return cursorBlinkMsg{}
+	})
 }
 
 // ── captureFileChange detecta tool calls de escrita/remoção e registra a mudança.
@@ -425,15 +430,32 @@ func (m *appModel) persistSessionToDB() {
 func (m *appModel) agentMessages() []llm.Message {
 	var msgs []llm.Message
 	for _, cm := range m.messages {
+		var role llm.Role
 		switch cm.Sender {
 		case "user":
-			msgs = append(msgs, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(cm.Content)})
+			role = llm.RoleUser
 		case "devon":
-			role := llm.RoleAssistant
 			if cm.IsError {
 				role = llm.RoleTool
+			} else {
+				role = llm.RoleAssistant
 			}
+		case "system":
+			role = llm.RoleSystem
+		default:
+			// Skip unknown senders
+			continue
+		}
+		if len(cm.ContentParts) > 0 {
+			msgs = append(msgs, llm.Message{Role: role, ContentParts: cm.ContentParts})
+		} else {
 			msgs = append(msgs, llm.Message{Role: role, Content: llm.TextContent(cm.Content)})
+		}
+	}
+	// Append completed tool runs as tool-role messages
+	for _, tr := range m.toolRuns {
+		if tr.Status == "done" || tr.Status == "error" {
+			msgs = append(msgs, llm.Message{Role: llm.RoleTool, Content: llm.TextContent(tr.Result)})
 		}
 	}
 	return msgs

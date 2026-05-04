@@ -62,7 +62,8 @@ type Event struct {
 	Tool   string
 	Args   string
 	Result string
-	Err    error
+	Err     error
+	Summary string // human-readable summary for turn_done events
 }
 
 // ConfirmReply is sent back from TUI.
@@ -84,10 +85,11 @@ type Agent struct {
 	activeModel     string
 	forcedTaskType  config.TaskType // non-zero when --task-type forces classification
 	ReplyCh     chan ConfirmReply
-	mu          chan Event
-	mem         *memory.Manager
-	projectID   string
-	idxMgr      *index.Manager
+	mu              chan Event
+	mem             *memory.Manager
+	projectID       string
+	idxMgr          *index.Manager
+	hasExecutedTools bool // tracks whether any tool was executed in the current run
 }
 
 // New cria um novo Agent com DB injection.
@@ -215,6 +217,11 @@ func (a *Agent) run(ctx context.Context, userInput string, ch chan<- Event) {
 		a.db.PutMessage(ctx, a.id, a.id, "user", userInput)
 	}
 
+	// Rebuild system message with actual user prompt to inject relevant files
+	if sysMsgs := a.buildSystemMessages(userInput); len(sysMsgs) > 0 {
+		a.history[0] = sysMsgs[0]
+	}
+
 	a.runLoop(ctx, ch)
 }
 
@@ -271,10 +278,16 @@ func (a *Agent) runWithMessage(ctx context.Context, msg llm.Message, ch chan<- E
 		a.db.PutMessage(ctx, a.id, a.id, "user", label)
 	}
 
+	// Rebuild system message with actual user prompt to inject relevant files
+	if sysMsgs := a.buildSystemMessages(textContent); len(sysMsgs) > 0 {
+		a.history[0] = sysMsgs[0]
+	}
+
 	a.runLoop(ctx, ch)
 }
 
 func (a *Agent) runLoop(ctx context.Context, ch chan<- Event) {
+	a.hasExecutedTools = false
 	for turn := 0; turn < a.cfg.MaxTurns; turn++ {
 		if ctx.Err() != nil {
 			return
@@ -333,7 +346,11 @@ func (a *Agent) runLoop(ctx context.Context, ch chan<- Event) {
 		a.history = append(a.history, assistantMsg)
 
 		if len(pendingTools) == 0 {
-			ch <- Event{Type: "turn_done"}
+			summary := "resposta enviada"
+			if a.hasExecutedTools {
+				summary = "tarefa concluída"
+			}
+			ch <- Event{Type: "turn_done", Summary: summary}
 
 			// Persiste snapshot do estado
 			if a.db != nil {
@@ -352,6 +369,7 @@ func (a *Agent) runLoop(ctx context.Context, ch chan<- Event) {
 				ch <- Event{Type: "tool_error", Tool: tc.Function.Name, Err: toolErr}
 				result = fmt.Sprintf("error: %v", toolErr)
 			} else {
+				a.hasExecutedTools = true
 				ch <- Event{Type: "tool_done", Tool: tc.Function.Name, Result: result}
 
 				// file_change: notify VS Code extension about file modifications
@@ -460,6 +478,11 @@ func (a *Agent) buildSystemMessages(userPrompt string) []llm.Message {
 		if memCtx != "" {
 			system += "\n\n" + memCtx
 		}
+	}
+
+	// Append project context (workdir, git branch, detected languages)
+	if projCtx := BuildProjectContext(a.cfg.WorkDir); projCtx != "" {
+		system += "\n\n# Contexto do Projeto\n" + projCtx
 	}
 
 	// Injetar top-K arquivos relevantes quando indexação ativa

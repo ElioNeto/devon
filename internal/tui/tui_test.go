@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -132,16 +133,19 @@ func TestModel_UpdateAgentResult(t *testing.T) {
 	m.height = 24
 	m.running = true
 
-	m = updateApp(m, agentResult{events: []agent.Event{{Type: "system", Text: "test message"}}})
+	// Use streaming pattern: send individual events via agentEventMsg
+	m = updateApp(m, agentEventMsg(agent.Event{Type: "system", Text: "test message"}))
 	if len(m.messages) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(m.messages))
 	}
 	if m.messages[0].Content != "test message" {
 		t.Errorf("expected 'test message', got %q", m.messages[0].Content)
 	}
-	// agentResult should stop running
+
+	// Send agentDoneMsg to signal channel closed (agent finished)
+	m = updateApp(m, agentDoneMsg{})
 	if m.running {
-		t.Error("agent should not be running after agentResult")
+		t.Error("agent should not be running after agentDoneMsg")
 	}
 }
 
@@ -320,13 +324,24 @@ func TestProcessAgentEventText(t *testing.T) {
 		t.Errorf("expected 'hello', got %q", m.messages[0].Content)
 	}
 
-	// Second text should append to same message
+	// Only the first token should generate a log event
+	if len(m.logEvents) != 1 {
+		t.Fatalf("expected 1 log event, got %d", len(m.logEvents))
+	}
+	if m.logEvents[0].Msg != "hello" {
+		t.Errorf("expected log msg 'hello', got %q", m.logEvents[0].Msg)
+	}
+
+	// Second text should append to same message but NOT generate a log event
 	m.processAgentEvent(agent.Event{Type: "text", Text: " world"})
 	if len(m.messages) != 1 {
 		t.Fatalf("expected still 1 message")
 	}
 	if m.messages[0].Content != "hello world" {
 		t.Errorf("expected 'hello world', got %q", m.messages[0].Content)
+	}
+	if len(m.logEvents) != 1 {
+		t.Errorf("expected still 1 log event after second text token, got %d", len(m.logEvents))
 	}
 }
 
@@ -371,13 +386,108 @@ func TestProcessAgentEventError(t *testing.T) {
 }
 
 func TestProcessAgentEventTurnDone(t *testing.T) {
-	m := appModel{running: true}
-	m.processAgentEvent(agent.Event{Type: "turn_done"})
-	if m.running {
-		t.Error("agent should not be running after turn_done")
+	tests := []struct {
+		name        string
+		summary     string
+		wantMsg     string
+	}{
+		{
+			name:    "empty summary falls back to testes passando",
+			summary: "",
+			wantMsg: "testes passando",
+		},
+		{
+			name:    "explicit summary resposta enviada",
+			summary: "resposta enviada",
+			wantMsg: "resposta enviada",
+		},
 	}
-	if len(m.toolRuns) != 0 {
-		t.Error("toolRuns should be cleared after turn_done")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := appModel{running: true}
+			m.toolRuns = []toolRun{{Name: "bash", Status: "done", Result: "ok"}}
+			m.processAgentEvent(agent.Event{Type: "turn_done", Summary: tt.summary})
+			// processAgentEvent("turn_done") no longer clears state — only emits logs.
+			// finalizeTurn() handles cleanup. Verify running and toolRuns are preserved.
+			if !m.running {
+				t.Error("running should still be true after processAgentEvent turn_done (finalizeTurn handles cleanup)")
+			}
+			if len(m.toolRuns) == 0 {
+				t.Error("toolRuns should not be cleared by processAgentEvent turn_done (finalizeTurn handles cleanup)")
+			}
+			// Verify log events were emitted with correct message
+			found := false
+			for _, le := range m.logEvents {
+				if le.Msg == tt.wantMsg {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected log event %q from processAgentEvent turn_done, got %+v", tt.wantMsg, m.logEvents)
+			}
+		})
+	}
+}
+
+func TestTurnDoneSummary_FallbackToTestesPassando(t *testing.T) {
+	m := appModel{running: true}
+	m.processAgentEvent(agent.Event{Type: "turn_done"}) // no Summary field set
+	found := false
+	for _, le := range m.logEvents {
+		if le.Msg == "testes passando" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected log event 'testes passando' when Summary is empty")
+	}
+}
+
+func TestTurnDoneSummary_RespostaEnviada(t *testing.T) {
+	m := appModel{running: true}
+	m.processAgentEvent(agent.Event{Type: "turn_done", Summary: "resposta enviada"})
+	found := false
+	for _, le := range m.logEvents {
+		if le.Msg == "resposta enviada" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected log event 'resposta enviada' when Summary is set")
+	}
+}
+
+func TestTurnDoneSummary_TarefaConcluida(t *testing.T) {
+	m := appModel{running: true}
+	m.processAgentEvent(agent.Event{Type: "turn_done", Summary: "tarefa concluída"})
+	found := false
+	for _, le := range m.logEvents {
+		if le.Msg == "tarefa concluída" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected log event 'tarefa concluída' when Summary is set")
+	}
+}
+
+func TestTurnDoneSummary_LoopConcluido(t *testing.T) {
+	m := appModel{running: true}
+	m.processAgentEvent(agent.Event{Type: "turn_done", Summary: "loop concluído em 3 turnos"})
+	found := false
+	for _, le := range m.logEvents {
+		if le.Msg == "loop concluído em 3 turnos" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected log event 'loop concluído em 3 turnos' when Summary is set")
 	}
 }
 
@@ -567,6 +677,33 @@ func TestDeleteWordTrailingSpaces(t *testing.T) {
 	}
 }
 
+func TestAgenticLoopCancellation(t *testing.T) {
+	// Ctrl+C during an agentic loop should cancel and stop the agent.
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+	m.running = true
+	m.maxAgentLoops = 10
+	m.currentTask = "test task"
+	m.toolRuns = []toolRun{{Name: "bash", Args: `{"cmd":"ls"}`, Status: "running"}}
+
+	// Set up a cancellable context
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancel = cancel
+	_ = ctx
+
+	// Send Ctrl+C
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m2 := result.(*appModel)
+
+	if m2.running {
+		t.Error("agent should not be running after Ctrl+C")
+	}
+	if len(m2.toolRuns) != 0 {
+		t.Error("toolRuns should be cleared after Ctrl+C")
+	}
+}
+
 // testErr is a simple error for tests
 type testErr struct{ msg string }
 
@@ -722,6 +859,168 @@ func TestOversizedAttachmentRejected(t *testing.T) {
 	}
 }
 
+// ── Cursor lifecycle tests ─────────────────────────────────────────────
+
+func TestCursor_ShownOnTextEvent(t *testing.T) {
+	m := appModel{}
+	m.processAgentEvent(agent.Event{Type: "text", Text: "hello"})
+	if !m.isGenerating {
+		t.Error("isGenerating should be true after text event")
+	}
+}
+
+func TestCursor_HiddenOnTurnDone(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+	m.isGenerating = true
+	// processAgentEvent("turn_done") no longer clears isGenerating — finalizeTurn does.
+	// Simulate the real flow: processAgentEvent for logging, then finalizeTurn for cleanup.
+	m.processAgentEvent(agent.Event{Type: "turn_done"})
+	m.finalizeTurn()
+	if m.isGenerating {
+		t.Error("isGenerating should be false after turn_done + finalizeTurn")
+	}
+}
+
+func TestCursor_HiddenOnError(t *testing.T) {
+	m := appModel{isGenerating: true}
+	m.processAgentEvent(agent.Event{Type: "error", Err: testErr{msg: "fail"}})
+	if m.isGenerating {
+		t.Error("isGenerating should be false after error")
+	}
+}
+
+func TestCursor_HiddenOnAgentDone(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+	m.running = true
+	m.isGenerating = true
+	m = updateApp(m, agentDoneMsg{})
+	if m.isGenerating {
+		t.Error("isGenerating should be false after agentDoneMsg")
+	}
+}
+
+func TestCursor_HiddenOnFinalizeTurn(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+	m.isGenerating = true
+	m.finalizeTurn()
+	if m.isGenerating {
+		t.Error("isGenerating should be false after finalizeTurn")
+	}
+}
+
+func TestCursor_VisibleInView(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+	m.rightView = viewSteps // cursor only renders in Steps tab
+	m.messages = []chatMessage{
+		{Sender: "user", Content: "hello"},
+		{Sender: "devon", Content: "world"},
+	}
+	m.isGenerating = true
+	m.cursorVisible = true
+
+	v := m.View()
+	if !strings.Contains(v, "▋") {
+		t.Error("view should contain cursor character ▋ when generating and visible")
+	}
+}
+
+func TestCursor_HiddenInViewWhenNotGenerating(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+	m.rightView = viewSteps // cursor only renders in Steps tab
+	m.messages = []chatMessage{
+		{Sender: "user", Content: "hello"},
+		{Sender: "devon", Content: "world"},
+	}
+	m.isGenerating = false
+	m.cursorVisible = true
+
+	v := m.View()
+	if strings.Contains(v, "▋") {
+		t.Error("view should NOT contain cursor character when not generating")
+	}
+}
+
+func TestCursor_InvisibleWhenBlinkOff(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+	m.rightView = viewSteps // cursor only renders in Steps tab
+	m.messages = []chatMessage{
+		{Sender: "devon", Content: "hello"},
+	}
+	m.isGenerating = true
+	m.canBlink = true
+	m.cursorVisible = false
+
+	v := m.View()
+	// When cursorVisible is false and canBlink is true, a space should render
+	// instead of the cursor block. But since it's a space, we just verify
+	// the view still looks reasonable (doesn't crash, shows the message).
+	if !strings.Contains(v, "hello") {
+		t.Error("view should still show message content")
+	}
+}
+
+func TestCursor_CanBlinkDisabled(t *testing.T) {
+	// TERM=dumb equivalent
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+	m.rightView = viewSteps // cursor only renders in Steps tab
+	m.canBlink = false
+	m.cursorVisible = false
+	m.isGenerating = true
+	m.messages = []chatMessage{
+		{Sender: "devon", Content: "test"},
+	}
+
+	v := m.View()
+	// When canBlink is false, cursor should be shown even when cursorVisible is false
+	if !strings.Contains(v, "▋") {
+		t.Error("when canBlink=false, cursor should always be visible")
+	}
+}
+
+func TestCursor_CanBlinkDetected(t *testing.T) {
+	// Default newModel should set canBlink based on TERM env
+	m := newModel(testConfig(), testRegistry(), "")
+	// The field must be set (either true or false depending on TERM)
+	// We just verify it doesn't panic and that cursorBlinkCmd works
+	cmd := m.cursorBlinkCmd()
+	if cmd == nil {
+		t.Error("cursorBlinkCmd should not be nil")
+	}
+}
+
+func TestCursor_ToggleViaUpdate(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+	m.cursorVisible = true
+
+	// Send cursorBlinkMsg to toggle cursor visibility
+	m = updateApp(m, cursorBlinkMsg{})
+	if m.cursorVisible {
+		t.Error("cursorVisible should be false after cursorBlinkMsg")
+	}
+
+	// Send another blink to toggle back
+	m = updateApp(m, cursorBlinkMsg{})
+	if !m.cursorVisible {
+		t.Error("cursorVisible should be true after second cursorBlinkMsg")
+	}
+}
+
 func TestHasVisionContent(t *testing.T) {
 	textParts := []llm.ContentPart{llm.NewTextPart("hello")}
 	if llm.HasVisionContent(textParts) {
@@ -734,5 +1033,306 @@ func TestHasVisionContent(t *testing.T) {
 	}
 	if !llm.HasVisionContent(parts) {
 		t.Error("parts with image should have vision content")
+	}
+}
+
+func TestMultiTurnHistoryPreservation(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.width = 80
+	m.height = 24
+
+	// ── Turn 1: user "My name is John" → devon reply with bash tool ──
+	m.messages = append(m.messages, chatMessage{Sender: "user", Content: "My name is John"})
+	m.processAgentEvent(agent.Event{Type: "text", Text: "Nice to meet you John"})
+	m.processAgentEvent(agent.Event{Type: "tool_start", Tool: "bash", Args: `{"cmd":"ls"}`})
+	m.processAgentEvent(agent.Event{Type: "tool_done", Tool: "bash", Result: "ok"})
+
+	// Verify agentMessages() includes tool result BEFORE finalizeTurn clears toolRuns
+	turn1Msgs := m.agentMessages()
+	hasToolResult := false
+	for _, msg := range turn1Msgs {
+		if msg.Role == llm.RoleTool {
+			hasToolResult = true
+			break
+		}
+	}
+	if !hasToolResult {
+		t.Error("Turn 1: agentMessages should include a RoleTool message when toolRuns are present")
+	}
+	// Verify the tool result content
+	toolFound := false
+	for _, msg := range turn1Msgs {
+		if msg.Role == llm.RoleTool && msg.Content != nil && *msg.Content == "ok" {
+			toolFound = true
+			break
+		}
+	}
+	if !toolFound {
+		t.Error("Turn 1: agentMessages should include tool result with content 'ok'")
+	}
+
+	m.processAgentEvent(agent.Event{Type: "turn_done"})
+	m.finalizeTurn()
+
+	// ── Turn 2: user "What is my name?" → devon "Your name is John" ──
+	m.messages = append(m.messages, chatMessage{Sender: "user", Content: "What is my name?"})
+	m.processAgentEvent(agent.Event{Type: "text", Text: "Your name is John"})
+	m.processAgentEvent(agent.Event{Type: "turn_done"})
+	m.finalizeTurn()
+
+	// ── Turn 3: user "What did I ask first?" → devon "You said your name is John" ──
+	m.messages = append(m.messages, chatMessage{Sender: "user", Content: "What did I ask first?"})
+	m.processAgentEvent(agent.Event{Type: "text", Text: "You said your name is John"})
+	m.processAgentEvent(agent.Event{Type: "turn_done"})
+	m.finalizeTurn()
+
+	// ── Verification after all turns ──
+
+	// 1. historyTurns has 3 entries
+	if len(m.historyTurns) != 3 {
+		t.Errorf("expected 3 historyTurns, got %d", len(m.historyTurns))
+	}
+
+	// 2. historyTurns preserve user prompts across turns
+	if m.historyTurns[0].UserPrompt != "My name is John" {
+		t.Errorf("turn 1 user prompt = %q, want 'My name is John'", m.historyTurns[0].UserPrompt)
+	}
+	if m.historyTurns[1].UserPrompt != "What is my name?" {
+		t.Errorf("turn 2 user prompt = %q, want 'What is my name?'", m.historyTurns[1].UserPrompt)
+	}
+	if m.historyTurns[2].UserPrompt != "What did I ask first?" {
+		t.Errorf("turn 3 user prompt = %q, want 'What did I ask first?'", m.historyTurns[2].UserPrompt)
+	}
+
+	// 3. historyTurns include tool summary
+	if m.historyTurns[0].ToolSummary != "bash" {
+		t.Errorf("turn 1 tool summary = %q, want 'bash'", m.historyTurns[0].ToolSummary)
+	}
+
+	// 4. agentMessages() returns at least 6 messages (3 user + 3 assistant, plus tool results captured at persistence)
+	allMsgs := m.agentMessages()
+	if len(allMsgs) < 6 {
+		t.Errorf("agentMessages() returned %d messages, expected at least 6", len(allMsgs))
+	}
+
+	// 5. agentMessages() includes "John" reference from turn 1 (cross-turn context preservation)
+	johnRef := false
+	for _, msg := range allMsgs {
+		if msg.Content != nil && strings.Contains(*msg.Content, "John") {
+			johnRef = true
+			break
+		}
+	}
+	if !johnRef {
+		t.Error("agentMessages() should include 'John' reference from turn 1")
+	}
+
+	// 6. agentMessages() includes tool results (persisted in session, checked here for RoleTool)
+	// Note: after finalizeTurn, m.toolRuns is nil, so RoleTool is not in the final in-memory output.
+	// Tool results ARE captured at persistence time (history.SaveMessages) when agentMessages()
+	// is called inside finalizeTurn with toolRuns still populated. We validate that by checking
+	// that the turn 1 state included them (checked above before finalizeTurn).
+	_ = turn1Msgs // verified above
+
+	// 7. Verify total message count matches expected conversation flow
+	expectedRoles := []llm.Role{llm.RoleUser, llm.RoleAssistant, llm.RoleUser, llm.RoleAssistant, llm.RoleUser, llm.RoleAssistant}
+	if len(allMsgs) >= len(expectedRoles) {
+		for i, role := range expectedRoles {
+			if allMsgs[i].Role != role {
+				t.Errorf("allMsgs[%d].Role = %q, want %q", i, allMsgs[i].Role, role)
+			}
+		}
+	}
+}
+
+// ── Mock streamer for router tests ─────────────────────────────────────────
+
+type mockStreamer struct {
+	modelName string
+}
+
+func (m *mockStreamer) Stream(_ context.Context, _ []llm.Message, _ []llm.ToolDef) (<-chan llm.StreamEvent, error) {
+	ch := make(chan llm.StreamEvent)
+	close(ch)
+	return ch, nil
+}
+
+func (m *mockStreamer) Info() llm.ModelInfo {
+	return llm.ModelInfo{Name: m.modelName}
+}
+
+// ── Turn number and tool call count tests ──────────────────────────────────
+
+func TestTurnNumberIncremented(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.running = true
+	m.processAgentEvent(agent.Event{Type: "turn_done"})
+	m.finalizeTurn()
+	if m.turnNumber != 1 {
+		t.Errorf("turnNumber should be 1 after first turn, got %d", m.turnNumber)
+	}
+
+	m.processAgentEvent(agent.Event{Type: "turn_done"})
+	m.finalizeTurn()
+	if m.turnNumber != 2 {
+		t.Errorf("turnNumber should be 2 after second turn, got %d", m.turnNumber)
+	}
+}
+
+func TestToolCallCountIncremented(t *testing.T) {
+	m := appModel{}
+	m.processAgentEvent(agent.Event{Type: "tool_start", Tool: "bash", Args: `{"cmd":"ls"}`})
+	m.processAgentEvent(agent.Event{Type: "tool_start", Tool: "grep", Args: `{"pattern":"foo"}`})
+	m.processAgentEvent(agent.Event{Type: "tool_start", Tool: "write", Args: `{"path":"test.txt"}`})
+	if m.toolCallCount != 3 {
+		t.Errorf("toolCallCount should be 3, got %d", m.toolCallCount)
+	}
+}
+
+func TestToolCallCountResetOnSendInput(t *testing.T) {
+	// Text-only path
+	m := newModel(testConfig(), testRegistry(), "")
+	m.input = "hello world"
+	m.toolCallCount = 5
+	_, _ = m.sendInput()
+	if m.toolCallCount != 0 {
+		t.Errorf("toolCallCount should be 0 after sendInput (text path), got %d", m.toolCallCount)
+	}
+}
+
+func TestToolCallCountResetOnSendInputWithAttachments(t *testing.T) {
+	m := newModel(testConfig(), testRegistry(), "")
+	m.input = "hello with image"
+	m.toolCallCount = 5
+	m.attachments = []Attachment{
+		{Filename: "test.png", Data: []byte("data"), SizeKB: 1, MimeType: "image/png"},
+	}
+	_, _ = m.sendInput()
+	if m.toolCallCount != 0 {
+		t.Errorf("toolCallCount should be 0 after sendInput (attachments path), got %d", m.toolCallCount)
+	}
+}
+
+// ── Statusbar tests ────────────────────────────────────────────────────────
+
+func TestStatusbarPortugueseLabels(t *testing.T) {
+	s := newUIStyles()
+
+	// Idle state → "●  idle"
+	m := &appModel{
+		cfg:    testConfig(),
+		styles: s,
+	}
+	bar := renderStatusBar(m, 80)
+	if !strings.Contains(bar, "●  idle") {
+		t.Errorf("idle statusbar should contain '●  idle', got: %s", bar)
+	}
+
+	// Running without tool → "gerando"
+	m2 := &appModel{
+		cfg:     testConfig(),
+		styles:  s,
+		running: true,
+	}
+	bar2 := renderStatusBar(m2, 80)
+	if !strings.Contains(bar2, "gerando") {
+		t.Errorf("running statusbar should contain 'gerando', got: %s", bar2)
+	}
+
+	// Running with tool → "aguardando tool {name}"
+	m3 := &appModel{
+		cfg:     testConfig(),
+		styles:  s,
+		running: true,
+		toolRuns: []toolRun{
+			{Name: "bash", Status: "running"},
+		},
+	}
+	bar3 := renderStatusBar(m3, 80)
+	if !strings.Contains(bar3, "aguardando tool bash") {
+		t.Errorf("running with tool should contain 'aguardando tool bash', got: %s", bar3)
+	}
+}
+
+func TestStatusbarTurnoLoopDisplay(t *testing.T) {
+	cfg := testConfig()
+	cfg.MaxAgentLoops = 10
+	m := &appModel{
+		cfg:           cfg,
+		styles:        newUIStyles(),
+		turnNumber:    2,
+		toolCallCount: 3,
+	}
+	bar := renderStatusBar(m, 80)
+	if !strings.Contains(bar, "turno 2") {
+		t.Errorf("statusbar should contain 'turno 2', got: %s", bar)
+	}
+	if !strings.Contains(bar, "loop 3/10") {
+		t.Errorf("statusbar should contain 'loop 3/10', got: %s", bar)
+	}
+}
+
+func TestStatusbarModelFromRouter(t *testing.T) {
+	cfg := testConfig()
+	cfg.Model = "cfg-model"
+
+	// Without router, cfg.Model should appear
+	m := &appModel{
+		cfg:    cfg,
+		styles: newUIStyles(),
+	}
+	bar := renderStatusBar(m, 80)
+	if !strings.Contains(bar, "cfg-model") {
+		t.Errorf("statusbar should contain model name from cfg.Model, got: %s", bar)
+	}
+
+	// With router, router model should appear
+	mockClient := &mockStreamer{modelName: "router-model"}
+	router := llm.NewAgentRouter(nil, mockClient)
+	m2 := &appModel{
+		cfg:    cfg,
+		styles: newUIStyles(),
+		router: router,
+	}
+	bar2 := renderStatusBar(m2, 80)
+	if !strings.Contains(bar2, "router-model") {
+		t.Errorf("statusbar should contain model name from router, got: %s", bar2)
+	}
+	if strings.Contains(bar2, "cfg-model") {
+		t.Errorf("statusbar should NOT contain cfg.Model when router provides a model, got: %s", bar2)
+	}
+}
+
+func TestStatusbarTurnoHiddenWhenZero(t *testing.T) {
+	cfg := testConfig()
+	cfg.MaxAgentLoops = 10
+	m := &appModel{
+		cfg:           cfg,
+		styles:        newUIStyles(),
+		turnNumber:    0,
+		toolCallCount: 0,
+	}
+	bar := renderStatusBar(m, 80)
+	if strings.Contains(bar, "turno") {
+		t.Errorf("statusbar should NOT contain 'turno' when turnNumber=0, got: %s", bar)
+	}
+	if strings.Contains(bar, "loop") {
+		t.Errorf("statusbar should NOT contain 'loop' when toolCallCount=0, got: %s", bar)
+	}
+}
+
+func TestStatusbarTurnoHiddenWhenZeroAndModelOnly(t *testing.T) {
+	cfg := testConfig()
+	cfg.Model = "my-model"
+	m := &appModel{
+		cfg:    cfg,
+		styles: newUIStyles(),
+	}
+	bar := renderStatusBar(m, 80)
+	if strings.Contains(bar, "turno") {
+		t.Errorf("statusbar should NOT contain 'turno' when turnNumber=0, got: %s", bar)
+	}
+	if !strings.Contains(bar, "my-model") {
+		t.Errorf("statusbar should still show model name, got: %s", bar)
 	}
 }
